@@ -108,7 +108,7 @@ ttest <- function (refa = NULL, refb = NULL, sorta = NULL, sortb = NULL, session
 		result = NA, 
 		stringsAsFactors = FALSE
 	)
-	rejected <- results_formatted[results_formatted$measurements == "",1:7]
+	rejected <- results_formatted[results_formatted$measurements == "",1:6]
 	results_formatted <- results_formatted[results_formatted$measurements != "",]
 
 	#Append exclusion results

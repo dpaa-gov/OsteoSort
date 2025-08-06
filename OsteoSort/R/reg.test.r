@@ -56,7 +56,7 @@ reg.test <- function(refa = NULL, refb = NULL, sorta = NULL, sortb = NULL, sessi
 		stringsAsFactors = FALSE
 	)
 
-	rejected <- results_formatted[results_formatted$measurements == "",]
+	rejected <- results_formatted[results_formatted$measurements == "",1:6]
 	results_formatted <- results_formatted[results_formatted$measurements != "",]
 
     results_formatted[results_formatted[,8] > alphalevel,11] <- "Cannot Exclude"
