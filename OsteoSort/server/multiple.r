@@ -85,7 +85,7 @@ multiple_MLA <- reactiveValues(multiple_ML = c("temp"))
 observeEvent(input$multiple_reference, {
 	multiple_reference_imported$multiple_reference_imported <- reference_list$reference_list[[multiple_reference$multiple_reference]]
 	elements$elements <- unique(multiple_reference_imported$multiple_reference_imported$Element)
-	art <- config_df$config_df[config_df$config_df$Method == 'articulation',]
+	art <- articulation_config$df[articulation_config$df$Method == 'articulation',]
 	ref_col_names <- colnames(multiple_reference_imported$multiple_reference_imported)
 	multiple_art_elements$df <- NULL
 	multiple_art_measurements_a$df <- NULL
@@ -328,7 +328,6 @@ observeEvent(input$pro, {
 			},
 			contentType = "application/zip"
 		)
-		gc()
 		removeModal()
 		incProgress(amount = 1, message = "Completed")
 	})

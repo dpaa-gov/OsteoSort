@@ -7,8 +7,13 @@ COPY shiny-server.conf /etc/shiny-server/shiny-server.conf
 # Delete example apps from shiny-server
 RUN rm -rf /srv/shiny-server/*
 
+# Install libpq for RPostgres
+RUN apt-get update && \
+    apt-get install -y libpq-dev && \
+    rm -rf /var/lib/apt/lists/*
+
 # Install R dependencies
-RUN R -e "install.packages(c('dplyr', 'ggplot2', 'shinyalert', 'JuliaCall', 'DT', 'grid', 'zip', 'htmltools'))"
+RUN R -e "install.packages(c('pkgconfig', 'dplyr', 'ggplot2', 'shinyalert', 'JuliaCall', 'DT', 'grid', 'zip', 'htmltools', 'DBI', 'RPostgres', 'dotenv'))"
 
 # Copy the Shiny app code
 COPY OsteoSort /srv/shiny-server/OsteoSort

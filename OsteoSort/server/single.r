@@ -1,308 +1,417 @@
-common_alpha_level <- reactiveValues(common_alpha_level = 0.1) 
-output$common_alpha_level <- renderUI({
-	sliderInput(inputId = "common_alpha_level", label = "Alpha level", min=0.01, max=1, value=0.1, step = 0.01)
-})
-observeEvent(input$common_alpha_level, {
-	common_alpha_level$common_alpha_level <- input$common_alpha_level
-})
+# --- Helper functions ---
 
-single_absolute_value <- reactiveValues(single_absolute_value = FALSE) 
-output$single_absolute_value <- renderUI({
-	checkboxInput(inputId = "single_absolute_value", label = "Absolute D-value |a-b|", value = FALSE)
-})
-observeEvent(input$single_absolute_value, {
-	single_absolute_value$single_absolute_value <- input$single_absolute_value
-})
+# Capitalize first letter for display labels (e.g., "fem_04" -> "Fem_04")
+cap_first <- function(x) paste0(toupper(substr(x, 1, 1)), substr(x, 2, nchar(x)))
 
-single_yeojohnson <- reactiveValues(single_yeojohnson = FALSE) 
-output$single_yeojohnson <- renderUI({
-	checkboxInput(inputId = "single_yeojohnson", label = "YeoJohnson transformation", value = FALSE)
-})
-observeEvent(input$single_yeojohnson, {
-	single_yeojohnson$single_yeojohnson <- input$single_yeojohnson
-})
+# Get available (non-all-NA) measurement columns for an element in reference data
+get_available_measurements <- function(ref, element) {
+    meta_cols <- c("accession", "side", "element")
+    subset <- ref[tolower(ref$element) == tolower(element), ]
+    meas <- subset[, !names(subset) %in% meta_cols, drop = FALSE]
+    names(which(colSums(is.na(meas)) < nrow(meas)))
+}
 
-single_mean <- reactiveValues(single_mean = FALSE) 
-output$single_mean <- renderUI({
-	checkboxInput(inputId = "single_mean", label = "Zero mean", value = FALSE)
-})
-observeEvent(input$single_mean, {
-	single_mean$single_mean <- input$single_mean
-})
+# Show a standard analysis error dialog
+show_analysis_error <- function() {
+    removeModal()
+    shinyalert(
+        title = "ERROR!",
+        text = "There was an error with the input and/or reference data",
+        type = "error", closeOnClickOutside = TRUE,
+        showConfirmButton = TRUE, confirmButtonText = "Dismiss"
+    )
+}
 
-single_tails <- reactiveValues(single_tails = 2) 
-output$single_tails <- renderUI({
-	radioButtons(inputId = "single_tails", label = "Tails", choices = list(1, 2), selected = 2, inline = TRUE)
-})
-observeEvent(input$single_tails, {
-	single_tails$single_tails <- as.numeric(input$single_tails)
-})
+# --- Reactive state (only what truly needs to persist across observers) ---
 
-single_analysis <- reactiveValues(single_analysis = "pair-match")
-observeEvent(input$single_analysis, {
-	single_analysis$single_analysis <- input$single_analysis
-})
-output$single_analysis <- renderUI({
-	selectInput(inputId = "single_analysis", label = "Analysis", choices = c("pair-match","articulation","osr"), selected = "pair-match")
-})
-
-single_reference <- reactiveValues(single_reference = c("temp"))
-observeEvent(input$single_reference, {
-	single_reference$single_reference <- input$single_reference
-})
-output$single_reference <- renderUI({
-	selectInput(inputId = "single_reference", label = "Reference", choices = reference_name_list$reference_name_list)
-})
-
-single_reference_imported <- reactiveValues(single_reference_imported = data.frame())
-elements <- reactiveValues(elements = c("temp") )
+combined_ref <- reactiveValues(df = data.frame())
+elements <- reactiveValues(elements = c())
 art_elements <- reactiveValues(df = c())
 art_measurements_a <- reactiveValues(df = c())
 art_measurements_b <- reactiveValues(df = c())
-single_MLB <- reactiveValues(single_ML = c("temp"))
-single_MLA <- reactiveValues(single_ML = c("temp"))
-single_ML <- reactiveValues(single_ML = c("temp"))
+single_ML <- reactiveValues(vals = c())
+single_MLA <- reactiveValues(vals = c())
+single_MLB <- reactiveValues(vals = c())
 
-observeEvent(input$single_reference, {
-	single_reference_imported$single_reference_imported <- reference_list$reference_list[[single_reference$single_reference]]
-	elements$elements <- unique(single_reference_imported$single_reference_imported$Element)
+# --- Reference selection (server-rendered for multi-select) ---
 
-	art <- config_df$config_df[config_df$config_df$Method == 'articulation',]
-	ref_col_names <- colnames(single_reference_imported$single_reference_imported)
-	art_elements$df <- NULL
-	art_measurements_a$df <- NULL
-	art_measurements_b$df <- NULL
-	for(i in 1:nrow(art)) {
-		a = FALSE
-		b = FALSE
-		for(x in 1:length(ref_col_names)) {
-			if(art$Measurementa[i] == ref_col_names[x]) {a=TRUE}
-			if(art$Measurementb[i] == ref_col_names[x]) {b=TRUE}
-			if(a && b) {
-				art_measurements_a$df <- na.omit(c(art_measurements_a$df, art$Measurementa[i]))
-				art_measurements_b$df <- na.omit(c(art_measurements_b$df, art$Measurementb[i]))
-				temp1 <- na.omit(unique(single_reference_imported$single_reference_imported[!is.na(single_reference_imported$single_reference_imported[[art$Measurementa[i]]]),]$Element))[1]
-				temp2 <- na.omit(unique(single_reference_imported$single_reference_imported[!is.na(single_reference_imported$single_reference_imported[[art$Measurementb[i]]]),]$Element))[1]
-				if(!is.na(temp1) && !is.na(temp2)) {
-					cf <- function(a, b) {
-						for(t in 1:length(a)) {
-							if(a[t] == b) {return(TRUE)}
-						}
-						return(FALSE)
-					}
-					n <- 0
-					temp3 <- paste(temp1, temp2, sep="-")
-					if(!is.null(art_elements$df)) {
-						while(cf(art_elements$df, temp3)) {
-							n <- n + 1
-							temp3 <- paste(temp1, temp2,n+1, sep="-")
-						}
-					}
-					art_elements$df <- c(art_elements$df, temp3)
-				}
-				break
-			}
-		}
-	}
-
-	output$single_element_osr <- renderUI({
-		selectInput(inputId = "single_element_osr", label = "Elements", choices = art_elements$df)
-	})
-
-	output$single_element_pair_match <- renderUI({
-		selectInput(inputId = "single_elements_pairmatch", label = "Element", choices = elements$elements)
-	})
-
-	output$single_elements_association_a <- renderUI({
-		selectInput(inputId = "single_elements_association_a", label = "Independent", choices = elements$elements)
-	})
-
-	observeEvent(input$single_elements_association_a, {
-		output$single_elements_association_b <- renderUI({
-			selectInput(inputId = "single_elements_association_b", label = "Dependent", choices = elements$elements[elements$elements != input$single_elements_association_a])
-		})
-	})
-	
-	output$list_numeric_inputs_single_left <- renderUI ({
-		lapply(single_ML$single_ML, function(i) {
-			numericInput(paste0(i,"_left"), label = i, value = "", min=0,max=999,step=0.01)
-		})
-	})
-
-	output$list_numeric_inputs_single_right <- renderUI ({
-		lapply(single_ML$single_ML, function(i) {
-			numericInput(paste0(i,"_right"), label = i, value = "", min=0,max=999,step=0.01)
-		})
-	})
-
-	output$list_numeric_inputs_single_A <- renderUI ({
-		lapply(single_MLA$single_ML, function(i) {
-			numericInput(paste0(i,"_A"), label = i, value = "", min=0,max=999,step=0.01)
-		})
-	})
-
-	output$list_numeric_inputs_single_B <- renderUI ({
-		lapply(single_MLB$single_ML, function(i) {
-			numericInput(paste0(i,"_B"), label = i, value = "", min=0,max=999,step=0.01)
-		})
-	})
-
-	output$single_measurement_osr_a <- renderUI({
-		lapply(art_measurements_a$df[which(art_elements$df == input$single_element_osr)], function(i) {
-			numericInput(paste0(i,"_art_a"), label = i, value = "", min=0,max=999,step=0.01)
-		})
-	})
-	output$single_measurement_osr_b <- renderUI({
-		lapply(art_measurements_b$df[which(art_elements$df == input$single_element_osr)], function(i) {
-			numericInput(paste0(i,"_art_b"), label = i, value = "", min=0,max=999,step=0.01)
-		})
-	})
-
-	observeEvent(input$single_elements_pairmatch, {
-		temp <- single_reference_imported$single_reference_imported[single_reference_imported$single_reference_imported$Element == input$single_elements_pairmatch,]
-		t1 <- temp[,c(1:6)]
-		t2 <- temp[,-c(1:6)]
-		single_ML$single_ML <- names(which(colSums(is.na(t2)) < nrow(t2)))
-	})
-
-	observeEvent(input$single_elements_association_a, {
-		temp <- single_reference_imported$single_reference_imported[single_reference_imported$single_reference_imported$Element == input$single_elements_association_a,]
-		t1 <- temp[,c(1:6)]
-		t2 <- temp[,-c(1:6)]
-		single_MLA$single_ML <- names(which(colSums(is.na(t2)) < nrow(t2)))
-	})
-
-	observeEvent(input$single_elements_association_b, {
-		temp <- single_reference_imported$single_reference_imported[single_reference_imported$single_reference_imported$Element == input$single_elements_association_b,]
-		t1 <- temp[,c(1:6)]
-		t2 <- temp[,-c(1:6)]
-		single_MLB$single_ML <- names(which(colSums(is.na(t2)) < nrow(t2)))
-	})
-
+output$single_reference <- renderUI({
+    defaults <- c("DPAA White Male", "CMNH White Male", "SI-TERRY White Male", "UT White Male")
+    all_refs <- reference_name_list$reference_name_list
+    available_defaults <- all_refs[tolower(all_refs) %in% tolower(defaults)]
+    selectizeInput(
+        inputId = "single_reference",
+        label = "Reference Groups",
+        choices = reference_name_list$reference_name_list,
+        selected = available_defaults,
+        multiple = TRUE,
+        options = list(placeholder = "Select reference group(s)...")
+    )
 })
 
+# --- Analysis type (server-rendered) ---
+
+output$single_analysis <- renderUI({
+    selectInput(
+        inputId = "single_analysis",
+        label = "Analysis",
+        choices = c("Pairmatch" = "pairmatch", "Articulation" = "articulation", "Regression" = "regression"),
+        selected = "pairmatch"
+    )
+})
+
+# --- When reference groups change, combine and update all downstream UI ---
+
+observeEvent(input$single_reference, {
+    req(length(input$single_reference) > 0)
+
+    # Merge all selected reference groups
+    ref_data <- dplyr::bind_rows(
+        lapply(input$single_reference, function(g) reference_list$reference_list[[g]])
+    )
+    combined_ref$df <- ref_data
+    elements$elements <- unique(ref_data$element)
+
+    # --- Articulation: determine valid element pairs from config ---
+    art <- articulation_config$df
+    # Lowercase config measurement names to match DB column names (PostgreSQL returns lowercase)
+    art$Measurementa <- tolower(art$Measurementa)
+    art$Measurementb <- tolower(art$Measurementb)
+    ref_cols <- colnames(ref_data)
+    art_elements$df <- NULL
+    art_measurements_a$df <- NULL
+    art_measurements_b$df <- NULL
+
+    valid <- art$Measurementa %in% ref_cols & art$Measurementb %in% ref_cols
+    valid_art <- art[valid, ]
+
+    if (nrow(valid_art) > 0) {
+        for (i in 1:nrow(valid_art)) {
+            ma <- valid_art$Measurementa[i]
+            mb <- valid_art$Measurementb[i]
+            art_measurements_a$df <- c(art_measurements_a$df, ma)
+            art_measurements_b$df <- c(art_measurements_b$df, mb)
+
+            # Determine which elements these measurements belong to
+            elem_a <- na.omit(unique(ref_data$element[!is.na(ref_data[[ma]])]))[1]
+            elem_b <- na.omit(unique(ref_data$element[!is.na(ref_data[[mb]])]))[1]
+            if (!is.na(elem_a) && !is.na(elem_b)) {
+                label <- paste(elem_a, elem_b, sep = "-")
+                # Deduplicate labels using while loop
+                n <- 0
+                if (!is.null(art_elements$df)) {
+                    while (label %in% art_elements$df) {
+                        n <- n + 1
+                        label <- paste(elem_a, elem_b, n + 1, sep = "-")
+                    }
+                }
+                art_elements$df <- c(art_elements$df, label)
+            }
+        }
+    }
+
+    # --- UI outputs for element selection ---
+
+    output$single_element_osr <- renderUI({
+        selectInput(inputId = "single_element_osr", label = "Elements", choices = art_elements$df)
+    })
+
+    output$single_element_pair_match <- renderUI({
+        selectInput(inputId = "single_elements_pairmatch", label = "Element", choices = elements$elements)
+    })
+
+    # --- Regression: filter elements to regression-valid bones ---
+    reg_valid <- elements$elements[tolower(elements$elements) %in% tolower(regression_bones$bones)]
+
+    output$single_elements_association_a <- renderUI({
+        selectInput(inputId = "single_elements_association_a", label = "Independent", choices = reg_valid)
+    })
+
+    # Dependent cannot be same bone as independent
+    observeEvent(input$single_elements_association_a, {
+        available <- reg_valid[reg_valid != input$single_elements_association_a]
+        output$single_elements_association_b <- renderUI({
+            selectInput(inputId = "single_elements_association_b", label = "Dependent", choices = available)
+        })
+    })
+
+    # --- Dynamic measurement input fields ---
+
+    output$list_numeric_inputs_single_left <- renderUI({
+        lapply(single_ML$vals, function(i) {
+            numericInput(paste0(i, "_left"), label = cap_first(i), value = "", min = 0, max = 999, step = 0.01)
+        })
+    })
+
+    output$list_numeric_inputs_single_right <- renderUI({
+        lapply(single_ML$vals, function(i) {
+            numericInput(paste0(i, "_right"), label = cap_first(i), value = "", min = 0, max = 999, step = 0.01)
+        })
+    })
+
+    output$list_numeric_inputs_single_A <- renderUI({
+        lapply(single_MLA$vals, function(i) {
+            numericInput(paste0(i, "_A"), label = cap_first(i), value = "", min = 0, max = 999, step = 0.01)
+        })
+    })
+
+    output$list_numeric_inputs_single_B <- renderUI({
+        lapply(single_MLB$vals, function(i) {
+            numericInput(paste0(i, "_B"), label = cap_first(i), value = "", min = 0, max = 999, step = 0.01)
+        })
+    })
+
+    output$single_measurement_osr_a <- renderUI({
+        lapply(art_measurements_a$df[which(art_elements$df == input$single_element_osr)], function(i) {
+            numericInput(paste0(i, "_art_a"), label = cap_first(i), value = "", min = 0, max = 999, step = 0.01)
+        })
+    })
+
+    output$single_measurement_osr_b <- renderUI({
+        lapply(art_measurements_b$df[which(art_elements$df == input$single_element_osr)], function(i) {
+            numericInput(paste0(i, "_art_b"), label = cap_first(i), value = "", min = 0, max = 999, step = 0.01)
+        })
+    })
+
+    # --- Update measurement lists when element selection changes ---
+
+    observeEvent(input$single_elements_pairmatch, {
+        single_ML$vals <- get_available_measurements(combined_ref$df, input$single_elements_pairmatch)
+    })
+
+    observeEvent(input$single_elements_association_a, {
+        single_MLA$vals <- get_available_measurements(combined_ref$df, input$single_elements_association_a)
+    })
+
+    observeEvent(input$single_elements_association_b, {
+        single_MLB$vals <- get_available_measurements(combined_ref$df, input$single_elements_association_b)
+    })
+})
+
+# --- Analysis execution ---
+
+run_pair_match <- function(ref, measurements, input) {
+    input_left <- sapply(measurements, function(i) input[[paste0(i, "_left")]])
+    input_right <- sapply(measurements, function(i) input[[paste0(i, "_right")]])
+
+    input_left <- t(data.frame(input_left))
+    colnames(input_left) <- measurements
+    input_right <- t(data.frame(input_right))
+    colnames(input_right) <- measurements
+
+    # Check at least one pair is present
+    has_pair <- FALSE
+    for (x in 1:length(input_left)) {
+        if (!is.na(input_left[x]) && !is.na(input_right[x])) {
+            has_pair <- TRUE
+            break
+        }
+    }
+    if (!has_pair) { return(NULL) }
+
+    sortleft <- data.frame(accession = input$ID1, side = "left", element = tolower(input$single_elements_pairmatch), input_left, stringsAsFactors = FALSE)
+    sortright <- data.frame(accession = input$ID2, side = "right", element = tolower(input$single_elements_pairmatch), input_right, stringsAsFactors = FALSE)
+
+    pm.d1 <- pm.input(sort = rbind(sortleft, sortright), bone = input$single_elements_pairmatch, measurements = measurements, ref = ref)
+    if (is.null(pm.d1)) { return(NULL) }
+
+    d2 <- ttest(
+        sorta = pm.d1[[3]], sortb = pm.d1[[4]],
+        refa = pm.d1[[1]], refb = pm.d1[[2]],
+        alphalevel = input$common_alpha_level,
+        reference = paste(input$single_reference, collapse = ", "),
+        absolute = input$single_absolute_value,
+        zmean = input$single_mean,
+        yeojohnson = input$single_yeojohnson,
+        tails = as.numeric(input$single_tails)
+    )
+    return(d2)
+}
+
+run_articulation <- function(ref, art_elem, art_meas_a, art_meas_b, input) {
+    temp1 <- which(art_elem == input$single_element_osr)
+    tempa <- unique(art_meas_a[temp1])
+    tempb <- unique(art_meas_b[temp1])
+
+    input_a <- sapply(tempa, function(i) input[[paste0(i, "_art_a")]])
+    input_b <- sapply(tempb, function(i) input[[paste0(i, "_art_b")]])
+
+    input_a <- t(data.frame(input_a))
+    colnames(input_a) <- tempa
+    input_b <- t(data.frame(input_b))
+    colnames(input_b) <- tempb
+
+    if (is.na(input_a[1]) || is.na(input_b[1])) { return(NULL) }
+
+    bone_parts <- strsplit(input$single_element_osr, split = "-")[[1]]
+    sorta <- data.frame(accession = input$ID1, side = tolower(input$single_osr_side), element = tolower(bone_parts[1]), input_a, stringsAsFactors = FALSE)
+    sortb <- data.frame(accession = input$ID2, side = tolower(input$single_osr_side), element = tolower(bone_parts[2]), input_b, stringsAsFactors = FALSE)
+
+    art.d1 <- art.input(
+        side = tolower(input$single_osr_side), ref = ref,
+        sorta = sorta, sortb = sortb,
+        bonea = tolower(bone_parts[1]), boneb = tolower(bone_parts[2]),
+        measurementsa = tempa, measurementsb = tempb
+    )
+    if (is.null(art.d1)) { return(NULL) }
+
+    d2 <- ttest(
+        sorta = art.d1[[3]], sortb = art.d1[[4]],
+        refa = art.d1[[1]], refb = art.d1[[2]],
+        alphalevel = input$common_alpha_level,
+        reference = paste(input$single_reference, collapse = ", "),
+        absolute = input$single_absolute_value,
+        zmean = input$single_mean,
+        yeojohnson = input$single_yeojohnson,
+        tails = as.numeric(input$single_tails)
+    )
+    return(d2)
+}
+
+run_osr <- function(ref, meas_a, meas_b, input) {
+    input_A <- sapply(meas_a, function(i) input[[paste0(i, "_A")]])
+    input_B <- sapply(meas_b, function(i) input[[paste0(i, "_B")]])
+
+    input_A <- t(data.frame(input_A))
+    colnames(input_A) <- meas_a
+    input_B <- t(data.frame(input_B))
+    colnames(input_B) <- meas_b
+
+    if (all(is.na(input_A)) || all(is.na(input_B))) { return(NULL) }
+
+    sorta <- data.frame(accession = input$ID1, side = tolower(input$single_association_side_a), element = tolower(input$single_elements_association_a), input_A, stringsAsFactors = FALSE)
+    sortb <- data.frame(accession = input$ID2, side = tolower(input$single_association_side_b), element = tolower(input$single_elements_association_b), input_B, stringsAsFactors = FALSE)
+
+    reg.d1 <- reg.input(
+        sorta = sorta, sortb = sortb,
+        sidea = tolower(input$single_association_side_a),
+        sideb = tolower(input$single_association_side_b),
+        bonea = tolower(input$single_elements_association_a),
+        boneb = tolower(input$single_elements_association_b),
+        measurementsa = meas_a, measurementsb = meas_b,
+        ref = ref
+    )
+    if (is.null(reg.d1)) { return(NULL) }
+
+    d2 <- reg.test(
+        refa = reg.d1[[1]], refb = reg.d1[[2]],
+        sorta = reg.d1[[3]], sortb = reg.d1[[4]],
+        alphalevel = input$common_alpha_level,
+        reference = paste(input$single_reference, collapse = ", ")
+    )
+    return(d2)
+}
+
+# --- Process button handler ---
+
+# Reactive storage for results (used by CSV download)
+analysis_results <- reactiveValues(df = NULL, plot_data = NULL, analysis_type = NULL)
+
 observeEvent(input$proc, {
-	showModal(modalDialog(title = "Window will update when finished.", easyClose = FALSE, footer = NULL))
-	withProgress(message = 'Calculation has started', detail = '', value = 0, min=0, max=3, {
-		if(input$single_analysis == "articulation") {
-			temp1 <- which(art_elements$df == input$single_element_osr)
-			tempa <- art_measurements_a$df[temp1][!duplicated(art_measurements_a$df[temp1])]
-			tempb <- art_measurements_b$df[temp1][!duplicated(art_measurements_b$df[temp1])]
+    showModal(modalDialog(title = "Window will update when finished.", easyClose = FALSE, footer = NULL))
+    withProgress(message = "Calculation has started", detail = "", value = 0, min = 0, max = 3, {
 
-			single_input_art_a <- reactiveValues(single_input_art_a = c())
-			lapply(tempa, function(i) {
-				single_input_art_a$single_input_art_a <- c(single_input_art_a$single_input_art_a, input[[paste0(i,"_art_a")]])
-			})
+        d2 <- NULL
+        current_analysis <- input$single_analysis
 
-			single_input_art_b <- reactiveValues(single_input_art_b = c())
-			lapply(tempb, function(i) {
-				single_input_art_b$single_input_art_b <- c(single_input_art_b$single_input_art_b, input[[paste0(i,"_art_b")]])
-			})
+        if (current_analysis == "articulation") {
+            incProgress(amount = 1, message = "sorting data")
+            d2 <- run_articulation(combined_ref$df, art_elements$df, art_measurements_a$df, art_measurements_b$df, input)
 
-			single_input_art_a$single_input_art_a <- t(data.frame(single_input_art_a$single_input_art_a))
-			colnames(single_input_art_a$single_input_art_a) <- tempa
-			single_input_art_b$single_input_art_b <- t(data.frame(single_input_art_b$single_input_art_b))
-			colnames(single_input_art_b$single_input_art_b) <- tempb
+        } else if (current_analysis == "pairmatch") {
+            incProgress(amount = 1, message = "sorting data")
+            d2 <- run_pair_match(combined_ref$df, single_ML$vals, input)
 
-			if(is.na(single_input_art_a$single_input_art_a[1]) || is.na(single_input_art_b$single_input_art_b[1])) {removeModal();shinyalert(title = "ERROR!", text="There was an error with the input and/or reference data",type = "error", closeOnClickOutside = TRUE, showConfirmButton = TRUE, confirmButtonText="Dismiss");return(NULL)}
+        } else if (current_analysis == "regression") {
+            incProgress(amount = 1, message = "sorting data")
+            d2 <- run_osr(combined_ref$df, single_MLA$vals, single_MLB$vals, input)
+        }
 
-			sorta <- data.frame(id = input$ID1, Side = input$single_osr_side, Element = strsplit(input$single_element_osr, split = "-")[[1]][1], single_input_art_a$single_input_art_a, stringsAsFactors = FALSE)
-			sortb <- data.frame(id = input$ID2, Side = input$single_osr_side, Element = strsplit(input$single_element_osr, split = "-")[[1]][2], single_input_art_b$single_input_art_b, stringsAsFactors = FALSE)
-			incProgress(amount = 1, message = "sorting data")
-			art.d1 <- art.input(side = input$single_osr_side, ref = single_reference_imported$single_reference_imported, sorta = sorta, sortb = sortb, bonea = strsplit(input$single_element_osr, split = "-")[[1]][1], boneb = strsplit(input$single_element_osr, split = "-")[[1]][2], measurementsa = tempa, measurementsb = tempb)
-			incProgress(amount = 1, message = "running comparison")
-			if(is.null(art.d1)) {removeModal();shinyalert(title = "ERROR!", text="There was an error with the input and/or reference data",type = "error", closeOnClickOutside = TRUE, showConfirmButton = TRUE, confirmButtonText="Dismiss");return(NULL)}
-			d2 <- ttest(sorta = art.d1[[3]], sortb = art.d1[[4]], refa = art.d1[[1]], refb = art.d1[[2]], sessiontempdir = sessiontemp, alphalevel = common_alpha_level$common_alpha_level, reference = single_reference$single_reference, absolute = single_absolute_value$single_absolute_value, zmean = single_mean$single_mean, yeojohnson = single_yeojohnson$single_yeojohnson, tails = single_tails$single_tails)
-			tempDF <- rbind(d2[[2]], d2[[3]])
-		} else if(input$single_analysis == "pair-match") {
-			single_input_list_left <- reactiveValues(single_input_list_left = c())
-			lapply(single_ML$single_ML, function(i) {
-				single_input_list_left$single_input_list_left <- c(single_input_list_left$single_input_list_left, input[[paste0(i,"_left")]])
-			})
-			single_input_list_right <- reactiveValues(single_input_list_right = c())
-			lapply(single_ML$single_ML, function(i) {
-				single_input_list_right$single_input_list_right <- c(single_input_list_right$single_input_list_right, input[[paste0(i,"_right")]])
-			})
-			single_input_list_left$single_input_list_left <- t(data.frame(single_input_list_left$single_input_list_left))
-			colnames(single_input_list_left$single_input_list_left) <- single_ML$single_ML
-			single_input_list_right$single_input_list_right <- t(data.frame(single_input_list_right$single_input_list_right))
-			colnames(single_input_list_right$single_input_list_right) <- single_ML$single_ML
+        if (is.null(d2)) {
+            show_analysis_error()
+            return(NULL)
+        }
 
-			for(x in 1:length(single_input_list_left$single_input_list_left)) {
-				if(!is.na(single_input_list_left$single_input_list_left[x]) && !is.na(single_input_list_right$single_input_list_right[x])) {
-					break #break if at least 1 pair is present
-				} else if(x == length(single_input_list_left$single_input_list_left)) {
-					removeModal();shinyalert(title = "ERROR!", text="There was an error with the input and/or reference data",type = "error", closeOnClickOutside = TRUE, showConfirmButton = TRUE, confirmButtonText="Dismiss");return(NULL)
-				}
-			}
+        incProgress(amount = 1, message = "running comparison")
 
-			sortleft <- data.frame(id = input$ID1, Side = "left", Element = input$single_elements_pairmatch, single_input_list_left$single_input_list_left, stringsAsFactors = FALSE)
-			sortright <- data.frame(id = input$ID2, Side = "right", Element = input$single_elements_pairmatch, single_input_list_right$single_input_list_right, stringsAsFactors = FALSE)
-			incProgress(amount = 1, message = "sorting data")
-			pm.d1 <- pm.input(sort = rbind(sortleft, sortright), bone = input$single_elements_pairmatch, measurements = single_ML$single_ML, ref = single_reference_imported$single_reference_imported)
-			if(is.null(pm.d1)) {removeModal();shinyalert(title = "ERROR!", text="There was an error with the input and/or reference data",type = "error", closeOnClickOutside = TRUE, showConfirmButton = TRUE, confirmButtonText="Dismiss");return(NULL)}
-			incProgress(amount = 1, message = "running comparison")
-			d2 <- ttest(sorta = pm.d1[[3]], sortb = pm.d1[[4]], refa = pm.d1[[1]], refb = pm.d1[[2]], sessiontempdir = sessiontemp, alphalevel = common_alpha_level$common_alpha_level, reference = single_reference$single_reference, absolute = single_absolute_value$single_absolute_value, zmean = single_mean$single_mean, yeojohnson = single_yeojohnson$single_yeojohnson, tails = single_tails$single_tails)
-			tempDF <- rbind(d2[[2]], d2[[3]])
-		} else if(input$single_analysis == "osr") {
-			single_input_list_A <- reactiveValues(single_input_list_A = c())
-			lapply(single_MLA$single_ML, function(i) {
-				single_input_list_A$single_input_list_A <- c(single_input_list_A$single_input_list_A, input[[paste0(i,"_A")]])
-			})
+        # New return format: list(results_formatted, plot_data, t_time, rejected)
+        results_formatted <- d2[[1]]
+        plot_data <- d2[[2]]
 
-			single_input_list_B <- reactiveValues(single_input_listB = c())
-			lapply(single_MLB$single_ML, function(i) {
-				single_input_list_B$single_input_list_B <- c(single_input_list_B$single_input_list_B, input[[paste0(i,"_B")]])
-			})
-			single_input_list_A$single_input_list_A <- t(data.frame(single_input_list_A$single_input_list_A))
-			single_input_list_B$single_input_list_B <- t(data.frame(single_input_list_B$single_input_list_B))
-			colnames(single_input_list_A$single_input_list_A) <- single_MLA$single_ML
-			colnames(single_input_list_B$single_input_list_B) <- single_MLB$single_ML
+        # Store for CSV download
+        analysis_results$df <- results_formatted
+        analysis_results$plot_data <- plot_data
+        analysis_results$analysis_type <- current_analysis
 
-			if(all(is.na(single_input_list_A$single_input_list_A)) || all(is.na(single_input_list_B$single_input_list_B))) {removeModal();shinyalert(title = "ERROR!", text="There was an error with the input and/or reference data",type = "error", closeOnClickOutside = TRUE, showConfirmButton = TRUE, confirmButtonText="Dismiss");return(NULL)}
+        # Render results table with CSV download button
+        output$table2 <- DT::renderDataTable({
+            DT::datatable(results_formatted, selection = "none",
+                extensions = "Buttons",
+                options = list(
+                    dom = "Bfrtip",
+                    buttons = list(list(extend = "csv", text = "Download CSV")),
+                    pageLength = 10,
+                    ordering = TRUE
+                ),
+                rownames = FALSE)
+        })
 
-			sorta <- data.frame(id = input$ID1, Side = input$single_association_side_a, Element = input$single_elements_association_a, single_input_list_A$single_input_list_A, stringsAsFactors = FALSE)
-			sortb <- data.frame(id = input$ID2, Side = input$single_association_side_b, Element = input$single_elements_association_b, single_input_list_B$single_input_list_B, stringsAsFactors = FALSE)
-			incProgress(amount = 1, message = "sorting data")
-			reg.d1 <- reg.input(sorta = sorta, sortb = sortb, sidea = input$single_association_side_a, sideb = input$single_association_side_b, bonea = input$single_elements_association_a, boneb = input$single_elements_association_b, measurementsa = single_MLA$single_ML, measurementsb = single_MLB$single_ML, ref = single_reference_imported$single_reference_imported)
-			if(is.null(reg.d1)) {removeModal();shinyalert(title = "ERROR!", text="There was an error with the input and/or reference data",type = "error", closeOnClickOutside = TRUE, showConfirmButton = TRUE, confirmButtonText="Dismiss");return(NULL)}
-			incProgress(amount = 1, message = "running comparison")
-			d2 <- reg.test(refa = reg.d1[[1]], refb = reg.d1[[2]], sorta = reg.d1[[3]], sortb = reg.d1[[4]], sessiontempdir = sessiontemp, alphalevel = common_alpha_level$common_alpha_level, reference = single_reference$single_reference)
-			tempDF <- rbind(d2[[2]], d2[[3]])
-		}
+        # Render Plotly plot (only for single specimen comparisons)
+        if (!is.null(plot_data)) {
+            if (current_analysis == "regression") {
+                # Scatter plot with OLS prediction intervals
+                output$single_plot <- renderPlotly({
+                    d <- data.frame(x = plot_data$ref_x, y = plot_data$ref_y)
+                    OLS <- lm(y ~ x, data = d)
+                    pm1 <- predict(OLS, interval = "prediction", level = 1 - plot_data$alphalevel)
+                    d$fit <- pm1[, 1]
+                    d$lwr <- pm1[, 2]
+                    d$upr <- pm1[, 3]
+                    d <- d[order(d$x), ]
 
-		output$table2 <- DT::renderDataTable({
-			DT::datatable(tempDF, selection = 'none', options = list(lengthMenu = c(1), pageLength = 1, dom = 't', ordering=F), rownames = FALSE)
-		})
+                    plot_ly() %>%
+                        add_markers(data = d, x = ~x, y = ~y, marker = list(color = "grey", size = 6),
+                            name = "Reference") %>%
+                        add_lines(data = d, x = ~x, y = ~fit, line = list(color = "#ea6011", dash = "dash"),
+                            name = "OLS") %>%
+                        add_lines(data = d, x = ~x, y = ~lwr, line = list(color = "black", dash = "dash"),
+                            name = "Lower PI") %>%
+                        add_lines(data = d, x = ~x, y = ~upr, line = list(color = "black", dash = "dash"),
+                            name = "Upper PI") %>%
+                        add_markers(x = plot_data$specimen_x, y = plot_data$specimen_y,
+                            marker = list(color = "#126a8f", size = 10),
+                            name = "Specimen") %>%
+                        layout(
+                            xaxis = list(title = cap_first(plot_data$x_label)),
+                            yaxis = list(title = cap_first(plot_data$y_label)),
+                            showlegend = FALSE
+                        )
+                })
+            } else {
+                # Histogram with vertical specimen line (pairmatch / articulation)
+                output$single_plot <- renderPlotly({
+                    ref_dist <- plot_data[1:(nrow(plot_data) - 1), ]
+                    specimen_val <- plot_data[nrow(plot_data), ]
 
-		direc <- d2[[1]]
-		sd <- paste(sessiontemp,direc,sep="/")
+                    plot_ly() %>%
+                        add_histogram(x = ref_dist, marker = list(color = "#126a8f", line = list(color = "grey", width = 1)),
+                            name = "Reference") %>%
+                        layout(
+                            shapes = list(list(
+                                type = "line", x0 = specimen_val, x1 = specimen_val,
+                                y0 = 0, y1 = 1, yref = "paper",
+                                line = list(color = "#ea6011", dash = "dash", width = 2)
+                            )),
+                            xaxis = list(title = ""),
+                            yaxis = list(title = ""),
+                            showlegend = FALSE
+                        )
+                })
+            }
+        }
 
-		nimages <- list.files(sd)
-		nimages <- paste(sessiontemp, "/", direc, "/", nimages[grep(".jpg", nimages)], sep="")
 
-		output$single_plot <- renderImage({
-			list(src = nimages,
-				contentType = 'image/jpg',
-				height = 400,
-				alt = ""
-			)
-		}, deleteFile = FALSE)
-
-		files <- list.files(sd, recursive = TRUE, full.names=TRUE)
-		zip:::zipr(zipfile = paste(sd,"/",direc,'.zip',sep=''), files = files)
-		output$downloadData2 <- downloadHandler(
-			filename = function() {
-				paste("results.zip")
-			},
-			content = function(file) {
-				file.copy(paste(sd,"/",direc,'.zip',sep=''), file)  
-			},
-			contentType = "application/zip"
-		)
-		
-		gc()
-		removeModal()
-		incProgress(amount = 1, message = "Completed")
-	})
+        removeModal()
+        incProgress(amount = 1, message = "Completed")
+    })
 })

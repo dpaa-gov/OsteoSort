@@ -1,12 +1,15 @@
-single_osteometric_sorting <- tabPanel("Single",icon = icon("gear", lib="font-awesome"),
+single_osteometric_sorting <- tabPanel("Single", icon = icon("gear", lib = "font-awesome"),
 	sidebarLayout(
 		sidebarPanel(
 			tags$style(type='text/css', ".selectize-input { font-size: 14px; line-height: 14px;} .selectize-dropdown { font-size: 14px; line-height: 14px; }"),
 			tags$style(".irs-bar, .irs-bar-edge, .irs-single, irs.grid-pol {background: #126a8f; border-color: #126a8f;}"),
 			tags$style(".well {background-color: #f6f6f6;}"),
+			tags$style(type = "text/css", "#proc { width:100%; font-size:85%; background-color:#126a8f }"),
+			tags$style(type = "text/css", "#template { color:#FFFFFF }"),
+			tags$style(type = "text/css", "#example { color:#FFFFFF }"),
 			uiOutput("single_reference"),
 			uiOutput("single_analysis"),
-			conditionalPanel(condition = "input.single_analysis == 'pair-match'",
+			conditionalPanel(condition = "input.single_analysis == 'pairmatch'",
 				uiOutput("single_element_pair_match"),
 				fluidRow(
 					column(6,
@@ -19,15 +22,15 @@ single_osteometric_sorting <- tabPanel("Single",icon = icon("gear", lib="font-aw
 					)
 				)
 			),
-			conditionalPanel(condition = "input.single_analysis == 'osr'",
+			conditionalPanel(condition = "input.single_analysis == 'regression'",
 				fluidRow(
 					column(6,
-						selectInput("single_association_side_a", "Side", c(Left='Left', Right='Right')),
+						selectInput("single_association_side_a", "Side", c(Left = "Left", Right = "Right")),
 						uiOutput("single_elements_association_a"),
 						uiOutput("list_numeric_inputs_single_A")
 					),
 					column(6,
-						selectInput("single_association_side_b", "Side", c(Left='Left', Right='Right')),
+						selectInput("single_association_side_b", "Side", c(Left = "Left", Right = "Right")),
 						uiOutput("single_elements_association_b"),
 						uiOutput("list_numeric_inputs_single_B")
 					)
@@ -36,7 +39,7 @@ single_osteometric_sorting <- tabPanel("Single",icon = icon("gear", lib="font-aw
 			conditionalPanel(condition = "input.single_analysis == 'articulation'",
 				fluidRow(
 					column(12,
-						selectInput("single_osr_side", "Side", c(Left='Left', Right='Right'))
+						selectInput("single_osr_side", "Side", c(Left = "Left", Right = "Right"))
 					),
 					column(12,
 						uiOutput("single_element_osr")
@@ -51,55 +54,29 @@ single_osteometric_sorting <- tabPanel("Single",icon = icon("gear", lib="font-aw
 			),
 			fluidRow(
 				column(6,
-					textInput(inputId = 'ID1', label = '1st ID #', value = 'X1')
+					textInput(inputId = "ID1", label = "1st ID #", value = "X1")
 				),
 				column(6,
-					textInput(inputId = 'ID2', label = '2nd ID #', value = 'Y1')
+					textInput(inputId = "ID2", label = "2nd ID #", value = "Y1")
 				)
 			),
-			fluidRow(
-				column(6,
-					actionButton("settings2","Settings", icon=icon("sliders"))
-				),
-				column(6,
-					actionButton("proc","Process ", icon = icon("gear"))
-				)
+			hr(),
+			h4("Settings"),
+			conditionalPanel(condition = "input.single_analysis != 'regression'",
+				checkboxInput("single_absolute_value", "Absolute D-value |a-b|", value = FALSE),
+				checkboxInput("single_yeojohnson", "YeoJohnson transformation", value = FALSE),
+				checkboxInput("single_mean", "Zero mean", value = FALSE),
+				radioButtons("single_tails", "Tails", choices = c(1, 2), selected = 2, inline = TRUE)
 			),
-			fluidRow(br()),
-			fluidRow(
-				column(6),
-				column(6,
-					downloadButton("downloadData2", "Save")
-				)
-			),
-			tags$style(type = "text/css", "#downloadData2 { width:100%; font-size:85%; background-color:#126a8f }"),
-			tags$style(type = "text/css", "#settings2 { width:100%; font-size:85%; background-color:#126a8f }"),
-			tags$style(type = "text/css", "#proc { width:100%; font-size:85%; background-color:#126a8f }"),
-			tags$style(type = "text/css", "#template { color:#FFFFFF }"),
-			tags$style(type = "text/css", "#example { color:#FFFFFF }"),
-			width=2
+			sliderInput("common_alpha_level", "Alpha level", min = 0.1, max = 1, value = 0.1, step = 0.1),
+			actionButton("proc", "Process", icon = icon("gear")),
+			width = 3
 		),
 		mainPanel(
-			imageOutput('single_plot'),
+			plotly::plotlyOutput("single_plot"),
 			br(),
-			DT::dataTableOutput('table2'),
-			bsModal("settingssingle", title = "Settings", trigger = "settings2", size = "medium", 
-				fluidRow(
-					column(8, 
-						conditionalPanel(condition = "input.single_analysis == 'osr'", 
-							uiOutput("association_types")
-						),
-						conditionalPanel(condition = "input.single_analysis != 'osr'",
-							uiOutput("single_absolute_value"),
-							uiOutput("single_yeojohnson"),
-							uiOutput("single_mean"),
-							uiOutput("single_tails")
-						),
-						uiOutput("common_alpha_level")
-					)
-				)
-			),
-			width=10
+			DT::dataTableOutput("table2"),
+			width = 9
 		)
 	)
 )
