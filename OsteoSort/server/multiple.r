@@ -546,15 +546,24 @@ observeEvent(input$pro, {
                 )
             }
 
-            output$table <- DT::renderDataTable({
-                render_dt(not_excluded, "not_excluded")
-            })
-            output$tablen <- DT::renderDataTable({
-                render_dt(excluded, "excluded")
-            })
-            output$tablenr <- DT::renderDataTable({
-                render_dt(rejected, "rejected")
-            })
+            output$table <- DT::renderDataTable(
+                {
+                    render_dt(not_excluded, "not_excluded")
+                },
+                server = FALSE
+            )
+            output$tablen <- DT::renderDataTable(
+                {
+                    render_dt(excluded, "excluded")
+                },
+                server = FALSE
+            )
+            output$tablenr <- DT::renderDataTable(
+                {
+                    render_dt(rejected, "rejected")
+                },
+                server = FALSE
+            )
 
             multiple_results_ready(TRUE)
             session$sendCustomMessage("updateProgress", list(id = "multiple", pct = 100, text = "Completed!"))
