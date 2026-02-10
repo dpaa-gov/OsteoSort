@@ -13,7 +13,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Install R dependencies
-RUN R -e "install.packages(c('pkgconfig', 'dplyr', 'ggplot2', 'shinyalert', 'JuliaCall', 'DT', 'grid', 'zip', 'htmltools', 'DBI', 'RPostgres', 'dotenv'))"
+RUN R -e "install.packages(c('dplyr', 'shinyalert', 'JuliaCall', 'DT', 'htmltools', 'DBI', 'RPostgres', 'dotenv', 'plotly'))"
 
 # Copy the Shiny app code
 COPY OsteoSort /srv/shiny-server/OsteoSort
