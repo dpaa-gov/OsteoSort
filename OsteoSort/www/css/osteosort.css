@@ -330,4 +330,53 @@ body {
   color: #1e2a3a !important;
 }
 
+/* Results tabset — gold active tab, gold text on inactive */
+.nav-tabs>li>a {
+  color: #d4a843 !important;
+}
+
+.nav-tabs>li.active>a,
+.nav-tabs>li.active>a:hover,
+.nav-tabs>li.active>a:focus {
+  background-color: #d4a843 !important;
+  color: #1e2a3a !important;
+  border-color: #d4a843 !important;
+}
+
+.nav-tabs>li>a:hover,
+.nav-tabs>li>a:focus {
+  background-color: rgba(212, 168, 67, 0.15) !important;
+  border-color: transparent !important;
+}
+
+/* DataTables search box — gold focus outline */
+.dataTables_filter input:focus {
+  border-color: #d4a843 !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(212, 168, 67, 0.3) !important;
+}
+
+/* Measurement code tooltip — light gold on dark */
+.well span[title] {
+  position: relative;
+}
+
+.well span[title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #f5e6c0;
+  color: #1e2a3a;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  z-index: 1000;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+
 /* ===== End Dark Sidebar Theme ===== */
