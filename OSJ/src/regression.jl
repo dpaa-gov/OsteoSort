@@ -113,7 +113,7 @@ function REGSL(m1, m2, RL, RR)
 				refd_1 = refd_1[2:end,1] #remove first row 0
 				refd_2 = refd_2[2:end,1] #remove first row 0
 				X = hcat(fill(1, size(refd_1, 1)), refd_1)
-				OLS = fit(LinearModel, X, refd_2, false)
+				OLS = fit(LinearModel, X, refd_2, dropcollinear=false)
 				sigma = res_std_err(OLS)
 				r2 = cor(refd_1, refd_2) ^ 2
 				mean_ref = mean(refd_1)

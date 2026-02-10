@@ -1,0 +1,333 @@
+/* ===== OsteoSort Dark Sidebar Theme ===== */
+
+/* Dark sidebar background */
+.well {
+  background-color: #1e2a3a !important;
+  border: none !important;
+  border-radius: 8px !important;
+  -webkit-box-shadow: none !important;
+  box-shadow: none !important;
+  color: #e0e6ed;
+}
+
+/* All text inside sidebar */
+.well label,
+.well .control-label,
+.well h4,
+.well h5,
+.well h6,
+.well p,
+.well span {
+  color: #e0e6ed !important;
+  font-weight: normal !important;
+}
+
+/* Section labels */
+.sidebar-section-label {
+  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  color: #8899aa !important;
+  margin-bottom: 8px;
+  margin-top: 16px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-section-label:first-child {
+  margin-top: 0;
+}
+
+/* Left/Right column headers */
+.well h5.side-label {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #8899aa !important;
+  margin-top: 4px;
+  margin-bottom: 8px;
+}
+
+/* Dark form controls in sidebar */
+.well .form-control,
+.well input[type="text"],
+.well input[type="number"],
+.well select {
+  background-color: #2a3a4a !important;
+  color: #e0e6ed !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  -webkit-box-shadow: none !important;
+  box-shadow: none !important;
+}
+
+.well .form-control:focus,
+.well input:focus {
+  border-color: #d4a843 !important;
+  -webkit-box-shadow: none !important;
+  box-shadow: none !important;
+}
+
+.well .form-control::-webkit-input-placeholder {
+  color: #6b7d8e;
+}
+
+.well .form-control::-moz-placeholder {
+  color: #6b7d8e;
+}
+
+.well .form-control:-ms-input-placeholder {
+  color: #6b7d8e;
+}
+
+/* Selectize (dropdown) overrides */
+.well .selectize-input,
+.well .selectize-control.single .selectize-input {
+  background-color: #2a3a4a !important;
+  color: #d4a843 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  -webkit-box-shadow: none !important;
+  box-shadow: none !important;
+}
+
+.well .selectize-input>input {
+  color: #d4a843 !important;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.well .selectize-input .item {
+  color: #d4a843 !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: none !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-top: none !important;
+  border-bottom: none !important;
+  border-radius: 0 !important;
+  outline: none !important;
+  padding: 1px 6px !important;
+  font-weight: 600;
+  box-shadow: none !important;
+  -webkit-box-shadow: none !important;
+}
+
+.well .selectize-input .item.active {
+  color: #d4a843 !important;
+  background-color: rgba(212, 168, 67, 0.15) !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.well .selectize-input .item .remove,
+.well .selectize-input .item.active .remove {
+  color: transparent !important;
+  border: none !important;
+  border-left: none !important;
+  border-right: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  -webkit-box-shadow: none !important;
+  background: transparent !important;
+  font-size: 0 !important;
+  width: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  display: none !important;
+}
+
+/* Sidebar action buttons — gold */
+.well #proc,
+.well #pro,
+.well #clearFile1 {
+  background-color: #d4a843 !important;
+  border-color: #d4a843 !important;
+  color: #1e2a3a !important;
+  width: 100% !important;
+}
+
+/* File input Browse button — gold with black text */
+.btn-file,
+.btn.btn-default.btn-file,
+.well .btn-file,
+.well .btn-file span,
+.well .btn-file * {
+  background-color: #d4a843 !important;
+  border-color: #d4a843 !important;
+  color: #000 !important;
+}
+
+/* Download buttons (Template, Example) — gold flat */
+.well #template,
+.well #example {
+  background-color: #d4a843 !important;
+  border-color: #d4a843 !important;
+  color: #000000 !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+}
+
+/* DataTables CSV Download buttons — gold flat */
+.dt-buttons .dt-button,
+.dt-buttons .buttons-csv,
+.dt-buttons .buttons-html5 {
+  background-color: #d4a843 !important;
+  border-color: #d4a843 !important;
+  color: #000000 !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+  background-image: none !important;
+}
+
+/* Hide number input spinners */
+.well input[type="number"]::-webkit-outer-spin-button,
+.well input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.well input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+.well .selectize-dropdown {
+  background-color: #2a3a4a !important;
+  color: #e0e6ed !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+.well .selectize-dropdown .option {
+  color: #e0e6ed !important;
+}
+
+.well .selectize-dropdown .option.active,
+.well .selectize-dropdown .option:hover,
+.well .selectize-dropdown .option.selected {
+  background-color: #d4a843 !important;
+  color: #1e2a3a !important;
+}
+
+.well .selectize-dropdown .optgroup-header {
+  color: #8899aa !important;
+}
+
+/* IRS slider overrides for dark bg */
+.well .irs-bar,
+.well .irs-bar-edge {
+  background: #d4a843 !important;
+  border-color: #d4a843 !important;
+}
+
+.well .irs-single {
+  background: #d4a843 !important;
+  color: #1e2a3a !important;
+}
+
+.well .irs-line {
+  background: #2a3a4a !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.well .irs-grid-pol {
+  background: #d4a843 !important;
+}
+
+.well .irs-min,
+.well .irs-max {
+  color: #8899aa !important;
+  background: transparent !important;
+}
+
+.well .irs-grid-text {
+  color: #8899aa !important;
+}
+
+/* Checkbox overrides */
+.well .checkbox label,
+.well .radio label {
+  color: #e0e6ed !important;
+}
+
+.well input[type="checkbox"],
+.well input[type="radio"] {
+  accent-color: #d4a843 !important;
+}
+
+/* Radio button inline overrides */
+.well .radio-inline {
+  color: #e0e6ed !important;
+}
+
+/* Horizontal rule in sidebar */
+.well hr {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Action buttons in sidebar */
+.well .btn-default,
+.well .btn {
+  color: #ffffff !important;
+}
+
+/* Main panel section label */
+.main-section-label {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: #2c3e50;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid #d4a843;
+}
+
+/* Body and main content area — soft gray */
+body {
+  background-color: #ecf0f1 !important;
+}
+
+.main-panel,
+.tab-content,
+.col-sm-9 {
+  background-color: #ecf0f1 !important;
+}
+
+/* Header — darker than sidebar with gold accent border */
+.navbar-default {
+  background-color: #15202d !important;
+  border-bottom: 2px solid #d4a843 !important;
+}
+
+/* Nav tab hover/active — gold text */
+.navbar-default .navbar-nav>li>a:hover,
+.navbar-default .navbar-nav>li>a:focus {
+  color: #d4a843 !important;
+}
+
+.navbar-default .navbar-nav>.active>a,
+.navbar-default .navbar-nav>.active>a:hover,
+.navbar-default .navbar-nav>.active>a:focus {
+  color: #d4a843 !important;
+  background-color: transparent !important;
+}
+
+/* DataTables pagination — gold hover/active */
+.dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+  background: #d4a843 !important;
+  border-color: #d4a843 !important;
+  color: #1e2a3a !important;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button.current,
+.dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
+  background: #d4a843 !important;
+  border-color: #d4a843 !important;
+  color: #1e2a3a !important;
+}
+
+/* ===== End Dark Sidebar Theme ===== */

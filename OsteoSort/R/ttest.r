@@ -25,46 +25,19 @@ ttest <- function(refa = NULL, refb = NULL, sorta = NULL, sortb = NULL, alphalev
 
 	plot_data <- NULL
 
-	if (absolute && zmean && yeojohnson) {
-		results <- julia_call("OSJ.TTESTABM", as.matrix(sorta[, meas_cols]), as.matrix(sortb[, meas_cols]), as.matrix(refa[, meas_cols]), as.matrix(refb[, meas_cols]), tails)
-		if (nrow(as.matrix(sorta)) == 1 && nrow(as.matrix(sortb)) == 1) {
-			plot_data <- julia_call("OSJ.TTESTAB_plot", as.matrix(sorta[, meas_cols]), as.matrix(sortb[, meas_cols]), as.matrix(refa[, meas_cols]), as.matrix(refb[, meas_cols]))
-		}
-	} else if (absolute && zmean) {
-		results <- julia_call("OSJ.TTESTAM", as.matrix(sorta[, meas_cols]), as.matrix(sortb[, meas_cols]), as.matrix(refa[, meas_cols]), as.matrix(refb[, meas_cols]), tails)
-		if (nrow(as.matrix(sorta)) == 1 && nrow(as.matrix(sortb)) == 1) {
-			plot_data <- julia_call("OSJ.TTESTA_plot", as.matrix(sorta[, meas_cols]), as.matrix(sortb[, meas_cols]), as.matrix(refa[, meas_cols]), as.matrix(refb[, meas_cols]))
-		}
-	} else if (absolute && yeojohnson) {
-		results <- julia_call("OSJ.TTESTAB", as.matrix(sorta[, meas_cols]), as.matrix(sortb[, meas_cols]), as.matrix(refa[, meas_cols]), as.matrix(refb[, meas_cols]), tails)
-		if (nrow(as.matrix(sorta)) == 1 && nrow(as.matrix(sortb)) == 1) {
-			plot_data <- julia_call("OSJ.TTESTAB_plot", as.matrix(sorta[, meas_cols]), as.matrix(sortb[, meas_cols]), as.matrix(refa[, meas_cols]), as.matrix(refb[, meas_cols]))
-		}
-	} else if (zmean && yeojohnson) {
-		results <- julia_call("OSJ.TTESTBM", as.matrix(sorta[, meas_cols]), as.matrix(sortb[, meas_cols]), as.matrix(refa[, meas_cols]), as.matrix(refb[, meas_cols]), tails)
-		if (nrow(as.matrix(sorta)) == 1 && nrow(as.matrix(sortb)) == 1) {
-			plot_data <- julia_call("OSJ.TTESTB_plot", as.matrix(sorta[, meas_cols]), as.matrix(sortb[, meas_cols]), as.matrix(refa[, meas_cols]), as.matrix(refb[, meas_cols]))
-		}
-	} else if (absolute) {
-		results <- julia_call("OSJ.TTESTA", as.matrix(sorta[, meas_cols]), as.matrix(sortb[, meas_cols]), as.matrix(refa[, meas_cols]), as.matrix(refb[, meas_cols]), tails)
-		if (nrow(as.matrix(sorta)) == 1 && nrow(as.matrix(sortb)) == 1) {
-			plot_data <- julia_call("OSJ.TTESTA_plot", as.matrix(sorta[, meas_cols]), as.matrix(sortb[, meas_cols]), as.matrix(refa[, meas_cols]), as.matrix(refb[, meas_cols]))
-		}
-	} else if (yeojohnson) {
-		results <- julia_call("OSJ.TTESTB", as.matrix(sorta[, meas_cols]), as.matrix(sortb[, meas_cols]), as.matrix(refa[, meas_cols]), as.matrix(refb[, meas_cols]), tails)
-		if (nrow(as.matrix(sorta)) == 1 && nrow(as.matrix(sortb)) == 1) {
-			plot_data <- julia_call("OSJ.TTESTB_plot", as.matrix(sorta[, meas_cols]), as.matrix(sortb[, meas_cols]), as.matrix(refa[, meas_cols]), as.matrix(refb[, meas_cols]))
-		}
-	} else if (zmean) {
-		results <- julia_call("OSJ.TTESTM", as.matrix(sorta[, meas_cols]), as.matrix(sortb[, meas_cols]), as.matrix(refa[, meas_cols]), as.matrix(refb[, meas_cols]), tails)
-		if (nrow(as.matrix(sorta)) == 1 && nrow(as.matrix(sortb)) == 1) {
-			plot_data <- julia_call("OSJ.TTEST_plot", as.matrix(sorta[, meas_cols]), as.matrix(sortb[, meas_cols]), as.matrix(refa[, meas_cols]), as.matrix(refb[, meas_cols]))
-		}
-	} else {
-		results <- julia_call("OSJ.TTEST", as.matrix(sorta[, meas_cols]), as.matrix(sortb[, meas_cols]), as.matrix(refa[, meas_cols]), as.matrix(refb[, meas_cols]), tails)
-		if (nrow(as.matrix(sorta)) == 1 && nrow(as.matrix(sortb)) == 1) {
-			plot_data <- julia_call("OSJ.TTEST_plot", as.matrix(sorta[, meas_cols]), as.matrix(sortb[, meas_cols]), as.matrix(refa[, meas_cols]), as.matrix(refb[, meas_cols]))
-		}
+	# Call unified Julia TTEST with keyword arguments
+	sort_mat <- as.matrix(sorta[, meas_cols])
+	sort_mat_b <- as.matrix(sortb[, meas_cols])
+	ref_mat <- as.matrix(refa[, meas_cols])
+	ref_mat_b <- as.matrix(refb[, meas_cols])
+
+	results <- julia_call("OSJ.TTEST", sort_mat, sort_mat_b, ref_mat, ref_mat_b, tails,
+		absolute = absolute, yeojohnson = yeojohnson, zeromean = zmean)
+
+	# Plot data for single comparisons
+	if (nrow(as.matrix(sorta)) == 1 && nrow(as.matrix(sortb)) == 1) {
+		plot_data <- julia_call("OSJ.TTEST_plot", sort_mat, sort_mat_b, ref_mat, ref_mat_b,
+			absolute = absolute, yeojohnson = yeojohnson)
 	}
 
 	# Transform numerical T/F to measurement names
@@ -76,7 +49,7 @@ ttest <- function(refa = NULL, refb = NULL, sorta = NULL, sortb = NULL, alphalev
 
 	is_articulation <- sorta[results[, 1], "element"] != sortb[results[, 2], "element"]
 
-	if (is_articulation) {
+	if (is_articulation[1]) {
 		# Articulation: bones are different, so column names don't align positionally.
 		# Just show all measurement names from both bones.
 		meas_a <- colnames(sorta[, meas_cols])
@@ -111,10 +84,10 @@ ttest <- function(refa = NULL, refb = NULL, sorta = NULL, sortb = NULL, alphalev
 			element_2 = sortb[results[, 2], "element"],
 			side_2 = sortb[results[, 2], "side"],
 			measurements = measurements,
-			p_value = round(results[, 4], digits = 5),
+			p = round(results[, 4], digits = 5),
 			mean = round(results[, 5], digits = 4),
 			sd = round(results[, 6], digits = 4),
-			sample = results[, 7]
+			n = results[, 7]
 		),
 		result = NA,
 		stringsAsFactors = FALSE
@@ -123,8 +96,8 @@ ttest <- function(refa = NULL, refb = NULL, sorta = NULL, sortb = NULL, alphalev
 	results_formatted <- results_formatted[results_formatted$measurements != "", ]
 
 	# Append exclusion results
-	results_formatted[results_formatted$p_value > alphalevel, "result"] <- "Cannot Exclude"
-	results_formatted[results_formatted$p_value <= alphalevel, "result"] <- "Excluded"
+	results_formatted[results_formatted$p > alphalevel, "result"] <- "Cannot Exclude"
+	results_formatted[results_formatted$p <= alphalevel, "result"] <- "Excluded"
 
 	t_time <- end_time(start_time)
 	return(list(results_formatted, plot_data, t_time, rejected))

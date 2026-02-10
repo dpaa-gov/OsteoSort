@@ -1,16 +1,20 @@
 multiple_osteometric_sorting <- tabPanel("Multiple",icon = icon("gears", lib="font-awesome"),
 	sidebarLayout(
 		sidebarPanel(
+			tags$div(class = "sidebar-section-label", "REFERENCE"),
 			uiOutput("multiple_reference"),
+			tags$div(class = "sidebar-section-label", "ANALYSIS"),
 			uiOutput("multiple_analysis"),
-			uiOutput("testtype2"),
+			tags$div(class = "sidebar-section-label", "UPLOAD"),
 			uiOutput('resettableInput'),
-			conditionalPanel(condition = "input.multiple_analysis == 'pair-match'",
+			conditionalPanel(condition = "input.multiple_analysis == 'pairmatch'",
+				tags$div(class = "sidebar-section-label", "ELEMENT"),
 				uiOutput("multiple_element_pair_match"),
+				tags$div(class = "sidebar-section-label", "MEASUREMENTS"),
 				uiOutput("multiple_measurement_antimere")
 			),
 			conditionalPanel(condition = "input.multiple_analysis == 'articulation'",
-				selectInput("multiple_non_antimere_side", "Side", c(Left='Left', Right='Right')),
+			uiOutput("multiple_non_antimere_side"),
 				uiOutput("multiple_element_non_antimere"),
 				fluidRow(
 					column(6,
@@ -21,96 +25,69 @@ multiple_osteometric_sorting <- tabPanel("Multiple",icon = icon("gears", lib="fo
 					)
 				)
 			),
-			conditionalPanel(condition = "input.multiple_analysis == 'osr'",
+			conditionalPanel(condition = "input.multiple_analysis == 'regression'",
 				fluidRow(
 					column(6,
-						selectInput("multiple_association_side_a", "Side", c(Left='Left', Right='Right')),
+						uiOutput("multiple_association_side_a"),
 						uiOutput("multiple_elements_association_a"),
 						uiOutput("multiple_measurement_association_a")
 					),
 					column(6,
-						selectInput("multiple_association_side_b", "Side", c(Left='Left', Right='Right')),
+						uiOutput("multiple_association_side_b"),
 						uiOutput("multiple_elements_association_b"),
 						uiOutput("multiple_measurement_association_b")
 					)
 				)
 			),
+			# Settings inline (moved from modal)
+			tags$div(class = "sidebar-section-label", "SETTINGS"),
+			conditionalPanel(condition = "input.multiple_analysis != 'regression'",
+				uiOutput("multiple_absolute_value"),
+				uiOutput("multiple_yeojohnson"),
+				uiOutput("multiple_mean"),
+				uiOutput("multiple_tails")
+			),
+			sliderInput(inputId = "multiple_common_alpha_level", label = "Alpha level",
+				min = 0.05, max = 0.5, value = 0.1, step = 0.05),
 			fluidRow(
-				column(6,
-					actionButton("settings1","Settings", icon=icon("sliders"))
-				),
 				column(6,
 					actionButton("pro","Process ", icon = icon("gear"))
-				)
-			),
-			fluidRow(br()),
-			fluidRow(
+				),
 				column(6,
 					actionButton("clearFile1", "Clear   ", icon = icon("rectangle-xmark"))
-				),
-				column(6,
-					downloadButton("downloadData", "Save    ")
 				)
 			),
-			tags$style(type = "text/css", "#settings1 { width:100%; font-size:85%; background-color:#126a8f  }"),
-			tags$style(type = "text/css", "#pro { width:100%; font-size:85%; background-color:#126a8f  }"),
-			tags$style(type = "text/css", "#clearFile1 { width:100%; font-size:85%; background-color:#126a8f }"),
-			tags$style(type = "text/css", "#downloadData { width:100%; font-size:85%; background-color:#126a8f }"),
-            tags$style(HTML('
-                table.dataTable tbody tr.selected td,
-                table.dataTable tbody td.selected {
-                    border-top-color: white !important;
-                    box-shadow: inset 0 0 0 9999px #126a8f !important;
-                }
-
-                table.dataTable tbody tr:active td {
-                    background-color: #126a8f !important;
-                }
-
-                :root {
-                    --dt-row-selected: transparent !important;
-                }
-
-                table.dataTable tbody tr:hover, table.dataTable tbody tr:hover td {
-                    background-color: #126a8f !important;
-                }
-            ')),
-			width=2
+			width = 3
 		),
 		mainPanel(
-			htmlOutput('multiple_contents'),
-			br(),
-			tabsetPanel(id="tabSelected",
-				tabPanel("Not excluded",
-					br(),
-					DT::dataTableOutput('table')
+			conditionalPanel(condition = "output.multiple_has_results",
+				tags$div(style = "border: 1px solid #ccc; padding: 15px; border-radius: 4px;",
+					tags$div(class = "main-section-label", HTML("&#128200; Results Summary")),
+					fluidRow(
+						column(4, tableOutput('multiple_contents')),
+						column(8, plotly::plotlyOutput('multiple_plot', height = "250px"))
+					)
 				),
-				tabPanel("Excluded",
-					br(),
-					DT::dataTableOutput('tablen')
-				),
-				tabPanel("Rejected",
-					br(),
-					DT::dataTableOutput('tablenr')
-				),
-			),
-			bsModal("settingsmultiple", title = "Settings", trigger = "settings1", size = "medium", 
-				fluidRow(
-					column(8,
-						conditionalPanel(condition = "input.multiple_analysis == 'osr'", 
-							uiOutput("multiple_association_types")
+				br(),
+				tags$div(style = "border: 1px solid #ccc; padding: 15px; border-radius: 4px;",
+					tags$div(class = "main-section-label", HTML("&#128202; Results Table")),
+					tabsetPanel(id="tabSelected",
+						tabPanel("Not excluded",
+							br(),
+							DT::dataTableOutput('table')
 						),
-						conditionalPanel(condition = "input.multiple_analysis != 'osr'",
-							uiOutput("multiple_absolute_value"),
-							uiOutput("multiple_yeojohnson"),
-							uiOutput("multiple_mean"),
-							uiOutput("multiple_tails")
+						tabPanel("Excluded",
+							br(),
+							DT::dataTableOutput('tablen')
 						),
-						uiOutput("multiple_common_alpha_level")
+						tabPanel("Rejected",
+							br(),
+							DT::dataTableOutput('tablenr')
+						)
 					)
 				)
 			),
-			width=10
+			width = 9
 		)
 	)
 )

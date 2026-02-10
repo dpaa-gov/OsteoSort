@@ -10,33 +10,33 @@ pg_conn <- dbConnect(
 )
 
 # Get distinct reference groups (collection + ancestry + sex)
-res <- dbSendQuery(
+reference_groups <- unique(na.omit(dbGetQuery(
     conn = pg_conn,
     statement = " SELECT DISTINCT collection || ' ' || ancestry || ' ' || sex AS group_label,
         collection, ancestry, sex
         FROM osteometry.individuals
         WHERE osteosort_method = TRUE
         ORDER BY collection, ancestry, sex"
-)
-reference_groups <- unique(na.omit(dbFetch(res)))
+)))
 
 # Get all bones that have osteosort-enabled measurements
-res <- dbSendQuery(
+osteosort_bones <- dbGetQuery(
     conn = pg_conn,
     statement = "SELECT DISTINCT bone FROM osteometry.measurements
         WHERE osteosort_method = TRUE
         ORDER BY bone"
 )
-osteosort_bones <- dbFetch(res)
 
-# Get all osteosort-enabled measurements
-res <- dbSendQuery(
+# Get all osteosort-enabled measurements (with full names for tooltips)
+osteosort_measurements <- dbGetQuery(
     conn = pg_conn,
-    statement = "SELECT ards, bone FROM osteometry.measurements
+    statement = "SELECT ards, bone, full_name FROM osteometry.measurements
         WHERE osteosort_method = TRUE
         ORDER BY bone, ards"
 )
-osteosort_measurements <- dbFetch(res)
+
+# Named lookup: ards code -> full_name (for UI tooltips, lowercase keys for matching)
+measurement_tooltips <- setNames(osteosort_measurements$full_name, tolower(osteosort_measurements$ards))
 
 # Set up reactive values
 reference_name_list <- reactiveValues(reference_name_list = reference_groups$group_label)

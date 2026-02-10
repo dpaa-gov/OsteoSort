@@ -42,7 +42,7 @@ reg.test <- function(refa = NULL, refb = NULL, sorta = NULL, sortb = NULL, refer
 		measurements <- data.frame(t(results[c(6:length(results))]))
 	}
 
-	measurement_names <- unique(c(colnames(sorta[, -c(1:3)]), colnames(sortb[, -c(1:3)])))
+	measurement_names <- c(colnames(sorta[, -c(1:3)]), colnames(sortb[, -c(1:3)]))
 	measurement_names <- measurement_names[measurement_names != "fa"]
 
 	for (i in 1:ncol(measurements)) {
@@ -62,9 +62,9 @@ reg.test <- function(refa = NULL, refb = NULL, sorta = NULL, sortb = NULL, refer
 			y_element = sortb[results[, 2], "element"],
 			y_side = sortb[results[, 2], "side"],
 			measurements = measurements,
-			p_value = round(results[, 3], digits = 4),
+			p = round(results[, 3], digits = 4),
 			r2 = round(results[, 5], digits = 4),
-			sample = results[, 4]
+			n = results[, 4]
 		),
 		result = NA,
 		stringsAsFactors = FALSE
@@ -73,8 +73,8 @@ reg.test <- function(refa = NULL, refb = NULL, sorta = NULL, sortb = NULL, refer
 	rejected <- results_formatted[results_formatted$measurements == "", 1:6]
 	results_formatted <- results_formatted[results_formatted$measurements != "", ]
 
-	results_formatted[results_formatted$p_value > alphalevel, "result"] <- "Cannot Exclude"
-	results_formatted[results_formatted$p_value <= alphalevel, "result"] <- "Excluded"
+	results_formatted[results_formatted$p > alphalevel, "result"] <- "Cannot Exclude"
+	results_formatted[results_formatted$p <= alphalevel, "result"] <- "Excluded"
 
 	t_time <- end_time(start_time)
 	return(list(results_formatted, plot_data, t_time, rejected))

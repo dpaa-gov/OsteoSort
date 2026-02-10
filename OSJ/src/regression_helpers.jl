@@ -5,7 +5,7 @@ function res_std_err(model)
 	resd = sum(resd)
 	nK = samples - 2
 	temp = resd / nK
-	return sqrt(Complex(temp))
+	return sqrt(max(temp, 0.0))
 end
 
 function reg_t_stat(sigma, r2, predicted, comparison, comparison_p, mean, sd, n)

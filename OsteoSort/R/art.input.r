@@ -64,7 +64,7 @@ art.input <- function(bonea = NULL, boneb = NULL, side = NULL, ref = NULL, sorta
 		}
 	}
 
-	if (nrow(sorta) == 0 || nrow(sortb) == 0) { return(NULL) }
+	if (nrow(sort_A) == 0 || nrow(sort_B) == 0) { return(NULL) }
 
 	sort_A[is.na(sort_A)] <- 0
 	sort_B[is.na(sort_B)] <- 0

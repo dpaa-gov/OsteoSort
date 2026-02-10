@@ -1,8 +1,20 @@
-# OsteoSort 1.4.1
+# OsteoSort 1.5.0
 
-![Build](https://img.shields.io/badge/build-partial-yellow)
+![Build](https://img.shields.io/badge/build-passing-brightgreen)
+![R](https://img.shields.io/badge/R-4.x-blue)
+![Julia](https://img.shields.io/badge/Julia-1.11+-purple)
+![Status](https://img.shields.io/badge/status-beta%20testing%20needed-yellow)
 
-Computerized osteometric sorting application built with R/Shiny and Julia. OsteoSort uses statistical methods (pair-matching, articulation, and osteometric sorting by regression) to compare skeletal measurements against reference populations, aiding in the reassociation of commingled remains.
+Computerized osteometric sorting application built with R/Shiny and Julia. OsteoSort uses statistical methods to compare skeletal measurements against reference populations, aiding in the reassociation of commingled remains.
+
+**Key Features:**
+- **Pair-matching** — statistical comparison of bilateral skeletal elements
+- **Articulation** — assessment of joint congruence between adjacent bones
+- **Osteometric sorting by regression** — size-based reassociation using OLS regression
+- Interactive Plotly visualizations with CSV export
+- PostgreSQL-backed reference populations (ARDS)
+
+![OsteoSort Screenshot](screenshot.png)
 
 ## Architecture
 
@@ -77,6 +89,7 @@ OsteoSort/
     └── execution_precompile.jl
 ```
 
+
 ## Dependencies
 
 ### R
@@ -85,10 +98,8 @@ OsteoSort/
 | shiny | Web framework |
 | htmltools | HTML generation |
 | DT | Interactive data tables |
-| ggplot2 | Plotting |
 | dplyr | Data manipulation |
 | shinyalert | Alert dialogs |
-| zip | Result export |
 | JuliaCall | R ↔ Julia bridge |
 | DBI | Database interface |
 | RPostgres | PostgreSQL driver |
@@ -103,21 +114,17 @@ OsteoSort/
 | Rmath | R math distributions |
 | GLM | Generalized linear models |
 
+## Acknowledgments
+
+- **Alex Moore** — UI styling suggestions and design inspiration
+
 ## Citation
 
-Lynch, J.J. 2025 OsteoSort. Computerized Osteometric Sorting. Version 1.4.1. Defense POW/MIA Accounting Agency, Offutt AFB, NE.
+Lynch, J.J. 2026 OsteoSort. Computerized Osteometric Sorting. Version 1.5.0. Defense POW/MIA Accounting Agency, Offutt AFB, NE.
 
 ## TODO
 
-1. Fix deprecated argument in GLM package
-2. Julia is still installing dependencies... I missed one in the sysimage. Find out what it is.
-3. Type my arrays for caching
-4. Regression helper Complex... is abstract. Find new eltypes (see above)
-5. Functions aren't pre-compiled. Could it be tails type is wrong? Double check what R pushes over. Push to Julia then check types.
-6. Refactor `multiple.r` — apply Plotly + CSV download pattern (remove temp folder/zip workflow)
-7. Clean up unused code/files after multiple.r migration (output_function.r, analytical_temp_space.r, etc.)
-8. Improve single tab UI styling — data table layout for single-result display
-9. Refactor Julia t-test functions — simplify the 8 TTEST variants into a single parameterized function
+1. Analysts beta test
 
 ## License
 

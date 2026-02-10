@@ -1,5 +1,4 @@
 pm.input <- function(bone = NULL, ref = NULL, sort = NULL, measurements = NULL, threshold = 1) {
-	options(warn = -1)
 
 	if (is.null(bone) || is.null(sort) || is.null(ref) || is.null(threshold) || is.null(measurements)) {
 		return(NULL)
@@ -59,7 +58,7 @@ pm.input <- function(bone = NULL, ref = NULL, sort = NULL, measurements = NULL, 
 		}
 	}
 
-	if (nrow(sortleft_t) == 0 || nrow(sortright_t) == 0) { return(NULL) }
+	if (nrow(sortleft) == 0 || nrow(sortright) == 0) { return(NULL) }
 
 	# Replace NA with zero
 	sortleft[is.na(sortleft)] <- 0

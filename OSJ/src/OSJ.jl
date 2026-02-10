@@ -17,16 +17,6 @@ include("regression_plot.jl")
 
 #export function calls
 export TTEST
-export TTESTA
-export TTESTB
-export TTESTM
-export TTESTAB
-export TTESTAM
-export TTESTBM
-export TTESTABM
-export TTESTAB_plot
-export TTESTA_plot
-export TTESTB_plot
 export TTEST_plot
 export REGSL
 export REGSL_plot
