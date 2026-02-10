@@ -1,8 +1,6 @@
 #############################################
 #############################################
-## Unified t-test function
-## Replaces 8 separate functions (TTEST, TTESTA, TTESTB, TTESTM, TTESTAB, TTESTAM, TTESTBM, TTESTABM)
-## with a single parameterized implementation.
+## T-test function
 ##
 ## Parameters:
 ##   absolute  - use abs() on measurement differences (default: false)
@@ -92,8 +90,7 @@ end
 
 #############################################
 #############################################
-## Unified reference difference function
-## Replaces ref_dif and ref_difa
+## Reference difference function
 
 function ref_dif(res, RL, RR; absolute::Bool=false)
 	refd = Float64[]
