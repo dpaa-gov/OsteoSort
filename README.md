@@ -41,7 +41,7 @@ Computerized osteometric sorting application built with R/Shiny and Julia. Osteo
 ## Installation
 
 ```sh
-git clone https://github.com/jjlynch2/OsteoSort
+git clone https://github.com/dpaa-gov/OsteoSort
 cd OsteoSort
 docker build -t osteosort .
 docker run --restart=on-failure:10 --name=osteosort -d -p 4001:3838 osteosort
