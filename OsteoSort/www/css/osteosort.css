@@ -194,6 +194,7 @@
 
 .well input[type="number"] {
   -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 .well .selectize-dropdown {
@@ -288,13 +289,13 @@
 
 /* Body and main content area — soft gray */
 body {
-  background-color: #ecf0f1 !important;
+  background-color: #ffffff !important;
 }
 
 .main-panel,
 .tab-content,
 .col-sm-9 {
-  background-color: #ecf0f1 !important;
+  background-color: #ffffff !important;
 }
 
 /* Header — darker than sidebar with gold accent border */
@@ -357,16 +358,16 @@ body {
 }
 
 /* Measurement code tooltip — light gold on dark */
-.well span[title] {
+.well span[data-tooltip] {
   position: relative;
+  cursor: help;
 }
 
-.well span[title]:hover::after {
-  content: attr(title);
+.well span[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
   position: absolute;
   bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 0;
   background-color: #f5e6c0;
   color: #1e2a3a;
   padding: 4px 10px;

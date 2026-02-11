@@ -9,7 +9,7 @@ meas_label <- function(code) {
     if (is.na(tooltip)) {
         return(cap_first(code))
     }
-    tags$span(title = tooltip, style = "cursor: help;", cap_first(code))
+    tags$span(`data-tooltip` = tooltip, style = "cursor: help;", cap_first(code))
 }
 
 # Get available (non-all-NA) measurement columns for an element in reference data
@@ -95,7 +95,7 @@ observeEvent(input$single_reference, {
     valid_art <- art[valid, ]
 
     if (nrow(valid_art) > 0) {
-        for (i in 1:nrow(valid_art)) {
+        for (i in seq_len(nrow(valid_art))) {
             ma <- valid_art$Measurementa[i]
             mb <- valid_art$Measurementb[i]
             art_measurements_a$df <- c(art_measurements_a$df, ma)
@@ -134,14 +134,6 @@ observeEvent(input$single_reference, {
 
     output$single_elements_association_a <- renderUI({
         selectInput(inputId = "single_elements_association_a", label = "Independent", choices = reg_valid)
-    })
-
-    # Dependent cannot be same bone as independent
-    observeEvent(input$single_elements_association_a, {
-        available <- reg_valid[reg_valid != input$single_elements_association_a]
-        output$single_elements_association_b <- renderUI({
-            selectInput(inputId = "single_elements_association_b", label = "Dependent", choices = available)
-        })
     })
 
     # --- Dynamic measurement input fields ---
@@ -197,6 +189,15 @@ observeEvent(input$single_reference, {
     })
 })
 
+# Dependent cannot be same bone as independent (moved outside to avoid observer stacking)
+observeEvent(input$single_elements_association_a, {
+    reg_valid <- elements$elements[tolower(elements$elements) %in% tolower(regression_bones$bones)]
+    available <- reg_valid[reg_valid != input$single_elements_association_a]
+    output$single_elements_association_b <- renderUI({
+        selectInput(inputId = "single_elements_association_b", label = "Dependent", choices = available)
+    })
+})
+
 # --- Analysis execution ---
 
 run_pair_match <- function(ref, measurements, input) {
@@ -210,7 +211,7 @@ run_pair_match <- function(ref, measurements, input) {
 
     # Check at least one pair is present
     has_pair <- FALSE
-    for (x in 1:length(input_left)) {
+    for (x in seq_along(input_left)) {
         if (!is.na(input_left[x]) && !is.na(input_right[x])) {
             has_pair <- TRUE
             break
@@ -220,8 +221,8 @@ run_pair_match <- function(ref, measurements, input) {
         return(NULL)
     }
 
-    sortleft <- data.frame(accession = "X", side = "left", element = tolower(input$single_elements_pairmatch), input_left, stringsAsFactors = FALSE)
-    sortright <- data.frame(accession = "Y", side = "right", element = tolower(input$single_elements_pairmatch), input_right, stringsAsFactors = FALSE)
+    sortleft <- data.frame(accession = "X", side = "left", element = tolower(input$single_elements_pairmatch), input_left)
+    sortright <- data.frame(accession = "Y", side = "right", element = tolower(input$single_elements_pairmatch), input_right)
 
     pm.d1 <- pm.input(sort = rbind(sortleft, sortright), bone = input$single_elements_pairmatch, measurements = measurements, ref = ref)
     if (is.null(pm.d1)) {
@@ -259,8 +260,8 @@ run_articulation <- function(ref, art_elem, art_meas_a, art_meas_b, input) {
     }
 
     bone_parts <- strsplit(input$single_element_osr, split = "-")[[1]]
-    sorta <- data.frame(accession = "X", side = tolower(input$single_osr_side), element = tolower(bone_parts[1]), input_a, stringsAsFactors = FALSE)
-    sortb <- data.frame(accession = "Y", side = tolower(input$single_osr_side), element = tolower(bone_parts[2]), input_b, stringsAsFactors = FALSE)
+    sorta <- data.frame(accession = "X", side = tolower(input$single_osr_side), element = tolower(bone_parts[1]), input_a)
+    sortb <- data.frame(accession = "Y", side = tolower(input$single_osr_side), element = tolower(bone_parts[2]), input_b)
 
     art.d1 <- art.input(
         side = tolower(input$single_osr_side), ref = ref,
@@ -298,8 +299,8 @@ run_osr <- function(ref, meas_a, meas_b, input) {
         return(NULL)
     }
 
-    sorta <- data.frame(accession = "X", side = tolower(input$single_association_side_a), element = tolower(input$single_elements_association_a), input_A, stringsAsFactors = FALSE)
-    sortb <- data.frame(accession = "Y", side = tolower(input$single_association_side_b), element = tolower(input$single_elements_association_b), input_B, stringsAsFactors = FALSE)
+    sorta <- data.frame(accession = "X", side = tolower(input$single_association_side_a), element = tolower(input$single_elements_association_a), input_A)
+    sortb <- data.frame(accession = "Y", side = tolower(input$single_association_side_b), element = tolower(input$single_elements_association_b), input_B)
 
     reg.d1 <- reg.input(
         sorta = sorta, sortb = sortb,
@@ -437,8 +438,8 @@ observeEvent(input$proc, {
                                 xaxis = list(title = cap_first(plot_data$x_label)),
                                 yaxis = list(title = cap_first(plot_data$y_label)),
                                 showlegend = FALSE,
-                                plot_bgcolor = "#ecf0f1",
-                                paper_bgcolor = "#ecf0f1"
+                                plot_bgcolor = "#ffffff",
+                                paper_bgcolor = "#ffffff"
                             )
                     })
                 } else {
@@ -461,8 +462,8 @@ observeEvent(input$proc, {
                                 xaxis = list(title = ""),
                                 yaxis = list(title = ""),
                                 showlegend = FALSE,
-                                plot_bgcolor = "#ecf0f1",
-                                paper_bgcolor = "#ecf0f1"
+                                plot_bgcolor = "#ffffff",
+                                paper_bgcolor = "#ffffff"
                             )
                     })
                 }

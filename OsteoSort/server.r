@@ -1,9 +1,6 @@
 # Set options for environment
 options(scipen = 999) # no scientific notation
-options(stringsAsFactors = FALSE) # no strings as factors
-options(warn = -1) # disables warnings
 options(shiny.maxRequestSize = 40 * 1024^2) # 40MB file size limit
-options(as.is = TRUE)
 
 # load libraries
 library(shiny)

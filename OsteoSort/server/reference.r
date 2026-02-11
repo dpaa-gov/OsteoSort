@@ -1,12 +1,17 @@
 # Connect to ARDS PostgreSQL and load reference data
 dotenv::load_dot_env() # load database information
-pg_conn <- dbConnect(
-    RPostgres::Postgres(),
-    host = Sys.getenv("DB_HOST"),
-    port = as.integer(Sys.getenv("DB_PORT")),
-    dbname = Sys.getenv("DB_NAME"),
-    user = Sys.getenv("DB_USER"),
-    password = Sys.getenv("DB_PASS")
+pg_conn <- tryCatch(
+    dbConnect(
+        RPostgres::Postgres(),
+        host = Sys.getenv("DB_HOST"),
+        port = as.integer(Sys.getenv("DB_PORT")),
+        dbname = Sys.getenv("DB_NAME"),
+        user = Sys.getenv("DB_USER"),
+        password = Sys.getenv("DB_PASS")
+    ),
+    error = function(e) {
+        stop("Failed to connect to ARDS database: ", e$message)
+    }
 )
 
 # Get distinct reference groups (collection + ancestry + sex)
@@ -41,12 +46,12 @@ measurement_tooltips <- setNames(osteosort_measurements$full_name, tolower(osteo
 # Set up reactive values
 reference_name_list <- reactiveValues(reference_name_list = reference_groups$group_label)
 reference_list <- reactiveValues(reference_list = list())
-articulation_config <- reactiveValues(df = read.csv(file = "./extdata/config/articulation_config", header = TRUE, sep = ",", stringsAsFactors = FALSE))
-regression_bones <- reactiveValues(bones = read.csv(file = "./extdata/config/regression_config", header = TRUE, stringsAsFactors = FALSE)$Bone)
+articulation_config <- reactiveValues(df = read.csv(file = "./extdata/config/articulation_config", header = TRUE, sep = ","))
+regression_bones <- reactiveValues(bones = read.csv(file = "./extdata/config/regression_config", header = TRUE)$Bone)
 
 # Load reference data for each group at startup
 observeEvent(TRUE, {
-    for (i in 1:nrow(reference_groups)) {
+    for (i in seq_len(nrow(reference_groups))) {
         group <- reference_groups[i, ]
         label <- group$group_label
 

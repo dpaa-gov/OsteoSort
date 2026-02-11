@@ -33,7 +33,7 @@ multiple_MLB <- reactiveValues(multiple_ML = c("temp"))
 multiple_MLA <- reactiveValues(multiple_ML = c("temp"))
 uploaded_csv_cols <- reactiveValues(cols = c())
 uploaded_csv_elements <- reactiveValues(elements = c())
-uploaded_csv_sides <- reactiveValues(df = data.frame(element = character(), side = character(), stringsAsFactors = FALSE))
+uploaded_csv_sides <- reactiveValues(df = data.frame(element = character(), side = character()))
 
 multiple_absolute_value <- reactiveValues(multiple_absolute_value = FALSE)
 multiple_yeojohnson <- reactiveValues(multiple_yeojohnson = FALSE)
@@ -57,7 +57,7 @@ output$resettableInput <- renderUI({
 observeEvent(input$clearFile1, {
     uploaded_csv_cols$cols <- c()
     uploaded_csv_elements$elements <- c()
-    uploaded_csv_sides$df <- data.frame(element = character(), side = character(), stringsAsFactors = FALSE)
+    uploaded_csv_sides$df <- data.frame(element = character(), side = character())
     multiple_results_ready(FALSE)
     fileInput("file1", NULL, accept = c("text/csv", "text/comma-separated-values,text/plain", ".csv"))
 })
@@ -79,8 +79,6 @@ observeEvent(input$file1, {
         ))
     }
 })
-
-
 
 # Settings
 output$multiple_absolute_value <- renderUI({
@@ -203,7 +201,7 @@ observeEvent(input$multiple_reference, {
     valid_art <- art[valid, ]
 
     if (nrow(valid_art) > 0) {
-        for (i in 1:nrow(valid_art)) {
+        for (i in seq_len(nrow(valid_art))) {
             ma <- valid_art$Measurementa[i]
             mb <- valid_art$Measurementb[i]
             multiple_art_measurements_a$df <- c(multiple_art_measurements_a$df, ma)
@@ -492,8 +490,7 @@ observeEvent(input$pro, {
                 exclusion_pct <- paste0(round((ll - nmatch) / ll, digits = 3) * 100, "%")
                 summary_df <- data.frame(
                     Metric = c("Completed in", "Comparisons", "Specimens", "Potential matches", "Exclusions", "Rejected"),
-                    Value = c(paste(t_time, "seconds"), ll, samplesize, nmatch, paste(ll - nmatch, paste0("(", exclusion_pct, ")")), nrow(rejected)),
-                    stringsAsFactors = FALSE
+                    Value = c(paste(t_time, "seconds"), ll, samplesize, nmatch, paste(ll - nmatch, paste0("(", exclusion_pct, ")")), nrow(rejected))
                 )
                 output$multiple_contents <- renderTable(
                     {
@@ -509,7 +506,7 @@ observeEvent(input$pro, {
                 all_pvals <- as.numeric(results_formatted$p)
                 all_results <- results_formatted$result
                 output$multiple_plot <- plotly::renderPlotly({
-                    df <- data.frame(p_value = all_pvals, result = all_results, stringsAsFactors = FALSE)
+                    df <- data.frame(p_value = all_pvals, result = all_results)
                     plotly::plot_ly(df,
                         x = ~p_value, color = ~result,
                         colors = c("Cannot Exclude" = "#3d5a73", "Excluded" = "#cc4444"),
@@ -526,8 +523,8 @@ observeEvent(input$pro, {
                             barmode = "stack",
                             legend = list(orientation = "h", x = 0.5, xanchor = "center", y = 1.1),
                             margin = list(t = 30, b = 40, l = 40, r = 10),
-                            plot_bgcolor = "#ecf0f1",
-                            paper_bgcolor = "#ecf0f1"
+                            plot_bgcolor = "#ffffff",
+                            paper_bgcolor = "#ffffff"
                         )
                 })
             }
