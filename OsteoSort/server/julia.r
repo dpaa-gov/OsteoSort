@@ -5,7 +5,7 @@ if (file.exists(sysimage)) {
     julia_setup(sysimage_path = sysimage)
 } else {
     julia_setup()
-    julia_command('push!(LOAD_PATH, "./OSJ")')
+    julia_command('push!(LOAD_PATH, "../OSJ")')
     julia_command("using OSJ")
 }
 removeModal()

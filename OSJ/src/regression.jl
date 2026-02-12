@@ -40,16 +40,16 @@ function REGSL(m1, m2, RL, RR)
 	n4 = size(m2,2)
 	Results = zeros(n2*n1,n3+n4+5)
 	ri = 1
-	m_cache_id = []
-	m_cache_de = []
-	mean_ref_cache = []
-	sd_ref_cache = []
-	n_ref_cache = []
-	r2_ref_cache = []
-	sigma_ref_cache = []
-	OLS_ref_cache = []
-	m_counter_1_o_cache = []
-	m_counter_2_o_cache = []
+	m_cache_id = Vector{Any}()
+	m_cache_de = Vector{Any}()
+	mean_ref_cache = Float64[]
+	sd_ref_cache = Float64[]
+	n_ref_cache = Int[]
+	r2_ref_cache = Float64[]
+	sigma_ref_cache = Float64[]
+	OLS_ref_cache = Vector{Any}()
+	m_counter_1_o_cache = Vector{Any}()
+	m_counter_2_o_cache = Vector{Any}()
 	m_counter_1_o = 0
 	m_counter_2_o = 0
 	for o in 1:size(m1,1)

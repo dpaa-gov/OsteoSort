@@ -2,6 +2,9 @@ source("./ui/single.r", local = TRUE)
 source("./ui/multiple.r", local = TRUE)
 source("./ui/files.r", local = TRUE)
 
+# Read version from file
+app_version <- trimws(readLines("VERSION", n = 1))
+
 shinyUI(
     navbarPage(
         theme = "css/flatly-bootstrap.css", windowTitle = "OsteoSort",
@@ -16,9 +19,10 @@ shinyUI(
                 });
             "))
         ),
-        tags$script(HTML(paste("var header = $('.navbar > .container-fluid');header.append('<div style=\"float:left\"><img src=\"osteosort.png\" alt=\"alt\" style=\"float:right; width:200px;padding-top:0px;\"></div><div style=\"float:right; padding-top:15px\">",
-            "<font color=\"#d4a843\"><strong>Version: ", "1.5.0", "</strong></font>", "</div>');console.log(header)",
-            sep = ""
+        title = tags$img(src = "osteosort.png", class = "navbar-logo"),
+        tags$script(HTML(paste0(
+            "var header = $('.navbar > .container-fluid');",
+            "header.append('<span class=\"version-badge\">v ", app_version, "</span>');"
         ))),
         single_osteometric_sorting,
         multiple_osteometric_sorting,
