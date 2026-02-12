@@ -324,16 +324,46 @@ div:has(> .main-section-label) {
   border-color: #f9f9f9;
 }
 
+/* DataTables — white background */
+.dataTables_wrapper {
+  background-color: #ffffff;
+}
+
+table.dataTable,
+table.dataTable thead th,
+table.dataTable tbody td {
+  background-color: #ffffff;
+}
+
+table.dataTable.stripe tbody tr.odd,
+table.dataTable.display tbody tr.odd {
+  background-color: #f9f9f9;
+}
+
+table.dataTable.stripe tbody tr.even,
+table.dataTable.display tbody tr.even {
+  background-color: #ffffff;
+}
+
+/* DataTables row hover — light gold */
+table.dataTable tbody tr:hover,
+table.dataTable tbody tr:hover>td,
+table.dataTable.display tbody tr:hover>.sorting_1 {
+  background-color: rgba(212, 168, 67, 0.15) !important;
+}
+
 /* Body and main content area — soft gray */
 body {
-  background-color: #ecf0f1 !important;
+  background-color: #ffffff !important;
 }
 
 .main-panel,
 .tab-content,
 .col-sm-9 {
-  background-color: #ecf0f1 !important;
+  background-color: #ffffff !important;
 }
+
+
 
 /* Header — darker than sidebar with gold accent border */
 .navbar-default {
