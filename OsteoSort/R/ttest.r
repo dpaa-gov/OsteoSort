@@ -94,10 +94,10 @@ ttest <- function(refa = NULL, refb = NULL, sorta = NULL, sortb = NULL, alphalev
             element_2 = sortb[results[, 2], "element"],
             side_2 = sortb[results[, 2], "side"],
             measurements = measurements,
-            p = round(results[, 4], digits = 5),
+            n = results[, 7],
             mean = round(results[, 5], digits = 4),
             sd = round(results[, 6], digits = 4),
-            n = results[, 7]
+            p = round(results[, 4], digits = 5)
         ),
         result = NA
     )

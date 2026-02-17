@@ -50,8 +50,11 @@ reg.test <- function(refa = NULL, refb = NULL, sorta = NULL, sortb = NULL, refer
         measurements <- data.frame(t(results[c(6:length(results))]))
     }
 
-    measurement_names <- c(colnames(sorta[, -c(1:3)]), colnames(sortb[, -c(1:3)]))
-    measurement_names <- measurement_names[measurement_names != "fa"]
+    # Build full name list (including fa) to identify which columns to drop
+    all_names <- c(colnames(sorta[, -c(1:3)]), colnames(sortb[, -c(1:3)]))
+    fa_cols <- which(all_names == "fa")
+    measurements <- measurements[, -fa_cols, drop = FALSE]
+    measurement_names <- all_names[all_names != "fa"]
 
     for (i in seq_len(ncol(measurements))) {
         measurements[measurements[, i] == 1, i] <- paste(measurement_names[i], " ", sep = "")
@@ -70,9 +73,9 @@ reg.test <- function(refa = NULL, refb = NULL, sorta = NULL, sortb = NULL, refer
             y_element = sortb[results[, 2], "element"],
             y_side = sortb[results[, 2], "side"],
             measurements = measurements,
-            p = round(results[, 3], digits = 4),
+            n = results[, 4],
             r2 = round(results[, 5], digits = 4),
-            n = results[, 4]
+            p = round(results[, 3], digits = 4)
         ),
         result = NA
     )

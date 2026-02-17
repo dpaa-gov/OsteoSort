@@ -57,8 +57,8 @@ multiple_osteometric_sorting <- tabPanel("Multiple",
                 uiOutput("multiple_tails")
             ),
             sliderInput(
-                inputId = "multiple_common_alpha_level", label = "Alpha level",
-                min = 0.05, max = 0.5, value = 0.1, step = 0.05
+                inputId = "multiple_common_alpha_level", label = "Alpha",
+                min = 0.01, max = 0.1, value = 0.1, step = 0.01
             ),
             hr(),
             fluidRow(
@@ -93,16 +93,22 @@ multiple_osteometric_sorting <- tabPanel("Multiple",
                         tabPanel(
                             "Not excluded",
                             br(),
+                            downloadButton("download_not_excluded", "Download", class = "btn-gold btn-flat btn-sm"),
+                            br(), br(),
                             DT::dataTableOutput("table")
                         ),
                         tabPanel(
                             "Excluded",
                             br(),
+                            downloadButton("download_excluded", "Download", class = "btn-gold btn-flat btn-sm"),
+                            br(), br(),
                             DT::dataTableOutput("tablen")
                         ),
                         tabPanel(
                             "Rejected",
                             br(),
+                            downloadButton("download_rejected", "Download", class = "btn-gold btn-flat btn-sm"),
+                            br(), br(),
                             DT::dataTableOutput("tablenr")
                         )
                     )

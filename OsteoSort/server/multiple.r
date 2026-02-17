@@ -40,6 +40,9 @@ multiple_yeojohnson <- reactiveValues(multiple_yeojohnson = FALSE)
 multiple_mean <- reactiveValues(multiple_mean = FALSE)
 multiple_tails <- reactiveValues(multiple_tails = 2)
 multiple_results_ready <- reactiveVal(FALSE)
+multiple_not_excluded <- reactiveVal(data.frame())
+multiple_excluded <- reactiveVal(data.frame())
+multiple_rejected <- reactiveVal(data.frame())
 
 # Flag to show/hide results panel
 output$multiple_has_results <- reactive({
@@ -82,21 +85,21 @@ observeEvent(input$file1, {
 
 # Settings
 output$multiple_absolute_value <- renderUI({
-    checkboxInput("multiple_absolute_value", "Absolute D-value |a-b|", value = FALSE)
+    checkboxInput("multiple_absolute_value", "Absolute D-value", value = FALSE)
 })
 observeEvent(input$multiple_absolute_value, {
     multiple_absolute_value$multiple_absolute_value <- input$multiple_absolute_value
 })
 
 output$multiple_yeojohnson <- renderUI({
-    checkboxInput("multiple_yeojohnson", "Yeojohnson transformation", value = FALSE)
+    checkboxInput("multiple_yeojohnson", "YeoJohnson", value = FALSE)
 })
 observeEvent(input$multiple_yeojohnson, {
     multiple_yeojohnson$multiple_yeojohnson <- input$multiple_yeojohnson
 })
 
 output$multiple_mean <- renderUI({
-    checkboxInput("multiple_mean", "Zero mean", value = FALSE)
+    checkboxInput("multiple_mean", "Mean = 0", value = FALSE)
 })
 observeEvent(input$multiple_mean, {
     multiple_mean$multiple_mean <- input$multiple_mean
@@ -518,7 +521,7 @@ observeEvent(input$pro, {
                                 y0 = 0, y1 = 1, yref = "paper",
                                 line = list(color = "#d4a843", dash = "dash", width = 2)
                             )),
-                            xaxis = list(title = "p-value", range = c(0, 1)),
+                            xaxis = list(title = "p", range = c(0, 1)),
                             yaxis = list(title = "Count"),
                             barmode = "stack",
                             legend = list(orientation = "h", x = 0.5, xanchor = "center", y = 1.1),
@@ -529,14 +532,17 @@ observeEvent(input$pro, {
                 })
             }
 
-            # Render DT tables with CSV download buttons
-            render_dt <- function(df, filename = "results") {
+            # Store for CSV download handlers
+            multiple_not_excluded(not_excluded)
+            multiple_excluded(excluded)
+            multiple_rejected(rejected)
+
+            # Render DT tables (server-side for performance)
+            render_dt <- function(df) {
                 DT::datatable(multiple_clean_display_cols(df),
                     selection = "none", rownames = FALSE,
-                    extensions = "Buttons",
                     options = list(
-                        dom = "Bfrtip",
-                        buttons = list(list(extend = "csv", text = "Download", filename = filename)),
+                        dom = "frtip",
                         lengthMenu = c(10, 25, 50), pageLength = 10,
                         search = list(regex = TRUE, caseInsensitive = FALSE)
                     )
@@ -545,21 +551,21 @@ observeEvent(input$pro, {
 
             output$table <- DT::renderDataTable(
                 {
-                    render_dt(not_excluded, "not_excluded")
+                    render_dt(not_excluded)
                 },
-                server = FALSE
+                server = TRUE
             )
             output$tablen <- DT::renderDataTable(
                 {
-                    render_dt(excluded, "excluded")
+                    render_dt(excluded)
                 },
-                server = FALSE
+                server = TRUE
             )
             output$tablenr <- DT::renderDataTable(
                 {
-                    render_dt(rejected, "rejected")
+                    render_dt(rejected)
                 },
-                server = FALSE
+                server = TRUE
             )
 
             multiple_results_ready(TRUE)
@@ -573,3 +579,18 @@ observeEvent(input$pro, {
         }
     )
 })
+
+# --- CSV download handlers (server-side DT can't export all rows via Buttons) ---
+
+output$download_not_excluded <- downloadHandler(
+    filename = function() "not_excluded.csv",
+    content = function(file) write.csv(multiple_clean_display_cols(multiple_not_excluded()), file, row.names = FALSE)
+)
+output$download_excluded <- downloadHandler(
+    filename = function() "excluded.csv",
+    content = function(file) write.csv(multiple_clean_display_cols(multiple_excluded()), file, row.names = FALSE)
+)
+output$download_rejected <- downloadHandler(
+    filename = function() "rejected.csv",
+    content = function(file) write.csv(multiple_clean_display_cols(multiple_rejected()), file, row.names = FALSE)
+)

@@ -61,16 +61,15 @@ single_osteometric_sorting <- tabPanel("Single",
                     )
                 )
             ),
-            hr(),
             tags$div(class = "sidebar-section-label", "SETTINGS"),
             conditionalPanel(
                 condition = "input.single_analysis != 'regression'",
-                checkboxInput("single_absolute_value", "Absolute D-value |a-b|", value = FALSE),
-                checkboxInput("single_yeojohnson", "YeoJohnson transformation", value = FALSE),
-                checkboxInput("single_mean", "Zero mean", value = FALSE),
+                checkboxInput("single_absolute_value", "Absolute D-value", value = FALSE),
+                checkboxInput("single_yeojohnson", "YeoJohnson", value = FALSE),
+                checkboxInput("single_mean", "Mean = 0", value = FALSE),
                 radioButtons("single_tails", "Tails", choices = c(1, 2), selected = 2, inline = TRUE)
             ),
-            sliderInput("common_alpha_level", "Alpha level", min = 0.05, max = 0.5, value = 0.1, step = 0.05),
+            sliderInput("common_alpha_level", "Alpha", min = 0.01, max = 0.1, value = 0.1, step = 0.01),
             hr(),
             actionButton("proc", "Process", icon = icon("gear")),
             width = 3

@@ -192,10 +192,10 @@
   box-shadow: none !important;
 }
 
-/* DataTables CSV Download buttons — gold flat */
-.dt-buttons .dt-button,
-.dt-buttons .buttons-csv,
-.dt-buttons .buttons-html5 {
+/* Download buttons (results tabs) — gold flat */
+#download_not_excluded,
+#download_excluded,
+#download_rejected {
   background-color: #d4a843 !important;
   border-color: #d4a843 !important;
   color: #000000 !important;
