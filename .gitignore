@@ -4,3 +4,8 @@
 
 # Environment variables (DB credentials)
 .env
+
+# Sysimage build artifacts (generated inside Docker)
+sysimage/*.so
+sysimage/Manifest.toml
+sysimage/Project.toml
