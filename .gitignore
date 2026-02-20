@@ -5,7 +5,19 @@
 # Environment variables (DB credentials)
 .env
 
-# Sysimage build artifacts (generated inside Docker)
-sysimage/*.so
-sysimage/Manifest.toml
-sysimage/Project.toml
+# Build output — compiled shared library
+dist/
+
+# Compiled C shim and build artifacts
+build/r_osj_shim.so
+build/Manifest.toml
+build/Project.toml
+
+# R session files
+.Rhistory
+.RData
+.Rproj.user/
+
+# OS
+.DS_Store
+Thumbs.db

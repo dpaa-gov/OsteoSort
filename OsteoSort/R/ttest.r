@@ -39,13 +39,13 @@ ttest <- function(refa = NULL, refb = NULL, sorta = NULL, sortb = NULL, alphalev
     ref_mat <- as.matrix(refa[, meas_cols])
     ref_mat_b <- as.matrix(refb[, meas_cols])
 
-    results <- julia_call("OSJ.TTEST", sort_mat, sort_mat_b, ref_mat, ref_mat_b, tails,
+    results <- osj_ttest(sort_mat, sort_mat_b, ref_mat, ref_mat_b, tails,
         absolute = absolute, yeojohnson = yeojohnson, zeromean = zmean
     )
 
     # Plot data for single comparisons
     if (nrow(as.matrix(sorta)) == 1 && nrow(as.matrix(sortb)) == 1) {
-        plot_data <- julia_call("OSJ.TTEST_plot", sort_mat, sort_mat_b, ref_mat, ref_mat_b,
+        plot_data <- osj_ttest_plot(sort_mat, sort_mat_b, ref_mat, ref_mat_b,
             absolute = absolute, yeojohnson = yeojohnson
         )
     }

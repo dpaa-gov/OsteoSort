@@ -10,10 +10,13 @@ screenshot.png
 LICENSE
 CITATION
 
-# Local sysimage build artifacts (built inside Docker)
-sysimage/*.so
-sysimage/Manifest.toml
-sysimage/Project.toml
+# Build output (rebuilt inside Docker)
+dist/
+
+# Compiled shim (rebuilt inside Docker)
+build/*.so
+build/Manifest.toml
+build/Project.toml
 
 # Dev-only files
 start_dev.R

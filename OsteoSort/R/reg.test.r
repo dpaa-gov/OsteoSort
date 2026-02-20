@@ -28,9 +28,9 @@ reg.test <- function(refa = NULL, refb = NULL, sorta = NULL, sortb = NULL, refer
     plot_data <- NULL
 
     # Use positional indexing for Julia calls since bone A and bone B have different columns
-    results <- julia_call("OSJ.REGSL", as.matrix(sorta[, -c(1:3)]), as.matrix(sortb[, -c(1:3)]), as.matrix(refa[, -c(1:3)]), as.matrix(refb[, -c(1:3)]))
+    results <- osj_regsl(as.matrix(sorta[, -c(1:3)]), as.matrix(sortb[, -c(1:3)]), as.matrix(refa[, -c(1:3)]), as.matrix(refb[, -c(1:3)]))
     if (nrow(as.matrix(sorta)) == 1 && nrow(as.matrix(sortb)) == 1) {
-        plot_data <- julia_call("OSJ.REGSL_plot", as.matrix(sorta[, -c(1:3)]), as.matrix(sortb[, -c(1:3)]), as.matrix(refa[, -c(1:3)]), as.matrix(refb[, -c(1:3)]))
+        plot_data <- osj_regsl_plot(as.matrix(sorta[, -c(1:3)]), as.matrix(sortb[, -c(1:3)]), as.matrix(refa[, -c(1:3)]), as.matrix(refb[, -c(1:3)]))
         # Attach labels and alpha for Plotly rendering
         plot_data <- list(
             ref_x = plot_data[[1]],

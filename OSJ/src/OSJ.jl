@@ -21,4 +21,7 @@ export TTEST_plot
 export REGSL
 export REGSL_plot
 
+#C-ABI wrappers for shared library builds
+include("c_api.jl")
+
 end # module OSJ

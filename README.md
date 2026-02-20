@@ -21,10 +21,10 @@ Computerized osteometric sorting application built with R/Shiny and Julia. Osteo
 | Layer | Technology |
 |-------|------------|
 | Frontend | R/Shiny UI |
-| Backend (statistical) | R + Julia (via JuliaCall) |
+| Backend (statistical) | R + Julia (compiled shared library) |
 | Database | PostgreSQL (ARDS) |
-| Deployment | Docker (rocker/shiny) |
-| Julia sysimage | PackageCompiler.jl |
+| Deployment | Docker (two-stage build) |
+| Julia compilation | PackageCompiler.jl (`create_library`) |
 
 ## Prerequisites
 
@@ -56,28 +56,44 @@ The app will be available at `http://localhost:4001/OsteoSort`.
 ### Requirements
 
 - R 4.x with packages listed in [Dependencies](#dependencies)
-- Julia 1.11+
+- Julia 1.11+ (for building the shared library)
+- GCC (for building the C shim)
 - PostgreSQL client library (`libpq-dev` on Debian/Ubuntu)
 - `.env` file in `OsteoSort/` with DB credentials (see [Prerequisites](#prerequisites))
+
+### Build the Shared Library (one-time)
+
+```sh
+# Build libosj.so
+julia --project=OSJ build/create_library.jl
+
+# Build C shim
+gcc -shared -fPIC -o build/r_osj_shim.so build/r_osj_shim.c \
+    -L dist/libosj/lib -losj -Wl,-rpath,$(pwd)/dist/libosj/lib
+```
 
 ### Run
 
 ```sh
-Rscript start_dev.R
+LD_LIBRARY_PATH=dist/libosj/lib:dist/libosj/lib/julia Rscript start_dev.R
 ```
 
-The app will open at `http://127.0.0.1:4001`. Julia loads without a sysimage in dev mode (slower initial startup, but no build step needed).
+The app will open at `http://127.0.0.1:4001`.
 
 ## Project Structure
 
 ```
 OsteoSort/
-├── Dockerfile
+├── Dockerfile             # Two-stage: builder compiles .so, runtime is lean
+├── start_dev.R            # Local dev server launcher
 ├── shiny-server.conf
 ├── OsteoSort/             # Shiny application
-│   ├── server.r           # Server entry point
+│   ├── server.r           # Server entry point (loads osj.r, calls osj_load())
 │   ├── ui.r               # UI entry point
 │   ├── R/                 # Analytical R functions
+│   │   ├── osj.r          # Shared library interface (dyn.load + wrappers)
+│   │   ├── ttest.r        # T-test analysis (calls osj_ttest)
+│   │   └── reg.test.r     # Regression analysis (calls osj_regsl)
 │   ├── server/            # Server modules (reference, single, files, etc.)
 │   ├── ui/                # UI modules
 │   ├── extdata/           # Config files (articulation_config, etc.)
@@ -85,11 +101,16 @@ OsteoSort/
 ├── OSJ/                   # Julia analytical package
 │   ├── Project.toml
 │   └── src/
-└── sysimage/              # Julia sysimage build scripts
-    ├── create_sysimage.jl
-    └── execution_precompile.jl
+│       ├── OSJ.jl         # Module definition
+│       └── c_api.jl       # @ccallable wrappers for R .C() interface
+├── build/                 # Build scripts
+│   ├── create_library.jl  # PackageCompiler library build
+│   ├── library_precompile.jl
+│   └── r_osj_shim.c      # C shim for init_julia ABI bridging
+└── dist/                  # Build output (gitignored)
+    └── libosj/
+        └── lib/libosj.so
 ```
-
 
 ## Dependencies
 
@@ -101,7 +122,6 @@ OsteoSort/
 | DT | Interactive data tables |
 | dplyr | Data manipulation |
 | shinyalert | Alert dialogs |
-| JuliaCall | R ↔ Julia bridge |
 | DBI | Database interface |
 | RPostgres | PostgreSQL driver |
 | dotenv | Environment variable loading |
@@ -125,9 +145,8 @@ Lynch, J.J. 2026 OsteoSort. Computerized Osteometric Sorting. Version 1.5.0. Def
 
 ## TODO
 
-1. Analysts beta test
-2. Compile Julia code to a shared library (`.so`) via `PackageCompiler.create_library()` and call from R via `dyn.load()` — eliminates Julia runtime dependency, significantly reducing Docker image size
+1. User beta testing
 
 ## License
 
-GNU General Public License v2.0 — see [LICENSE](LICENSE) for details.
+GNU General Public License v2.0

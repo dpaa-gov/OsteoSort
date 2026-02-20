@@ -16,7 +16,7 @@ cat("Starting OsteoSort in development mode...\n")
 # Install missing R packages
 required_packages <- c(
     "shiny", "htmltools", "dplyr",
-    "shinyalert", "DT", "JuliaCall", "DBI", "RPostgres", "dotenv", "plotly"
+    "shinyalert", "DT", "DBI", "RPostgres", "dotenv", "plotly"
 )
 missing <- required_packages[!sapply(required_packages, requireNamespace, quietly = TRUE)]
 if (length(missing) > 0) {
