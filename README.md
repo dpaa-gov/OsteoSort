@@ -146,6 +146,7 @@ Lynch, J.J. 2026 OsteoSort. Computerized Osteometric Sorting. Version 1.5.0. Def
 ## TODO
 
 1. User beta testing
+2. Replace `.env` file with injected environment variables
 
 ## License
 
