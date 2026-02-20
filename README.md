@@ -126,6 +126,7 @@ Lynch, J.J. 2026 OsteoSort. Computerized Osteometric Sorting. Version 1.5.0. Def
 ## TODO
 
 1. Analysts beta test
+2. Compile Julia code to a shared library (`.so`) via `PackageCompiler.create_library()` and call from R via `dyn.load()` — eliminates Julia runtime dependency, significantly reducing Docker image size
 
 ## License
 
