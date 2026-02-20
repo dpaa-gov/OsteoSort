@@ -36,6 +36,7 @@ Computerized osteometric sorting application built with R/Shiny and Julia. Osteo
   DB_PORT=<port>
   DB_USER=<user>
   DB_PASS=<password>
+  DB_NAME=<database>
   ```
 
 ## Installation

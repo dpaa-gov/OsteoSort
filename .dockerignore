@@ -1,0 +1,19 @@
+# Version control and editor config
+.git
+.gitignore
+.vscode
+.agent
+
+# Documentation and assets not needed in image
+*.md
+screenshot.png
+LICENSE
+CITATION
+
+# Local sysimage build artifacts (built inside Docker)
+sysimage/*.so
+sysimage/Manifest.toml
+sysimage/Project.toml
+
+# Dev-only files
+start_dev.R
