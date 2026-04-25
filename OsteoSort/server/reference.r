@@ -1,5 +1,11 @@
 # Connect to ARDS PostgreSQL and load reference data
-dotenv::load_dot_env() # load database information
+
+if (file.exists(".env")) {
+    dotenv::load_dot_env(".env")
+} else {
+    message("No .env file found; using system environment variables.")
+}
+
 pg_conn <- tryCatch(
     dbConnect(
         RPostgres::Postgres(),
