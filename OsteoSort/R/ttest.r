@@ -1,4 +1,4 @@
-ttest <- function(refa = NULL, refb = NULL, sorta = NULL, sortb = NULL, alphalevel = 0.1, absolute = TRUE, zmean = FALSE, tails = 2, yeojohnson = TRUE, reference = NULL) {
+ttest <- function(refa = NULL, refb = NULL, sorta = NULL, sortb = NULL, alphalevel = 0.1, absolute = FALSE, zmean = FALSE, tails = 2, yeojohnson = TRUE, reference = NULL) {
     start_time <- start_time()
 
     meta_cols <- c("accession", "side", "element")
