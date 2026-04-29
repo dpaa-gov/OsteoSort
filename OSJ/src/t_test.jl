@@ -73,7 +73,9 @@ function TTEST(m1, m2, RL, RR, TL; absolute::Bool=false, yeojohnson::Bool=false,
 				dsum = transform([dsum,dsum], refd_bc)[1] #transform sort data by lambda
 			end
 			if absolute
-				Results[ri,4] = TL[1] * pt(-abs( (abs(dsum - refd_mean) ) / refd_std), refd_size - 1) #p.value
+				# True upper-tail test: P(T > t_stat)
+				t_stat = (dsum - refd_mean) / refd_std
+				Results[ri,4] = TL[1] * (1.0 - pt(t_stat, refd_size - 1)) #p.value
 			else
 				Results[ri,4] = TL[1] * pt(-abs( (dsum - refd_mean) / refd_std), refd_size - 1) #p.value
 			end

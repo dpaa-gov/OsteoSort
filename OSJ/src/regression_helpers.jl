@@ -9,5 +9,5 @@ function res_std_err(model)
 end
 
 function reg_t_stat(sigma, r2, predicted, comparison, comparison_p, mean, sd, n)
-	return abs(predicted - comparison) / (sigma * sqrt(1+(1/n) + ((comparison_p - mean) ^2) / (n*(sd^2))))
+	return abs(predicted - comparison) / (sigma * sqrt(1+(1/n) + ((comparison_p - mean) ^2) / ((n-1)*(sd^2))))
 end
