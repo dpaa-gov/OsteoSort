@@ -37,11 +37,13 @@ pg_conn <- tryCatch(
 # Get distinct reference groups (collection + ancestry + sex)
 reference_groups <- unique(na.omit(dbGetQuery(
     conn = pg_conn,
-    statement = " SELECT DISTINCT collection || ' ' || ancestry || ' ' || sex AS group_label,
-        collection, ancestry, sex
-        FROM osteometry.individuals
-        WHERE osteosort_method = TRUE
-        ORDER BY collection, ancestry, sex"
+    statement = " SELECT DISTINCT i.collection || ' ' || i.ancestry || ' ' || i.sex AS group_label,
+        i.collection, i.ancestry, i.sex
+        FROM osteometry.individuals i
+        INNER JOIN osteometry.collections c ON i.collection = c.collection
+        WHERE c.osteosort_method = TRUE
+        AND i.osteosort_method = TRUE
+        ORDER BY i.collection, i.ancestry, i.sex"
 )))
 
 # Get all bones that have osteosort-enabled measurements
