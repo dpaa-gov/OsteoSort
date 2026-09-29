@@ -14,7 +14,8 @@ library(RPostgres)
 library(dotenv)
 library(plotly)
 
-# load analytical R code
+# load reference retrieval and analytical R code
+source("./R/reference_data.r", local = TRUE)
 source("./R/osj.r", local = TRUE)
 osj_load() # Initialize Julia runtime before Shiny event loop
 source("./R/art.input.r", local = TRUE)

@@ -1,115 +1,51 @@
-# Connect to ARDS PostgreSQL and load reference data
-
+# Load current ARDS reference data for this session.
 if (file.exists(".env")) {
     dotenv::load_dot_env(".env")
 } else {
     message("No .env file found; using system environment variables.")
 }
 
-db_host <- Sys.getenv("DB_HOST", unset = "host.docker.internal")
-db_port <- Sys.getenv("DB_PORT", unset = "5432")
-db_name <- Sys.getenv("DB_NAME", unset = "")
-db_user <- Sys.getenv("DB_USER", unset = "")
-db_pass <- Sys.getenv("DB_PASS", unset = "")
+reference_snapshot <- (function() {
+    db_host <- Sys.getenv("DB_HOST", unset = "host.docker.internal")
+    db_port <- Sys.getenv("DB_PORT", unset = "5432")
+    db_name <- Sys.getenv("DB_NAME", unset = "")
+    db_user <- Sys.getenv("DB_USER", unset = "")
+    db_pass <- Sys.getenv("DB_PASS", unset = "")
 
-if (db_port == "" || is.na(suppressWarnings(as.integer(db_port)))) {
-    db_port <- "5432"
-}
-
-if (db_name == "" || db_user == "" || db_pass == "") {
-    stop("Missing required database environment variables: DB_NAME, DB_USER, and/or DB_PASS")
-}
-
-pg_conn <- tryCatch(
-    dbConnect(
-        RPostgres::Postgres(),
-        host = db_host,
-        port = as.integer(db_port),
-        dbname = db_name,
-        user = db_user,
-        password = db_pass
-    ),
-    error = function(e) {
-        stop("Failed to connect to ARDS database: ", e$message)
+    if (db_port == "" || is.na(suppressWarnings(as.integer(db_port)))) {
+        db_port <- "5432"
     }
-)
 
-# Get distinct reference groups (collection + ancestry + sex)
-reference_groups <- unique(na.omit(dbGetQuery(
-    conn = pg_conn,
-    statement = " SELECT DISTINCT i.collection || ' ' || i.ancestry || ' ' || i.sex AS group_label,
-        i.collection, i.ancestry, i.sex
-        FROM osteometry.individuals i
-        INNER JOIN osteometry.collections c ON i.collection = c.collection
-        WHERE c.osteosort_method = TRUE
-        AND i.osteosort_method = TRUE
-        ORDER BY i.collection, i.ancestry, i.sex"
-)))
+    if (db_name == "" || db_user == "" || db_pass == "") {
+        stop("Missing required database environment variables: DB_NAME, DB_USER, and/or DB_PASS")
+    }
 
-# Get all bones that have osteosort-enabled measurements
-osteosort_bones <- dbGetQuery(
-    conn = pg_conn,
-    statement = "SELECT DISTINCT bone FROM osteometry.measurements
-        WHERE osteosort_method = TRUE
-        ORDER BY bone"
-)
+    pg_conn <- tryCatch(
+        dbConnect(
+            RPostgres::Postgres(),
+            host = db_host,
+            port = as.integer(db_port),
+            dbname = db_name,
+            user = db_user,
+            password = db_pass
+        ),
+        error = function(e) {
+            stop("Failed to connect to ARDS database: ", e$message)
+        }
+    )
 
-# Get all osteosort-enabled measurements (with full names for tooltips)
-osteosort_measurements <- dbGetQuery(
-    conn = pg_conn,
-    statement = "SELECT ards, bone, full_name FROM osteometry.measurements
-        WHERE osteosort_method = TRUE
-        ORDER BY bone, ards"
-)
+    on.exit(DBI::dbDisconnect(pg_conn), add = TRUE)
+    load_reference_data(pg_conn)
+})()
 
-# Named lookup: ards code -> full_name (for UI tooltips, lowercase keys for matching)
-measurement_tooltips <- setNames(osteosort_measurements$full_name, tolower(osteosort_measurements$ards))
+reference_groups <- reference_snapshot$reference_groups
+osteosort_measurements <- reference_snapshot$osteosort_measurements
+osteosort_bones <- reference_snapshot$osteosort_bones
+measurement_tooltips <- reference_snapshot$measurement_tooltips
 
 # Set up reactive values
 reference_name_list <- reactiveValues(reference_name_list = reference_groups$group_label)
-reference_list <- reactiveValues(reference_list = list())
+reference_list <- reactiveValues(reference_list = reference_snapshot$reference_list)
 articulation_config <- reactiveValues(df = read.csv(file = "./extdata/config/articulation_config", header = TRUE, sep = ","))
 regression_bones <- reactiveValues(bones = read.csv(file = "./extdata/config/regression_config", header = TRUE)$Bone)
-
-# Load reference data for each group at startup
-observeEvent(TRUE, {
-    for (i in seq_len(nrow(reference_groups))) {
-        group <- reference_groups[i, ]
-        label <- group$group_label
-
-        # For each bone, query measurements for this group
-        all_bone_data <- data.frame()
-        for (bone in osteosort_bones$bone) {
-            # Get measurement columns for this bone
-            bone_meas <- osteosort_measurements[osteosort_measurements$bone == bone, "ards"]
-            if (length(bone_meas) == 0) next
-
-            # Build table name: "cervical 1" -> "osteometry.cervical_1"
-            table_name <- paste0("osteometry.", gsub(" ", "_", tolower(bone)))
-
-            # Build SELECT query with dynamic columns
-            meas_cols <- paste(paste0("b.", bone_meas), collapse = ", ")
-            query <- paste0(
-                "SELECT i.accession, b.side, '", bone, "' AS element, ", meas_cols,
-                " FROM ", table_name, " b",
-                " INNER JOIN osteometry.individuals i ON b.accession = i.accession",
-                " WHERE i.osteosort_method = TRUE",
-                " AND i.collection = $1 AND i.ancestry = $2 AND i.sex = $3"
-            )
-
-            tryCatch(
-                {
-                    bone_data <- dbGetQuery(pg_conn, query, params = list(group$collection, group$ancestry, group$sex))
-                    if (nrow(bone_data) > 0) {
-                        all_bone_data <- dplyr::bind_rows(all_bone_data, bone_data)
-                    }
-                },
-                error = function(e) {
-                    message(paste("Warning: Could not load", bone, "for group", label, "-", e$message))
-                }
-            )
-        }
-
-        reference_list$reference_list[[label]] <- all_bone_data
-    }
-})
+rm(reference_snapshot)

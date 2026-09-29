@@ -135,10 +135,6 @@ OsteoSort/
 | Rmath | R math distributions |
 | GLM | Generalized linear models |
 
-## Acknowledgments
-
-- **Alex Moore** — UI styling suggestions and design inspiration
-
 ## Citation
 
 Lynch, J.J. 2026 OsteoSort. Computerized Osteometric Sorting. Version 1.5.0. Defense POW/MIA Accounting Agency, Offutt AFB, NE.
