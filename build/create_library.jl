@@ -19,7 +19,7 @@ create_library(
     "OSJ",
     "dist/libosj";
     lib_name = "osj",
-    precompile_execution_file = joinpath(@__DIR__, "execution_precompile.jl"),
+    precompile_execution_file = joinpath(@__DIR__, "library_precompile.jl"),
     incremental = false,
     filter_stdlibs = true,
     force = true

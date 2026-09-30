@@ -31,3 +31,15 @@ TTEST_plot(left, right, ref_left, ref_right, absolute=true, yeojohnson=true)
 # Regression
 REGSL(left, right, ref_left, ref_right)
 REGSL_plot(left, right, ref_left, ref_right)
+
+# C wrappers — the R .C() path, so their result-copying code is compiled in
+let out = zeros(length(left)^2), t = [2.0], I = Cint[size(left)..., size(left, 1)^2, length(out), 0, 0, 1]
+    GC.@preserve left right ref_left ref_right out t I begin
+        ip(i) = pointer(I, i)
+        mats = (x for m in (left, right, ref_left, ref_right) for x in (pointer(m), ip(1), ip(2)))
+        OSJ.osj_ttest(mats..., pointer(t), ip(7), ip(7), ip(7), pointer(out), ip(3), ip(5), ip(6))
+        OSJ.osj_ttest_plot(mats..., ip(7), ip(7), pointer(out), ip(4), ip(6))
+        OSJ.osj_regsl(mats..., pointer(out), ip(3), ip(5), ip(6))
+        OSJ.osj_regsl_plot(mats..., pointer(out), ip(4), ip(5), ip(6))
+    end
+end
