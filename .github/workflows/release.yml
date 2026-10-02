@@ -19,11 +19,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check Dockerfile points at this release
+      - name: Check versions match this release
         run: |
           expected="ARG LIBOSJ_VERSION=${GITHUB_REF_NAME}"
           if ! grep -qx "$expected" Dockerfile; then
             echo "::error::Dockerfile must contain '$expected' before releasing"
+            exit 1
+          fi
+          expected="${GITHUB_REF_NAME#v}"
+          if [[ "$(head -n 1 OsteoSort/VERSION | tr -d '[:space:]')" != "$expected" ]]; then
+            echo "::error::OsteoSort/VERSION must be '$expected' before releasing"
             exit 1
           fi
 

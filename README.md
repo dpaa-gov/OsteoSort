@@ -64,9 +64,9 @@ The image does not compile Julia. It downloads the prebuilt `libosj-linux-x86_64
 
 The Julia shared library is built once per release by GitHub Actions (`.github/workflows/release.yml`), not during deployment.
 
-1. Set `ARG LIBOSJ_VERSION=vX.Y.Z` in the `Dockerfile` (and update the version in this README and the citation), commit and push.
-2. Publish a GitHub Release with tag `vX.Y.Z`.
-3. The workflow checks the `Dockerfile` version matches the tag, builds the library with `build/Dockerfile.libosj`, runs `build/libosj_smoke.R` against it in `rocker/shiny`, and attaches `libosj-linux-x86_64.tar.gz` (plus a `.sha256`) to the release. This takes about 20–30 minutes; progress is in the Actions tab.
+1. Set `ARG LIBOSJ_VERSION=vX.Y.Z` in the `Dockerfile` and `X.Y.Z` in `OsteoSort/VERSION` (shown in the app header). For a final release, also update the version in this README and the citation. Commit and push.
+2. Publish a GitHub Release with tag `vX.Y.Z`. For a release candidate, use a tag like `vX.Y.Z-rc1` (with `X.Y.Z-rc1` in `VERSION`) and tick **Set as a pre-release**.
+3. The workflow checks the `Dockerfile` and `VERSION` match the tag, builds the library with `build/Dockerfile.libosj`, runs `build/libosj_smoke.R` against it in `rocker/shiny`, and attaches `libosj-linux-x86_64.tar.gz` (plus a `.sha256`) to the release. This takes about 20–30 minutes; progress is in the Actions tab.
 4. Once the asset appears on the release, deploy tag `vX.Y.Z` in Atlas.
 
 If the workflow fails, nothing is attached and a deploy of that tag fails at the download step. Fix the problem and use **Re-run jobs** on the failed run, which replaces any partial upload.
