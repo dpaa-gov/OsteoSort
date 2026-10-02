@@ -13,6 +13,9 @@ CITATION
 # Build output (rebuilt inside Docker)
 dist/
 
+# Release workflows
+.github
+
 # Compiled shim (rebuilt inside Docker)
 build/*.so
 build/Manifest.toml

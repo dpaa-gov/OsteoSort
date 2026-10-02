@@ -1,10 +1,5 @@
 # Load current ARDS reference data for this session.
-if (file.exists(".env")) {
-    dotenv::load_dot_env(".env")
-} else {
-    message("No .env file found; using system environment variables.")
-}
-
+# DB_* credentials come from the environment (injected by Atlas).
 reference_snapshot <- (function() {
     db_host <- Sys.getenv("DB_HOST", unset = "host.docker.internal")
     db_port <- Sys.getenv("DB_PORT", unset = "5432")

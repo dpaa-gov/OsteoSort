@@ -1,56 +1,11 @@
-# ── Stage 1: Builder ─────────────────────────────────────────
-# Compiles Julia shared library (libosj.so) and C shim
-FROM debian:bookworm-slim AS builder
-
-ARG JULIAVER=1.11.4
-
-# Install build dependencies
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends wget ca-certificates gcc libc6-dev && \
-    rm -rf /var/lib/apt/lists/*
-
-# Install Julia
-RUN wget -O juliaup https://install.julialang.org && \
-    sh juliaup -y && \
-    /root/.juliaup/bin/juliaup add $JULIAVER && \
-    /root/.juliaup/bin/juliaup default $JULIAVER
-
-ENV PATH="/root/.juliaup/bin:${PATH}"
-
-# Copy Julia package and build scripts
-COPY OSJ /build/OSJ
-COPY build /build/build
-
-WORKDIR /build
-
-# Build the shared library
-RUN julia --project=OSJ -e ' \
-    using Pkg; \
-    Pkg.add("PackageCompiler"); \
-    using PackageCompiler; \
-    println("Building libosj.so..."); \
-    create_library( \
-    "OSJ", \
-    "dist/libosj"; \
-    lib_name = "osj", \
-    precompile_execution_file = "build/library_precompile.jl", \
-    incremental = false, \
-    filter_stdlibs = true, \
-    force = true \
-    ); \
-    println("✓ Library build complete!") \
-    '
-
-# Build the C shim for R .C() → init_julia bridging
-RUN gcc -shared -fPIC \
-    -o dist/r_osj_shim.so \
-    build/r_osj_shim.c \
-    -L dist/libosj/lib -losj \
-    -Wl,-rpath,/home/shiny/dist/libosj/lib
-
-# ── Stage 2: Runtime ─────────────────────────────────────────
-# Lean R Shiny image — no Julia installation needed
+# Lean R Shiny image — no Julia installation needed.
+# libosj and the C shim are prebuilt by build/Dockerfile.libosj and attached
+# to the GitHub Release for LIBOSJ_VERSION (.github/workflows/release.yml).
 FROM rocker/shiny:4.4.3
+
+# Release that provides libosj-linux-x86_64.tar.gz — bump with each release
+ARG LIBOSJ_VERSION=v1.5.0
+ARG LIBOSJ_URL=https://github.com/dpaa-gov/OsteoSort/releases/download/${LIBOSJ_VERSION}/libosj-linux-x86_64.tar.gz
 
 # Copy shiny-server config
 COPY shiny-server.conf /etc/shiny-server/shiny-server.conf
@@ -64,14 +19,16 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Install R dependencies
-RUN R -e "install.packages(c('dplyr', 'shinyalert', 'DT', 'htmltools', 'DBI', 'RPostgres', 'dotenv', 'plotly'))"
+RUN R -e "install.packages(c('dplyr', 'shinyalert', 'DT', 'htmltools', 'DBI', 'RPostgres', 'plotly'))"
+
+# Download and unpack the prebuilt shared library and shim
+ADD ${LIBOSJ_URL} /tmp/libosj.tar.gz
+RUN mkdir -p /home/shiny/dist && \
+    tar -xzf /tmp/libosj.tar.gz -C /home/shiny/dist && \
+    rm /tmp/libosj.tar.gz
 
 # Copy the Shiny app code
 COPY OsteoSort /srv/shiny-server/OsteoSort
-
-# Copy compiled shared library and shim from builder
-COPY --from=builder /build/dist/libosj /home/shiny/dist/libosj
-COPY --from=builder /build/dist/r_osj_shim.so /home/shiny/dist/r_osj_shim.so
 
 # Set library path so Julia runtime libs can be found
 ENV LD_LIBRARY_PATH="/home/shiny/dist/libosj/lib:/home/shiny/dist/libosj/lib/julia"

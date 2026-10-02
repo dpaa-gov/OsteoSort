@@ -5,7 +5,7 @@
 # Prerequisites:
 #   - R with required packages (see README.md)
 #   - Julia 1.11+ with OSJ package
-#   - .env file in OsteoSort/ with DB credentials
+#   - DB_* environment variables with DB credentials
 #
 # Usage:
 #   Rscript start_dev.R
@@ -16,7 +16,7 @@ cat("Starting OsteoSort in development mode...\n")
 # Install missing R packages
 required_packages <- c(
     "shiny", "htmltools", "dplyr",
-    "shinyalert", "DT", "DBI", "RPostgres", "dotenv", "plotly"
+    "shinyalert", "DT", "DBI", "RPostgres", "plotly"
 )
 missing <- required_packages[!sapply(required_packages, requireNamespace, quietly = TRUE)]
 if (length(missing) > 0) {

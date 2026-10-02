@@ -1,0 +1,60 @@
+name: Release
+
+# Publishing a GitHub Release (e.g. v1.5.0) builds libosj once and attaches
+# it to that release. The Dockerfile downloads the asset, so Atlas never
+# compiles Julia.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  libosj:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Dockerfile points at this release
+        run: |
+          expected="ARG LIBOSJ_VERSION=${GITHUB_REF_NAME}"
+          if ! grep -qx "$expected" Dockerfile; then
+            echo "::error::Dockerfile must contain '$expected' before releasing"
+            exit 1
+          fi
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build libosj
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: build/Dockerfile.libosj
+          platforms: linux/amd64
+          outputs: type=local,dest=out
+
+      - name: Smoke test libosj
+        run: |
+          docker run --rm \
+            -v "$PWD/out:/home/shiny/dist:ro" \
+            -v "$PWD:/src:ro" -w /src \
+            -e LD_LIBRARY_PATH=/home/shiny/dist/libosj/lib:/home/shiny/dist/libosj/lib/julia \
+            rocker/shiny:4.4.3 Rscript build/libosj_smoke.R
+
+      - name: Package release asset
+        run: |
+          tar -czf libosj-linux-x86_64.tar.gz -C out .
+          sha256sum libosj-linux-x86_64.tar.gz > libosj-linux-x86_64.tar.gz.sha256
+
+      - name: Attach to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" \
+            libosj-linux-x86_64.tar.gz \
+            libosj-linux-x86_64.tar.gz.sha256 \
+            --clobber

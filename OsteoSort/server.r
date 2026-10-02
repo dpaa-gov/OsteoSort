@@ -11,7 +11,6 @@ library(DT)
 
 library(DBI)
 library(RPostgres)
-library(dotenv)
 library(plotly)
 
 # load reference retrieval and analytical R code

@@ -1,0 +1,58 @@
+# Builds libosj (Julia shared library) and the R C shim as a release asset.
+# Run from the OsteoSort root:
+#   docker build -f build/Dockerfile.libosj --output type=local,dest=out .
+# Produces out/libosj/ and out/r_osj_shim.so
+
+# ── Stage 1: Builder ─────────────────────────────────────────
+FROM debian:bookworm-slim AS builder
+
+ARG JULIAVER=1.11.4
+
+# Install build dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends wget ca-certificates gcc libc6-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Julia
+RUN wget -O juliaup https://install.julialang.org && \
+    sh juliaup -y && \
+    /root/.juliaup/bin/juliaup add $JULIAVER && \
+    /root/.juliaup/bin/juliaup default $JULIAVER
+
+ENV PATH="/root/.juliaup/bin:${PATH}"
+
+# Copy Julia package and build scripts
+COPY OSJ /build/OSJ
+COPY build /build/build
+
+WORKDIR /build
+
+# Build the shared library
+RUN julia --project=OSJ -e ' \
+    using Pkg; \
+    Pkg.add("PackageCompiler"); \
+    using PackageCompiler; \
+    println("Building libosj.so..."); \
+    create_library( \
+    "OSJ", \
+    "dist/libosj"; \
+    lib_name = "osj", \
+    precompile_execution_file = "build/library_precompile.jl", \
+    incremental = false, \
+    filter_stdlibs = true, \
+    force = true \
+    ); \
+    println("✓ Library build complete!") \
+    '
+
+# Build the C shim for R .C() → init_julia bridging
+RUN gcc -shared -fPIC \
+    -o dist/r_osj_shim.so \
+    build/r_osj_shim.c \
+    -L dist/libosj/lib -losj \
+    -Wl,-rpath,/home/shiny/dist/libosj/lib
+
+# ── Stage 2: Export ──────────────────────────────────────────
+# Only the build outputs, for --output type=local
+FROM scratch
+COPY --from=builder /build/dist/ /
