@@ -13,6 +13,9 @@ build/r_osj_shim.so
 build/Manifest.toml
 build/Project.toml
 
+# Local performance notes, benchmarks and snapshot
+perf/
+
 # R session files
 .Rhistory
 .RData
