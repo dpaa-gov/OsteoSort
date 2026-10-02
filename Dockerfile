@@ -4,7 +4,7 @@
 FROM rocker/shiny:4.4.3
 
 # Release that provides libosj-linux-x86_64.tar.gz — bump with each release
-ARG LIBOSJ_VERSION=v1.5.0
+ARG LIBOSJ_VERSION=v1.5.0-rc1
 ARG LIBOSJ_URL=https://github.com/dpaa-gov/OsteoSort/releases/download/${LIBOSJ_VERSION}/libosj-linux-x86_64.tar.gz
 
 # Copy shiny-server config
