@@ -1,0 +1,28 @@
+name: Tests
+
+# Runs on every push and pull request. OSJ's tests need no database. The
+# server's tests are run too: without ARDS they cover its configuration and,
+# by loading the package, its precompile workload, which exercises every
+# endpoint on made-up data. The tests that need ARDS, and the browser test,
+# are run locally (see the README).
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  julia:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+
+      - name: OSJ
+        run: julia --project=OSJ -e 'using Pkg; Pkg.instantiate(); Pkg.test()'
+
+      - name: Server
+        run: julia --project=server -e 'using Pkg; Pkg.instantiate(); Pkg.test()'

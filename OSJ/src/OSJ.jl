@@ -1,27 +1,24 @@
 module OSJ
 
-#pulls depends into scope
+# Osteometric sorting: comparing skeletal measurements of case specimens
+# against reference populations to see which bones could belong together.
+
 using Statistics
-using GLM
 using Rmath
 using Optim
 
-#include osteometric sorting code
-include("t_test.jl")
-include("t_test_cache.jl")
-include("t_test_plot.jl")
-include("yeojohnson.jl")
-include("regression.jl")
-include("regression_helpers.jl")
-include("regression_plot.jl")
+include("yeojohnson.jl")   # the Yeo-Johnson transformation
+include("core.jl")         # the comparisons themselves, on matrices
+include("data.jl")         # reference groups and case tables
+include("prepare.jl")      # choosing and aligning rows for an analysis
+include("analysis.jl")     # running the comparisons and labelling the results
 
-#export function calls
-export TTEST
-export TTEST_plot
-export REGSL
-export REGSL_plot
-
-#C-ABI wrappers for shared library builds
-include("c_api.jl")
+export BoneTable, ReferenceGroup, SortTable
+export Settings, AnalysisResult
+export available_measurements, articulation_pairs
+export prepare_pair_match, prepare_articulation, prepare_regression
+export prepare_single_pair_match, prepare_single_articulation, prepare_single_regression
+export ttest, regression_test
+export compare_pairs, compare_regression
 
 end # module OSJ

@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>OsteoSort</title>
+    <link rel="icon" href="img/osteosort.png">
+    <link rel="stylesheet" href="vendor/bootstrap-flatly.min.css">
+    <link rel="stylesheet" href="vendor/tom-select.bootstrap5.min.css">
+    <link rel="stylesheet" href="css/osteosort.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand app-navbar">
+        <div class="container-fluid">
+            <span class="navbar-brand"><img src="img/osteosort.png" class="navbar-logo" alt="OsteoSort"></span>
+            <ul class="navbar-nav" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="nav-single" data-bs-toggle="tab" data-bs-target="#tab-single" type="button" role="tab">
+                        <i class="os-icon icon-bone"></i> Single
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="nav-multiple" data-bs-toggle="tab" data-bs-target="#tab-multiple" type="button" role="tab">
+                        <i class="os-icon icon-table-list"></i> Multiple
+                    </button>
+                </li>
+                <li class="nav-item dropdown">
+                    <button class="nav-link dropdown-toggle" data-bs-toggle="dropdown" type="button" aria-expanded="false">
+                        <i class="os-icon icon-folder-open"></i> Files
+                    </button>
+                    <div class="dropdown-menu files-menu">
+                        <a class="btn btn-gold" href="api/template.csv" download="template.csv">Template</a>
+                        <a class="btn btn-gold" href="files/example_data.csv" download>Example</a>
+                    </div>
+                </li>
+            </ul>
+            <span class="version-badge ms-auto" id="version"></span>
+        </div>
+    </nav>
+
+    <main class="container-fluid app-main">
+        <div class="alert alert-danger" id="load-error" hidden></div>
+        <div class="tab-content">
+
+            <!-- Single -->
+            <div class="tab-pane show active" id="tab-single" role="tabpanel">
+                <div class="app-layout">
+                    <div class="app-sidebar">
+                        <form class="well" id="s-form" autocomplete="off">
+                            <div class="sidebar-section-label">Reference</div>
+                            <select id="s-reference" multiple placeholder="Select reference group(s)..."></select>
+                            <div class="sidebar-section-label">Analysis</div>
+                            <select id="s-analysis">
+                                <option value="pairmatch">Pair-match</option>
+                                <option value="articulation">Articulation</option>
+                                <option value="regression">Regression</option>
+                            </select>
+
+                            <div data-analysis="pairmatch">
+                                <div class="stacked"><select id="s-element" aria-label="Element"></select></div>
+                                <div class="row gx-3">
+                                    <div class="col-6"><h5 class="side-label">&larr; Left</h5><div id="s-left"></div></div>
+                                    <div class="col-6"><h5 class="side-label">&rarr; Right</h5><div id="s-right"></div></div>
+                                </div>
+                            </div>
+
+                            <div data-analysis="regression" hidden>
+                                <div class="row gx-3">
+                                    <div class="col-6">
+                                        <h5 class="side-label">Independent</h5>
+                                        <select id="s-element-a" aria-label="Independent element"></select>
+                                        <div class="stacked"><select id="s-side-a" aria-label="Independent side"><option>Left</option><option>Right</option></select></div>
+                                        <div id="s-values-a"></div>
+                                    </div>
+                                    <div class="col-6">
+                                        <h5 class="side-label">Dependent</h5>
+                                        <select id="s-element-b" aria-label="Dependent element"></select>
+                                        <div class="stacked"><select id="s-side-b" aria-label="Dependent side"><option>Left</option><option>Right</option></select></div>
+                                        <div id="s-values-b"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div data-analysis="articulation" hidden>
+                                <div class="row gx-3 stacked">
+                                    <div class="col-6"><select id="s-pair" aria-label="Elements"></select></div>
+                                    <div class="col-6"><select id="s-art-side" aria-label="Side"><option>Left</option><option>Right</option></select></div>
+                                </div>
+                                <div class="row gx-3">
+                                    <div class="col-6" id="s-art-a"></div>
+                                    <div class="col-6" id="s-art-b"></div>
+                                </div>
+                            </div>
+
+                            <div class="sidebar-section-label">Settings</div>
+                            <div class="ttest-settings">
+                                <div class="form-check"><input class="form-check-input" type="checkbox" id="s-absolute"><label class="form-check-label" for="s-absolute">Absolute differences</label></div>
+                                <div class="form-check"><input class="form-check-input" type="checkbox" id="s-yeojohnson"><label class="form-check-label" for="s-yeojohnson">Yeo-Johnson transformation</label></div>
+                                <div class="form-check"><input class="form-check-input" type="checkbox" id="s-zeromean"><label class="form-check-label" for="s-zeromean">Zero mean</label></div>
+                                <label class="form-label tails-label">Tails</label>
+                                <div>
+                                    <div class="form-check form-check-inline"><input class="form-check-input" type="radio" name="s-tails" id="s-tails-1" value="1"><label class="form-check-label" for="s-tails-1">1</label></div>
+                                    <div class="form-check form-check-inline"><input class="form-check-input" type="radio" name="s-tails" id="s-tails-2" value="2" checked><label class="form-check-label" for="s-tails-2">2</label></div>
+                                </div>
+                                <div class="settings-notes" id="s-notes"></div>
+                            </div>
+                            <label class="form-label alpha-label" for="s-alpha">Alpha <output id="s-alpha-value" class="alpha-value">0.1</output></label>
+                            <input type="range" class="form-range" id="s-alpha" min="0.01" max="0.1" step="0.01" value="0.1">
+                            <div class="range-ends"><span>0.01</span><span>0.1</span></div>
+                            <hr>
+                            <button class="btn btn-gold w-100" type="submit" id="s-process"><i class="os-icon icon-play"></i> Analyze</button>
+                        </form>
+                    </div>
+                    <div class="app-results">
+                        <div id="s-results" hidden>
+                            <div class="panel">
+                                <div class="main-section-label">Plot</div>
+                                <div id="s-plot" class="plot-single"></div>
+                            </div>
+                            <div class="panel">
+                                <div class="main-section-label">Results</div>
+                                <div class="table-toolbar">
+                                    <button class="btn btn-gold btn-sm" type="button" id="s-copy"><i class="os-icon icon-copy"></i> <span>Copy</span></button>
+                                </div>
+                                <div class="table-responsive"><table class="table table-striped table-bordered table-hover" id="s-table"></table></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Multiple -->
+            <div class="tab-pane" id="tab-multiple" role="tabpanel">
+                <div class="app-layout">
+                    <div class="app-sidebar">
+                        <form class="well" id="m-form" autocomplete="off">
+                            <div class="sidebar-section-label">Reference</div>
+                            <select id="m-reference" multiple placeholder="Select reference group(s)..."></select>
+                            <div class="sidebar-section-label">Upload</div>
+                            <input class="form-control" type="file" id="m-file" accept=".csv,text/csv,text/plain">
+                            <div class="upload-summary" id="m-upload-summary" hidden></div>
+                            <div class="sidebar-section-label">Analysis</div>
+                            <select id="m-analysis">
+                                <option value="pairmatch">Pair-match</option>
+                                <option value="articulation">Articulation</option>
+                                <option value="regression">Regression</option>
+                            </select>
+
+                            <div data-analysis="pairmatch">
+                                <div class="stacked"><select id="m-element" aria-label="Element"></select></div>
+                                <div class="stacked"><select id="m-measurements" multiple aria-label="Measurements"></select></div>
+                            </div>
+
+                            <div data-analysis="articulation" hidden>
+                                <div class="row gx-3 stacked">
+                                    <div class="col-6"><select id="m-pair" aria-label="Elements"></select></div>
+                                    <div class="col-6"><select id="m-art-side" aria-label="Side"></select></div>
+                                </div>
+                                <div class="row gx-3 stacked">
+                                    <div class="col-6"><select id="m-art-a" multiple></select></div>
+                                    <div class="col-6"><select id="m-art-b" multiple></select></div>
+                                </div>
+                            </div>
+
+                            <div data-analysis="regression" hidden>
+                                <div class="row gx-3">
+                                    <div class="col-6">
+                                        <h5 class="side-label">Independent</h5>
+                                        <select id="m-element-a" aria-label="Independent element"></select>
+                                        <div class="stacked"><select id="m-side-a" aria-label="Independent side"></select></div>
+                                        <div class="stacked"><select id="m-measurements-a" multiple></select></div>
+                                    </div>
+                                    <div class="col-6">
+                                        <h5 class="side-label">Dependent</h5>
+                                        <select id="m-element-b" aria-label="Dependent element"></select>
+                                        <div class="stacked"><select id="m-side-b" aria-label="Dependent side"></select></div>
+                                        <div class="stacked"><select id="m-measurements-b" multiple></select></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="sidebar-section-label">Settings</div>
+                            <div class="ttest-settings">
+                                <div class="form-check"><input class="form-check-input" type="checkbox" id="m-absolute"><label class="form-check-label" for="m-absolute">Absolute differences</label></div>
+                                <div class="form-check"><input class="form-check-input" type="checkbox" id="m-yeojohnson"><label class="form-check-label" for="m-yeojohnson">Yeo-Johnson transformation</label></div>
+                                <div class="form-check"><input class="form-check-input" type="checkbox" id="m-zeromean"><label class="form-check-label" for="m-zeromean">Zero mean</label></div>
+                                <label class="form-label tails-label">Tails</label>
+                                <div>
+                                    <div class="form-check form-check-inline"><input class="form-check-input" type="radio" name="m-tails" id="m-tails-1" value="1"><label class="form-check-label" for="m-tails-1">1</label></div>
+                                    <div class="form-check form-check-inline"><input class="form-check-input" type="radio" name="m-tails" id="m-tails-2" value="2" checked><label class="form-check-label" for="m-tails-2">2</label></div>
+                                </div>
+                                <div class="settings-notes" id="m-notes"></div>
+                            </div>
+                            <label class="form-label alpha-label" for="m-alpha">Alpha <output id="m-alpha-value" class="alpha-value">0.1</output></label>
+                            <input type="range" class="form-range" id="m-alpha" min="0.01" max="0.1" step="0.01" value="0.1">
+                            <div class="range-ends"><span>0.01</span><span>0.1</span></div>
+                            <hr>
+                            <div class="row gx-3">
+                                <div class="col-6"><button class="btn btn-gold w-100" type="submit" id="m-process"><i class="os-icon icon-play"></i> Analyze</button></div>
+                                <div class="col-6"><button class="btn btn-gold w-100" type="button" id="m-clear"><i class="os-icon icon-eraser"></i> Clear</button></div>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="app-results">
+                        <div id="m-results" hidden>
+                            <div class="panel">
+                                <div class="main-section-label">Summary</div>
+                                <div class="row">
+                                    <div class="col-md-4"><table class="table table-striped table-bordered" id="m-summary"></table></div>
+                                    <div class="col-md-8"><div id="m-histogram" class="plot-histogram"></div></div>
+                                </div>
+                            </div>
+                            <div class="panel">
+                                <div class="main-section-label">Results</div>
+                                <ul class="nav nav-tabs results-tabs" role="tablist">
+                                    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#m-pane-not_excluded" type="button">Not excluded</button></li>
+                                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#m-pane-excluded" type="button">Excluded</button></li>
+                                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#m-pane-rejected" type="button">Rejected</button></li>
+                                </ul>
+                                <div class="tab-content">
+                                    <div class="tab-pane show active" id="m-pane-not_excluded"></div>
+                                    <div class="tab-pane" id="m-pane-excluded"></div>
+                                    <div class="tab-pane" id="m-pane-rejected"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div class="modal" id="progress-modal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog"><div class="modal-content">
+            <div class="modal-header"><h4 class="modal-title">Analyzing...</h4></div>
+            <div class="modal-body">
+                <div class="progress"><div class="progress-bar progress-bar-striped progress-bar-animated" id="progress-bar" role="progressbar" style="width: 0%"></div></div>
+                <p class="progress-text" id="progress-text">Starting...</p>
+            </div>
+        </div></div>
+    </div>
+
+    <div class="modal fade" id="error-modal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered"><div class="modal-content error-dialog">
+            <div class="modal-body">
+                <h2>ERROR!</h2>
+                <p id="error-text"></p>
+                <button type="button" class="btn btn-gold" data-bs-dismiss="modal">Dismiss</button>
+            </div>
+        </div></div>
+    </div>
+
+    <script src="vendor/bootstrap.bundle.min.js"></script>
+    <script src="vendor/tom-select.complete.min.js"></script>
+    <script src="vendor/papaparse.min.js"></script>
+    <script src="vendor/plotly-cartesian.min.js"></script>
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>

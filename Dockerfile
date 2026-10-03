@@ -1,44 +1,35 @@
-# Lean R Shiny image — no Julia installation needed.
-# libosj and the C shim are prebuilt by build/Dockerfile.libosj and attached
-# to the GitHub Release for LIBOSJ_VERSION (.github/workflows/release.yml).
-FROM rocker/shiny:4.4.3
+# syntax=docker/dockerfile:1
+# What Atlas builds. Nothing is compiled here: the Julia side comes from the
+# release named below, so that release must already have its asset attached.
 
-# Release that provides libosj-linux-x86_64.tar.gz — bump with each release
-ARG LIBOSJ_VERSION=v1.5.0-rc1
-ARG LIBOSJ_URL=https://github.com/dpaa-gov/OsteoSort/releases/download/${LIBOSJ_VERSION}/libosj-linux-x86_64.tar.gz
+FROM debian:bookworm-slim AS bundle
 
-# Copy shiny-server config
-COPY shiny-server.conf /etc/shiny-server/shiny-server.conf
+# Bump with each release
+ARG OSTEOSORT_VERSION=v2.0.0
+# Or a local path, to try a bundle built on this machine
+ARG BUNDLE=https://github.com/dpaa-gov/OsteoSort/releases/download/${OSTEOSORT_VERSION}/osteosort-linux-x86_64.tar.gz
 
-# Delete example apps
-RUN rm -rf /srv/shiny-server/*
+# A URL arrives as the archive; a local archive arrives already unpacked
+ADD ${BUNDLE} /tmp/bundle/
+RUN mkdir -p /opt && \
+    if [ -d /tmp/bundle/osteosort ]; then mv /tmp/bundle/osteosort /opt/osteosort; \
+    else tar -xzf /tmp/bundle/*.tar.gz -C /opt; fi
 
-# Install system deps for R packages
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends libpq-dev && \
-    rm -rf /var/lib/apt/lists/*
+FROM debian:bookworm-slim
 
-# Install R dependencies
-RUN R -e "install.packages(c('dplyr', 'shinyalert', 'DT', 'htmltools', 'DBI', 'RPostgres', 'plotly'))"
+RUN useradd --uid 10001 --create-home osteosort
+COPY --from=bundle /opt/osteosort /opt/osteosort
 
-# Download and unpack the prebuilt shared library and shim
-ADD ${LIBOSJ_URL} /tmp/libosj.tar.gz
-RUN mkdir -p /home/shiny/dist && \
-    tar -xzf /tmp/libosj.tar.gz -C /home/shiny/dist && \
-    rm /tmp/libosj.tar.gz
+# Read at run time, at the paths the program was compiled with
+WORKDIR /app
+COPY server/config /app/server/config
+COPY web /app/web
+COPY VERSION /app/VERSION
 
-# Copy the Shiny app code
-COPY OsteoSort /srv/shiny-server/OsteoSort
+# Two worker threads for analyses, one interactive thread for requests
+ENV JULIA_NUM_THREADS=2,1 \
+    PORT=3838
 
-# Set library path so Julia runtime libs can be found
-ENV LD_LIBRARY_PATH="/home/shiny/dist/libosj/lib:/home/shiny/dist/libosj/lib/julia"
-
-# Change ownership
-RUN chown -R shiny /srv/shiny-server/OsteoSort && \
-    chown -R shiny /home/shiny
-
-# Expose the application port
+USER osteosort
 EXPOSE 3838
-
-# Start shiny-server
-CMD ["shiny-server"]
+CMD ["/opt/osteosort/bin/osteosort"]

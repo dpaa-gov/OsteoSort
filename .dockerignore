@@ -1,25 +1,13 @@
-# Version control and editor config
-.git
-.gitignore
-.vscode
-.agent
-
-# Documentation and assets not needed in image
-*.md
-screenshot.png
-LICENSE
-CITATION
-
-# Build output (rebuilt inside Docker)
-dist/
-
-# Release workflows
-.github
-
-# Compiled shim (rebuilt inside Docker)
-build/*.so
-build/Manifest.toml
-build/Project.toml
-
-# Dev-only files
-start_dev.R
+# Only what the two builds need is sent to Docker; everything else stays out.
+#   build/Dockerfile  compiles OSJ and server
+#   Dockerfile        copies server/config, web and VERSION, and, for a local
+#                     build, a bundle from dist/
+*
+!OSJ
+!server
+!web
+!VERSION
+!dist/*.tar.gz
+OSJ/test
+server/test
+**/.DS_Store

@@ -1,0 +1,21 @@
+﻿accession,side,element,Hum_01,Hum_02,Hum_03,Hum_06,Fem_01,Fem_04,Osc_17,Rad_01,Uln_06,Bogus_99
+H1,Left,Humerus,310,62,,45
+H2,left,Humerus,,,,44.1
+H3,LEFT,Humerus,305
+H4,Left,Humerus
+H5,Right,Humerus,309,61.5,46,44.8
+H6,right,Humerus,,60
+H7,"Right ",Humerus,300,60,,44
+H8,,Humerus,301,60,,44
+H9,Left,,302,60,,44
+H10,Left,Humerous,303,60,,44
+H11,Right,Humerus,abc,59,45.5,43
+"H12, a",Right,Humerus,311,62.2,,45.3
+H5,Right,Humerus,308,61,45.2,44.5
+
+F1,Left,Femur,,,,,480,47
+F2,Right,Femur,,,,,478,46.5
+O1,Left,Os coxa,,,,,,,55
+R1,Right,Radius,,,,,,,,245
+R2,Right,Radius,,,,,,,,251
+U1,Left,Ulna,,,,,,,,,230,7

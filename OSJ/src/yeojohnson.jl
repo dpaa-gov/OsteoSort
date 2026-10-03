@@ -1,20 +1,18 @@
-function transform(𝐱; optim_args...)
-    λ, details = lambda(𝐱; optim_args...)
-    transform(𝐱, λ)
-end
+# The Yeo-Johnson transformation: a power transformation that brings skewed
+# values closer to a normal distribution and, unlike Box-Cox, accepts zero and
+# negative values.
 
-function transform(𝐱, λ)
-    𝐱′ = similar(𝐱, Float64)
-    for (i, x) in enumerate(𝐱)
-        if x >= 0
-            𝐱′[i] = λ ≈ 0 ? log(x + 1) : ((x + 1)^λ - 1)/λ
-        else
-            𝐱′[i] = λ ≈ 2 ? -log(-x + 1) : -((-x + 1)^(2 - λ) - 1) / (2 - λ)
-        end
-    end
-    𝐱′
-end
+# One value, for a given parameter λ
+yeo_johnson(x::Real, λ) =
+    x >= 0 ? (λ ≈ 0 ? log(x + 1) : ((x + 1)^λ - 1) / λ) :
+             (λ ≈ 2 ? -log(-x + 1) : -((-x + 1)^(2 - λ) - 1) / (2 - λ))
 
+# A set of values
+transform(𝐱, λ) = Float64[yeo_johnson(x, λ) for x in 𝐱]
+
+# The λ that makes the transformed values most nearly normal, found by
+# maximising the log-likelihood over the interval. Returns the value and the
+# optimiser's report.
 function lambda(𝐱; interval = (-2.0, 2.0), optim_args...)
     i1, i2 = interval
     res = optimize(λ -> -log_likelihood(𝐱, λ), i1, i2; optim_args...)

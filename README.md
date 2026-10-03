@@ -1,172 +1,165 @@
-# OsteoSort 1.5.0
+# OsteoSort
 
-![Build](https://img.shields.io/badge/build-passing-brightgreen)
-![R](https://img.shields.io/badge/R-4.x-blue)
-![Julia](https://img.shields.io/badge/Julia-1.11+-purple)
-![Status](https://img.shields.io/badge/status-beta%20testing%20needed-yellow)
+Computerized osteometric sorting. OsteoSort compares skeletal measurements against reference populations to help reassociate commingled remains: it tests whether two bones could belong to the same individual and reports the pairs that can be excluded.
 
-Computerized osteometric sorting application built with R/Shiny and Julia. OsteoSort uses statistical methods to compare skeletal measurements against reference populations, aiding in the reassociation of commingled remains.
+- **Pair-matching:** a left bone against the right bone of the same element.
+- **Articulation:** two bones that meet at a joint, such as femur and os coxa.
+- **Regression:** the size of one bone predicted from another.
 
-**Key Features:**
-- **Pair-matching** — statistical comparison of bilateral skeletal elements
-- **Articulation** — assessment of joint congruence between adjacent bones
-- **Osteometric sorting by regression** — size-based reassociation using OLS regression
-- Interactive Plotly visualizations with CSV export
-- PostgreSQL-backed reference populations (ARDS)
+Each analysis runs on a single pair typed in by hand, or on a whole case file at once.
 
-![OsteoSort Screenshot](screenshot.png)
+![OsteoSort](screenshot.png)
 
-## Architecture
+## How it is built
 
-| Layer | Technology |
-|-------|------------|
-| Frontend | R/Shiny UI |
-| Backend (statistical) | R + Julia (compiled shared library) |
-| Database | PostgreSQL (ARDS) |
-| Deployment | Docker (prebuilt libosj from GitHub Release) |
-| Julia compilation | PackageCompiler.jl (`create_library`) |
+| Part | What it is | Where |
+|---|---|---|
+| OSJ | The method: a Julia package with no web or database code | `OSJ/` |
+| Server | A Julia HTTP server: loads reference data, reads case files, runs OSJ, serves the page | `server/` |
+| Page | Static HTML, CSS and JavaScript on Bootstrap 5; no build step | `web/` |
+| Reference data | ARDS, a PostgreSQL database, read-only | external |
 
-## Prerequisites
+The server reads the reference groups from ARDS when the page is opened, so a collection, individual or measurement switched off for OsteoSort in ARDS disappears from the app on the next page load.
 
-- Docker
-- A running PostgreSQL instance with the ARDS osteometry schema
-- Database credentials as environment variables:
-  ```
-  DB_HOST=<host>
-  DB_PORT=<port>
-  DB_USER=<user>
-  DB_PASS=<password>
-  DB_NAME=<database>
-  ```
+## Using the app
 
-In production these are injected by Atlas; nothing needs to be configured in the image.
+1. Choose one or more **reference groups**. Selecting several pools their individuals.
+2. Choose the **analysis** and the element (or pair of elements).
+3. **Single:** type the measurements. **Multiple:** upload a case file; the choices narrow to what the file and the reference data both have.
+4. Press **Analyze**.
 
-## Running with Docker
+**Results.** A pair is *Excluded* when its p-value is at or below alpha, otherwise *Cannot Exclude*. Hovering a row's sample size `n` shows which reference groups it came from. In the Multiple tab each table can be searched, sorted and downloaded; in the Single tab the Copy button puts the result on the clipboard.
 
-Production deployments go through Atlas from a release tag (see [Releasing](#releasing)). To run a release yourself, clone that tag so the code matches its prebuilt library:
+**Rejected.** Anything that could not be compared is listed with the reason:
 
-```sh
-git clone --branch vX.Y.Z https://github.com/dpaa-gov/OsteoSort
-cd OsteoSort
-docker build -t osteosort .
-docker run -d -p 4001:3838 \
-    -v /path/to/osteosort.Renviron:/home/shiny/.Renviron:ro \
-    osteosort
-```
+| Reason | Meaning |
+|---|---|
+| None of the selected measurements | The specimen has no value for any selected measurement |
+| No measurements in common | Both specimens have measurements, but share none |
+| Reference sample too small | Fewer than 10 reference individuals have the measurements the pair uses |
+| The comparison could not be calculated | No p-value could be worked out, as when the reference sample does not vary at all |
 
-`osteosort.Renviron` holds the `DB_*` variables above, one per line. Shiny Server does not pass container environment variables (`docker run -e`) through to the app, so they are read from `/home/shiny/.Renviron` instead — Atlas writes this file the same way at startup.
+**Case files.** A CSV with `accession`, `side` and `element` columns followed by one column per measurement, named with the ARDS code (`Hum_01`, `Fem_04`, ...). Download an empty one from **Files > Template**; it always lists the measurements currently enabled in ARDS. A measurement is a number above zero: a cell that is blank, `NA`, zero, negative or not a number counts as not taken. The file must be comma-separated and at most 5 MB, and one run can make at most 2,000,000 comparisons. **Files > Example** is a commingled assemblage of 1,056 specimens across 27 bones, sampled from the Chiba japanese male reference group.
 
-The app will be available at `http://localhost:4001/OsteoSort`.
+## Local development
 
-The image does not compile Julia. It downloads the prebuilt `libosj-linux-x86_64.tar.gz` from the GitHub Release named by `ARG LIBOSJ_VERSION` in the `Dockerfile`, so that release must already have its asset attached (see [Releasing](#releasing)).
+You need Docker, Julia 1.11 and a copy of ARDS.
 
-## Releasing
-
-The Julia shared library is built once per release by GitHub Actions (`.github/workflows/release.yml`), not during deployment.
-
-1. Set `ARG LIBOSJ_VERSION=vX.Y.Z` in the `Dockerfile` and `X.Y.Z` in `OsteoSort/VERSION` (shown in the app header). For a final release, also update the version in this README and the citation. Commit and push.
-2. Publish a GitHub Release with tag `vX.Y.Z`. For a release candidate, use a tag like `vX.Y.Z-rc1` (with `X.Y.Z-rc1` in `VERSION`) and tick **Set as a pre-release**.
-3. The workflow checks the `Dockerfile` and `VERSION` match the tag, builds the library with `build/Dockerfile.libosj`, runs `build/libosj_smoke.R` against it in `rocker/shiny`, and attaches `libosj-linux-x86_64.tar.gz` (plus a `.sha256`) to the release. This takes about 20–30 minutes; progress is in the Actions tab.
-4. Once the asset appears on the release, deploy tag `vX.Y.Z` in Atlas.
-
-If the workflow fails, nothing is attached and a deploy of that tag fails at the download step. Fix the problem and use **Re-run jobs** on the failed run, which replaces any partial upload.
-
-To build the library locally without publishing:
+**1. Start ARDS.** Build and load it as its own README describes, as a container named `ards-db`, then put it on a network the app can share:
 
 ```sh
-docker build -f build/Dockerfile.libosj --output type=local,dest=out .
+docker network create osteosort-dev
+docker network connect osteosort-dev ards-db
 ```
 
-## Local Development (Without Docker)
+**2. Give the app its credentials.** Create `.env` in the repository root (it is git-ignored):
 
-### Requirements
+```
+DB_HOST=ards-db
+DB_PORT=5432
+DB_NAME=ards
+DB_USER=osteosort
+DB_PASS=<the osteosort user's password>
+```
 
-- R 4.x with packages listed in [Dependencies](#dependencies)
-- Julia 1.11+ (for building the shared library)
-- GCC (for building the C shim)
-- PostgreSQL client library (`libpq-dev` on Debian/Ubuntu)
-- `DB_*` environment variables exported in your shell (see [Prerequisites](#prerequisites))
-
-### Build the Shared Library (one-time)
+**3. Run the server.**
 
 ```sh
-# Build libosj.so
-julia --project=OSJ build/create_library.jl
-
-# Build C shim
-gcc -shared -fPIC -o build/r_osj_shim.so build/r_osj_shim.c \
-    -L dist/libosj/lib -losj -Wl,-rpath,$(pwd)/dist/libosj/lib
+dev/julia.sh -e 'using Pkg; Pkg.instantiate()'                       # first time only
+dev/julia.sh -e 'using OsteoSortServer; OsteoSortServer.main()'      # http://127.0.0.1:3838/
 ```
 
-### Run
+`dev/julia.sh` runs Julia for the server package with the variables from `.env`. It uses the Julia 1.11 on your machine if there is one (reaching ARDS on `127.0.0.1`), and a Julia container on the `osteosort-dev` network otherwise. Changes to files in `web/` show on reload; changes to Julia code need a restart.
+
+### Tests
+
+All tests live in `test/`.
+
+| What | Command | Needs |
+|---|---|---|
+| `test/osj`: the method, on made-up data | `PROJECT=OSJ dev/julia.sh -e 'using Pkg; Pkg.test()'` | nothing |
+| `test/server`: the API against OSJ, awkward case files, combined reference groups | `dev/julia.sh -e 'using Pkg; Pkg.test()'` | ARDS |
+| `test/browser`: the real page in a headless browser, compared with the API | see below | a running server |
 
 ```sh
-LD_LIBRARY_PATH=dist/libosj/lib:dist/libosj/lib/julia Rscript start_dev.R
+docker run --rm --network host --user "$(id -u):$(id -g)" -e HOME=/tmp \
+  -v "$PWD:/app:z" -w /app mcr.microsoft.com/playwright/python:v1.49.0-jammy \
+  sh -c "pip install -q playwright==1.49.0 && python test/browser/test_ui.py"
 ```
 
-The app will open at `http://127.0.0.1:4001`.
+The first two also run on GitHub for every push (`.github/workflows/tests.yml`), where the server's tests skip the parts that need ARDS. Each release additionally builds the image and checks that it starts and serves the page (`.github/workflows/release.yml`). The browser test is run by hand; do so after changing anything in `web/`.
 
-## Project Structure
+`OSJ/test/runtests.jl` and `server/test/runtests.jl` are the files Julia's `Pkg.test()` looks for; each only points into `test/`.
+
+### Scripts
+
+| Script | Purpose |
+|---|---|
+| `dev/julia.sh` | Run Julia for the server (or, with `PROJECT=OSJ`, for OSJ) with the settings from `.env` |
+| `dev/run-image.sh` | Compile the Julia side, build the image and run it as Atlas does, on http://127.0.0.1:3839/ |
+
+## Configuration
+
+Everything comes from the environment.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `DB_NAME`, `DB_USER`, `DB_PASS` | required | ARDS database and read-only login |
+| `DB_HOST` | `host.docker.internal` | ARDS host |
+| `DB_PORT` | `5432` | ARDS port |
+| `PORT` | `3838` | Port the server listens on |
+| `REFERENCE_MAX_AGE_SECONDS` | `30` | How old the loaded reference data may be before a page load re-reads ARDS |
+
+Two files in `server/config/` hold what is not in ARDS: the articulating measurement pairs (`articulation.csv`) and the bones regression is offered for (`regression_bones.csv`). `default_references.csv` lists the groups selected when the page opens.
+
+## Deployment
+
+OsteoSort is deployed through Atlas, which builds the `Dockerfile` in this repository and runs the image.
+
+| Atlas setting | Value |
+|---|---|
+| Dockerfile path | `Dockerfile` |
+| Container port | `3838` |
+| Launch path | `/` |
+| Health-check path | `/healthz` |
+| ARDS database access | Read-only |
+
+The image compiles nothing. The Julia side is compiled once per release into a standalone program and attached to the GitHub Release; the `Dockerfile` downloads it and adds the page. So a release must have its asset before that tag is deployed.
+
+### Releasing
+
+1. Set the version in `VERSION` (shown in the app header) and `ARG OSTEOSORT_VERSION=vX.Y.Z` in the `Dockerfile`. Update the citation below and in `CITATION`. Commit and push.
+2. Publish a GitHub Release with tag `vX.Y.Z`.
+3. `.github/workflows/release.yml` checks that `VERSION` and the `Dockerfile` match the tag, compiles the program with `build/Dockerfile`, builds the image from it, checks that it starts, and attaches `osteosort-linux-x86_64.tar.gz` to the release.
+4. Once the asset is on the release, deploy tag `vX.Y.Z` in Atlas.
+
+If the workflow fails, nothing is attached and a deploy of that tag fails at the download step. Fix the problem and re-run the workflow.
+
+## Repository layout
 
 ```
-OsteoSort/
-├── Dockerfile             # Runtime image; downloads prebuilt libosj from the release
-├── .github/workflows/
-│   └── release.yml        # On release: build, smoke test, attach libosj asset
-├── start_dev.R            # Local dev server launcher
-├── shiny-server.conf
-├── OsteoSort/             # Shiny application
-│   ├── server.r           # Server entry point (loads osj.r, calls osj_load())
-│   ├── ui.r               # UI entry point
-│   ├── R/                 # Analytical R functions
-│   │   ├── osj.r          # Shared library interface (dyn.load + wrappers)
-│   │   ├── ttest.r        # T-test analysis (calls osj_ttest)
-│   │   └── reg.test.r     # Regression analysis (calls osj_regsl)
-│   ├── server/            # Server modules (reference, single, files, etc.)
-│   ├── ui/                # UI modules
-│   ├── extdata/           # Config files (articulation_config, etc.)
-│   └── www/               # Static assets (CSS, JS, images)
-├── OSJ/                   # Julia analytical package
-│   ├── Project.toml
-│   └── src/
-│       ├── OSJ.jl         # Module definition
-│       └── c_api.jl       # @ccallable wrappers for R .C() interface
-├── build/                 # Build scripts
-│   ├── create_library.jl  # PackageCompiler library build (local dev)
-│   ├── Dockerfile.libosj  # Library build used for releases
-│   ├── libosj_smoke.R     # Smoke test run against each release build
-│   ├── library_precompile.jl
-│   └── r_osj_shim.c      # C shim for init_julia ABI bridging
-└── dist/                  # Build output (gitignored)
-    └── libosj/
-        └── lib/libosj.so
+OSJ/                  The method (Julia package)
+  src/core.jl           the comparisons
+  src/prepare.jl        choosing and aligning rows for an analysis
+  src/analysis.jl       running comparisons and labelling results
+server/               The HTTP server (Julia package)
+  src/                  reference loading, case files, API, jobs
+  config/               articulation pairs, regression bones, default groups
+web/                  The page: index.html, css/, js/, vendored libraries, example file
+test/                 All tests
+  osj/                  the method, on made-up data; no database
+  server/               the API against ARDS, with its case files in data/
+  browser/              the page in a headless browser
+build/Dockerfile      Compiles the Julia side into a standalone program
+Dockerfile            What Atlas builds
+.github/workflows/    tests.yml (every push), release.yml (each release)
+dev/                  Local scripts
+VERSION               The version shown in the app
 ```
-
-## Dependencies
-
-### R
-| Package | Purpose |
-|---------|---------|
-| shiny | Web framework |
-| htmltools | HTML generation |
-| DT | Interactive data tables |
-| dplyr | Data manipulation |
-| shinyalert | Alert dialogs |
-| DBI | Database interface |
-| RPostgres | PostgreSQL driver |
-| plotly | Interactive plots |
-
-### Julia (OSJ package)
-| Package | Purpose |
-|---------|---------|
-| Statistics | Statistical functions |
-| Optim | Optimization |
-| Rmath | R math distributions |
-| GLM | Generalized linear models |
 
 ## Citation
 
-Lynch, J.J. 2026 OsteoSort. Computerized Osteometric Sorting. Version 1.5.0. Defense POW/MIA Accounting Agency, Offutt AFB, NE.
+Lynch, J.J. 2026 OsteoSort. Computerized Osteometric Sorting. Version 2.0.0. Defense POW/MIA Accounting Agency, Offutt AFB, NE.
 
 ## License
 

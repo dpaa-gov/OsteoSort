@@ -1,8 +1,8 @@
 name: Release
 
-# Publishing a GitHub Release (e.g. v1.5.0) builds libosj once and attaches
-# it to that release. The Dockerfile downloads the asset, so Atlas never
-# compiles Julia.
+# Publishing a GitHub Release (e.g. v2.0.0) compiles the Julia side of
+# OsteoSort once and attaches it to that release. The Dockerfile downloads the
+# asset, so Atlas never compiles Julia.
 
 on:
   release:
@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 jobs:
-  libosj:
+  bundle:
     runs-on: ubuntu-latest
     timeout-minutes: 90
 
@@ -21,45 +21,49 @@ jobs:
 
       - name: Check versions match this release
         run: |
-          expected="ARG LIBOSJ_VERSION=${GITHUB_REF_NAME}"
+          expected="ARG OSTEOSORT_VERSION=${GITHUB_REF_NAME}"
           if ! grep -qx "$expected" Dockerfile; then
             echo "::error::Dockerfile must contain '$expected' before releasing"
             exit 1
           fi
           expected="${GITHUB_REF_NAME#v}"
-          if [[ "$(head -n 1 OsteoSort/VERSION | tr -d '[:space:]')" != "$expected" ]]; then
-            echo "::error::OsteoSort/VERSION must be '$expected' before releasing"
+          if [[ "$(head -n 1 VERSION | tr -d '[:space:]')" != "$expected" ]]; then
+            echo "::error::VERSION must be '$expected' before releasing"
             exit 1
           fi
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: Build libosj
+      - name: Compile
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: build/Dockerfile.libosj
+          file: build/Dockerfile
           platforms: linux/amd64
-          outputs: type=local,dest=out
+          outputs: type=local,dest=dist
 
-      - name: Smoke test libosj
+      - name: Package
         run: |
-          docker run --rm \
-            -v "$PWD/out:/home/shiny/dist:ro" \
-            -v "$PWD:/src:ro" -w /src \
-            -e LD_LIBRARY_PATH=/home/shiny/dist/libosj/lib:/home/shiny/dist/libosj/lib/julia \
-            rocker/shiny:4.4.3 Rscript build/libosj_smoke.R
+          tar -czf dist/osteosort-linux-x86_64.tar.gz -C dist osteosort
+          (cd dist && sha256sum osteosort-linux-x86_64.tar.gz > osteosort-linux-x86_64.tar.gz.sha256)
 
-      - name: Package release asset
+      - name: Smoke test the image Atlas will build
         run: |
-          tar -czf libosj-linux-x86_64.tar.gz -C out .
-          sha256sum libosj-linux-x86_64.tar.gz > libosj-linux-x86_64.tar.gz.sha256
+          docker build --build-arg BUNDLE=dist/osteosort-linux-x86_64.tar.gz -t osteosort:release .
+          docker run -d --name osteosort -p 3838:3838 -e DB_NAME=none -e DB_USER=none -e DB_PASS=none osteosort:release
+          for i in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:3838/healthz && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3838/healthz
+          curl -fsS http://127.0.0.1:3838/ | grep -q "<title>OsteoSort</title>"
+          docker logs osteosort
 
       - name: Attach to release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "$GITHUB_REF_NAME" \
-            libosj-linux-x86_64.tar.gz \
-            libosj-linux-x86_64.tar.gz.sha256 \
+            dist/osteosort-linux-x86_64.tar.gz \
+            dist/osteosort-linux-x86_64.tar.gz.sha256 \
             --clobber

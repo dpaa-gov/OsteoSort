@@ -1,25 +1,14 @@
-
+# Editor settings
 .vscode/
-.agent/
 
-# Environment variables (DB credentials)
+# Local database credentials (see README: Local development)
 .env
 
-# Build output — compiled shared library
+# The compiled Julia side, built locally by dev/run-image.sh
 dist/
 
-# Compiled C shim and build artifacts
-build/r_osj_shim.so
-build/Manifest.toml
-build/Project.toml
-
-# Local performance notes, benchmarks and snapshot
-perf/
-
-# R session files
-.Rhistory
-.RData
-.Rproj.user/
+# Browser test screenshots
+test/browser/screens/
 
 # OS
 .DS_Store

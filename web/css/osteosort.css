@@ -1,0 +1,727 @@
+/* ===== OsteoSort: dark sidebar theme on Bootstrap 5 (Flatly) ===== */
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  src: url(../fonts/Inter-Regular.woff2) format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  src: url(../fonts/Inter-Medium.woff2) format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  src: url(../fonts/Inter-SemiBold.woff2) format('woff2');
+}
+
+:root {
+  --os-gold: #d4a843;
+  --os-gold-tint: rgba(212, 168, 67, 0.15);
+  --os-navy: #1e2a3a;
+  --os-navy-dark: #15202d;
+  --os-field: #2a3a4a;
+  --os-text: #e0e6ed;
+  --os-muted: #8899aa;
+  --os-line: rgba(255, 255, 255, 0.08);
+  --bs-body-font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --bs-body-font-size: 15px;
+  --bs-body-bg: #ecf0f1;
+}
+
+body {
+  font-family: var(--bs-body-font-family);
+  font-size: var(--bs-body-font-size);
+  background-color: var(--bs-body-bg);
+}
+
+.app-main {
+  padding: 20px 15px;
+}
+
+/* The sidebar keeps one width on desktop screens; the results take the rest.
+   On narrow screens the two stack. */
+@media (min-width: 992px) {
+  .app-layout {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+  }
+
+  .app-sidebar {
+    flex: 0 0 360px;
+  }
+}
+
+.app-results {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Text selection is off everywhere: dragging across the page highlights
+   nothing. Results are taken out with the Copy and Download buttons. Fields
+   stay selectable so typed values can be edited. */
+body {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Icons: Font Awesome Free 6 solid SVGs, tinted with the text colour.
+   Not named ".icon": Plotly gives its toolbar SVGs that class. */
+.os-icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.125em;
+  background-color: currentColor;
+  -webkit-mask: var(--icon) no-repeat center / contain;
+  mask: var(--icon) no-repeat center / contain;
+}
+
+.icon-bone { --icon: url(../icons/bone.svg); width: 1.125em; }
+.icon-table-list { --icon: url(../icons/table-list.svg); }
+.icon-play { --icon: url(../icons/play.svg); width: 0.75em; }
+.icon-folder-open { --icon: url(../icons/folder-open.svg); width: 1.125em; }
+.icon-eraser { --icon: url(../icons/eraser.svg); width: 1.125em; }
+.icon-download { --icon: url(../icons/download.svg); }
+.icon-copy { --icon: url(../icons/copy.svg); }
+
+/* Header: darker than the sidebar, with a gold accent border */
+.app-navbar {
+  background-color: var(--os-navy-dark);
+  border-bottom: 2px solid var(--os-gold);
+  min-height: 44px;
+  padding: 0;
+}
+
+.app-navbar .navbar-brand {
+  padding: 2px 15px 2px 0;
+  margin-right: 30px;
+  line-height: 40px;
+}
+
+.navbar-logo {
+  height: 40px;
+  width: auto;
+  vertical-align: middle;
+}
+
+.app-navbar .nav-link {
+  color: #ffffff;
+  background: none;
+  border: none;
+  padding: 12px 15px !important;
+  line-height: 20px;
+}
+
+.app-navbar .nav-link:hover,
+.app-navbar .nav-link:focus,
+.app-navbar .nav-link.active,
+.app-navbar .nav-link.show {
+  color: var(--os-gold);
+}
+
+.version-badge {
+  color: var(--os-gold);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  padding: 12px 15px;
+  line-height: 20px;
+}
+
+.files-menu {
+  padding: 8px;
+  min-width: 0;
+}
+
+.files-menu .btn {
+  display: block;
+  margin: 4px 0;
+}
+
+/* Dark sidebar */
+.well {
+  background-color: var(--os-navy);
+  border-radius: 8px;
+  padding: 19px;
+  margin-bottom: 20px;
+  color: var(--os-text);
+}
+
+.well label,
+.well .form-label,
+.well .form-check-label {
+  color: var(--os-text);
+  font-weight: normal;
+}
+
+.well .form-label {
+  margin-top: 10px;
+  margin-bottom: 4px;
+}
+
+.sidebar-section-label {
+  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  color: var(--os-muted);
+  margin-bottom: 8px;
+  margin-top: 16px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--os-line);
+}
+
+.well > .sidebar-section-label:first-child {
+  margin-top: 0;
+}
+
+/* Column headings (Left, Right, Independent, Dependent): the same type as
+   the section labels, without the rule under them */
+.well h5.side-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  line-height: 1.5;
+  text-transform: uppercase;
+  color: var(--os-muted);
+  margin-top: 12px;
+  margin-bottom: 6px;
+}
+
+/* Every control in the sidebar is the same size: dropdowns, tag lists,
+   number fields and the file field share one height, font and padding. */
+.well .form-control,
+.well .ts-wrapper .ts-control {
+  font-size: 15px;
+  line-height: 1.5;
+  min-height: 38px;
+  padding: 6px 8px;
+}
+
+/* The theme reserves room on the right for a dropdown arrow that is not
+   drawn here; give it back so longer names such as "humerus-scapula" fit. */
+.well .ts-wrapper.single .ts-control {
+  padding-right: 8px !important;
+}
+
+.well .ts-wrapper .ts-control {
+  align-items: center;
+}
+
+/* A control placed directly under another, with no label between them */
+.well .stacked {
+  margin-top: 8px;
+}
+
+/* Dark form controls */
+.well .form-control {
+  background-color: var(--os-field);
+  color: var(--os-text);
+  border: 1px solid var(--os-line);
+  box-shadow: none;
+}
+
+.well .form-control:focus {
+  border-color: var(--os-gold);
+  box-shadow: none;
+}
+
+.well .form-control::placeholder {
+  color: #6b7d8e;
+}
+
+.well .measurement {
+  margin-top: 8px;
+}
+
+/* The first field of a column sits under a dropdown: give its label room */
+.well .measurement:first-child {
+  margin-top: 16px;
+}
+
+.well .side-label + div > .measurement:first-child {
+  margin-top: 4px;
+}
+
+.well .measurement label {
+  display: block;
+  margin-bottom: 4px;
+}
+
+/* Hide number input spinners */
+.well input[type="number"]::-webkit-outer-spin-button,
+.well input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.well input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* File input: gold Browse button */
+.well input[type="file"]::file-selector-button {
+  background-color: var(--os-gold);
+  color: #000;
+  border: none;
+  font-weight: 500;
+}
+
+.well input[type="file"]:hover::file-selector-button {
+  background-color: #c2983a !important;
+}
+
+.upload-summary {
+  font-size: 12px;
+  color: var(--os-muted);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+.upload-summary strong {
+  color: var(--os-text);
+  font-weight: 500;
+}
+
+.upload-summary .unmatched {
+  color: #f0b4a0;
+}
+
+/* Tom Select (dropdowns and tag lists) */
+.well .ts-wrapper {
+  margin-bottom: 0;
+}
+
+.well .ts-wrapper .ts-control,
+.well .ts-wrapper.single.input-active .ts-control,
+.well .ts-wrapper.full .ts-control {
+  background-color: var(--os-field) !important;
+  background-image: none !important;
+  color: var(--os-gold);
+  border: 1px solid var(--os-line);
+  box-shadow: none;
+  font-weight: 600;
+}
+
+.well .ts-wrapper.focus .ts-control {
+  border-color: var(--os-gold);
+  box-shadow: none;
+}
+
+.well .ts-wrapper .ts-control > input {
+  color: var(--os-gold);
+}
+
+.well .ts-wrapper .ts-control > input::placeholder {
+  color: #6b7d8e;
+}
+
+/* A dropdown must not change height when it gains or loses focus: the form
+   below would move under the pointer and swallow a click on Process. */
+.well .ts-wrapper.single .ts-control {
+  flex-wrap: nowrap;
+}
+
+.well .ts-wrapper.single .ts-control > .item {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.well .ts-wrapper.single .ts-control > input {
+  min-width: 2px !important;
+}
+
+.well .ts-wrapper.single .ts-control::after {
+  border-color: var(--os-muted) transparent transparent transparent;
+}
+
+.well .ts-wrapper.multi .ts-control > .item {
+  color: var(--os-gold);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  /* tight enough for two codes per row in a half-width column */
+  padding: 1px 3px;
+  margin: 0 2px 3px 0;
+  font-weight: 600;
+}
+
+.well .ts-wrapper.multi .ts-control {
+  padding-left: 7px;
+  padding-right: 5px;
+}
+
+/* The theme gives a tag list's text field a 7rem minimum width, so it wraps
+   onto an empty line of its own whenever the last row of tags is nearly full.
+   Let it share the last row instead. */
+.well .ts-wrapper.multi.has-items .ts-control > input {
+  min-width: 2px !important;
+  margin: 0 !important;
+}
+
+.well .ts-wrapper.multi .ts-control > .item.active {
+  background-color: var(--os-gold-tint);
+  color: var(--os-gold);
+}
+
+.ts-dropdown {
+  background-color: var(--os-field);
+  color: var(--os-text);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  margin-top: 0;
+}
+
+.ts-dropdown .option,
+.ts-dropdown .no-results {
+  color: var(--os-text);
+  white-space: nowrap;
+}
+
+/* A list may be wider than a half-width dropdown, so long names stay on one line */
+.well .ts-dropdown {
+  width: max-content;
+  min-width: 100%;
+}
+
+.ts-dropdown .option.active,
+.ts-dropdown .option:hover,
+.ts-dropdown .option.selected {
+  background-color: var(--os-gold);
+  color: var(--os-navy);
+}
+
+/* Checkboxes, radios, slider */
+.well .form-check-input {
+  accent-color: var(--os-gold);
+  background-color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.well .form-check-input:checked {
+  background-color: var(--os-gold);
+  border-color: var(--os-gold);
+}
+
+.well .form-check-input:focus {
+  box-shadow: 0 0 0 2px rgba(212, 168, 67, 0.3);
+}
+
+.well .tails-label {
+  display: block;
+}
+
+.settings-notes {
+  margin-top: 8px;
+}
+
+.settings-note {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--os-muted);
+  border-left: 2px solid var(--os-line);
+  padding: 2px 0 2px 8px;
+  margin-top: 6px;
+}
+
+.settings-note.has-warning {
+  border-left-color: var(--os-gold);
+}
+
+.settings-note .warning {
+  color: #f5e6c0;
+}
+
+.alpha-label {
+  display: block;
+}
+
+.alpha-value {
+  background: var(--os-gold);
+  color: var(--os-navy);
+  font-size: 12px;
+  border-radius: 3px;
+  padding: 1px 5px;
+  margin-left: 4px;
+}
+
+.well .form-range::-webkit-slider-thumb {
+  background-color: var(--os-gold);
+}
+
+.well .form-range::-moz-range-thumb {
+  background-color: var(--os-gold);
+}
+
+.well .form-range::-webkit-slider-runnable-track {
+  background-color: var(--os-field);
+}
+
+.well .form-range::-moz-range-track {
+  background-color: var(--os-field);
+}
+
+.range-ends {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--os-muted);
+  margin-top: -4px;
+}
+
+.well hr {
+  border-color: rgba(255, 255, 255, 0.4);
+  margin: 18px 0;
+}
+
+/* Gold buttons */
+.btn-gold,
+.btn-gold:focus {
+  background-color: var(--os-gold);
+  border-color: var(--os-gold);
+  color: var(--os-navy);
+}
+
+.btn-gold:hover,
+.btn-gold:active,
+.btn-gold:disabled {
+  background-color: #c2983a !important;
+  border-color: #c2983a !important;
+  color: var(--os-navy) !important;
+}
+
+/* Measurement code tooltip: light gold on dark */
+.well [data-tooltip] {
+  position: relative;
+  cursor: help;
+}
+
+/* let the tooltip of a measurement tag extend past its tag list */
+.well .ts-wrapper.multi .ts-control {
+  overflow: visible;
+}
+
+/* Dropdowns and tag lists each sit in their own layer, so a tooltip would
+   slide under the control beside or above it. Lift whatever is hovered. */
+.well [data-tooltip]:hover {
+  z-index: 30;
+}
+
+.well .ts-wrapper:hover .ts-control {
+  z-index: 20;
+}
+
+.well [data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  background-color: #f5e6c0;
+  color: var(--os-navy);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  z-index: 1000;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+
+/* Main panel */
+.panel {
+  background-color: #ffffff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 15px;
+  margin-bottom: 20px;
+}
+
+.main-section-label {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: #2c3e50;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--os-gold);
+}
+
+.plot-single {
+  width: 100%;
+  height: 500px;
+}
+
+.plot-histogram {
+  width: 100%;
+  height: 250px;
+}
+
+/* Tables */
+.panel .table {
+  margin-bottom: 0;
+  --bs-table-striped-bg: #f9f9f9;
+  --bs-table-hover-bg: var(--os-gold-tint);
+  --bs-table-border-color: #f1f1f1;
+}
+
+.panel .table th {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.result-table tbody tr:hover > td {
+  background-color: var(--os-gold-tint);
+  box-shadow: none;
+}
+
+.result-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.result-table th.sortable::after {
+  content: "\2195";
+  color: #c5cbd1;
+  margin-left: 6px;
+  font-weight: 400;
+}
+
+.result-table th.sorted-asc::after { content: "\2191"; color: #2c3e50; }
+.result-table th.sorted-desc::after { content: "\2193"; color: #2c3e50; }
+
+.table-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 15px 0;
+}
+
+.table-toolbar label {
+  font-weight: 600;
+  margin: 0;
+}
+
+.table-toolbar input {
+  display: inline-block;
+  width: 220px;
+  margin-left: 6px;
+}
+
+.table-toolbar input:focus {
+  border-color: var(--os-gold);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(212, 168, 67, 0.3);
+}
+
+.table-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.table-footer .pagination {
+  margin: 0;
+  --bs-pagination-color: #2c3e50;
+  --bs-pagination-bg: transparent;
+  --bs-pagination-border-color: transparent;
+  --bs-pagination-hover-color: var(--os-navy);
+  --bs-pagination-hover-bg: var(--os-gold);
+  --bs-pagination-hover-border-color: var(--os-gold);
+  --bs-pagination-active-color: var(--os-navy);
+  --bs-pagination-active-bg: var(--os-gold);
+  --bs-pagination-active-border-color: var(--os-gold);
+  --bs-pagination-disabled-bg: transparent;
+  --bs-pagination-disabled-border-color: transparent;
+  --bs-pagination-disabled-color: #95a5a6;
+  --bs-pagination-focus-box-shadow: none;
+}
+
+/* The sample size of a result row says, on hover, which reference groups it
+   came from. The tooltip opens to the left, on the row's own line, so the
+   scrolling table area never clips it. */
+.panel td[data-tooltip] {
+  position: relative;
+  cursor: help;
+  text-decoration: underline dotted #b8c0c8;
+  text-underline-offset: 3px;
+}
+
+.panel td[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  background-color: #f5e6c0;
+  color: var(--os-navy);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  z-index: 1000;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+
+/* Results tabset: gold active tab, gold text on inactive */
+.results-tabs .nav-link {
+  color: var(--os-gold);
+  border-color: transparent;
+  min-width: 10.5rem; /* the three tabs are one width, that of the longest label */
+}
+
+.results-tabs .nav-link:hover,
+.results-tabs .nav-link:focus {
+  background-color: var(--os-gold-tint);
+  border-color: transparent;
+  color: var(--os-gold);
+}
+
+.results-tabs .nav-link.active,
+.results-tabs .nav-link.active:hover {
+  background-color: var(--os-gold);
+  color: var(--os-navy);
+  border-color: var(--os-gold);
+}
+
+/* Dialogs */
+.progress-text {
+  text-align: center;
+  margin: 10px 0 0;
+}
+
+#progress-modal .progress-bar {
+  background-color: var(--os-gold);
+}
+
+.error-dialog .modal-body {
+  text-align: center;
+  padding: 30px;
+}
+
+.error-dialog h2 {
+  color: #c0392b;
+  font-weight: 600;
+}
+
+.error-dialog p {
+  margin: 16px 0 22px;
+}
