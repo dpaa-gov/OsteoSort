@@ -604,9 +604,70 @@ textarea {
   border-bottom: 2px solid var(--os-gold);
 }
 
+/* The batch summary: one tile per headline number, two to a row beside the plot */
+.stat-tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.stat-tile {
+  background-color: #f7fafc;
+  border: 1px solid #dae6ec;
+  border-left: 3px solid #becfd9;
+  border-radius: 4px;
+  padding: 10px 14px;
+}
+
+/* four across above the single comparison's plot, fewer to a row on a narrow screen */
+.stat-tiles.in-a-row {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin-bottom: 8px;
+}
+
+.stat-tile.accent {
+  border-left-color: var(--os-gold);
+}
+
+/* the outcome of a single comparison, in the colours the batch histogram gives the two */
+.stat-tile.excluded {
+  border-left-color: #cc4444;
+}
+
+.stat-tile.kept {
+  border-left-color: #3d5a73;
+}
+
+.stat-value {
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #2a4051;
+}
+
+.stat-note {
+  font-size: 13px;
+  font-weight: 500;
+  color: #586f80;
+  margin-left: 8px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #586f80;
+  margin-top: 2px;
+}
+
+
+.stat-run {
+  font-size: 12px;
+  color: #778f9e;
+  margin: 8px 0 0;
+}
+
 .plot-single {
   width: 100%;
-  height: 500px;
+  height: 450px;
 }
 
 .plot-histogram {

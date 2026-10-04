@@ -2,7 +2,7 @@
 
 import {
     $, postJSON, capFirst, showError, progress, makeSelect, boneName, setChoices, valueOf, valuesOf,
-    initSettings, fillTable, copyRows, markRun, PLOT_CONFIG, PLOT_LAYOUT, COLORS,
+    initSettings, fillTable, copyRows, markRun, PLOT_CONFIG, PLOT_LAYOUT, COLORS, markLabel, statTile, settingsTile,
 } from "./common.js";
 
 export function initSingle(reference) {
@@ -108,8 +108,15 @@ export function initSingle(reference) {
             values_a: entered($("s-values-a")), values_b: entered($("s-values-b")) };
     }
 
-    function renderResult(result) {
+    function renderResult(result, request) {
         markRun($("s-results"));
+        // The answer first, the same four tiles for every analysis: the outcome, edged in
+        // the colour it has in the batch histogram, how strong, on how many, made with what.
+        const row = result.results.rows[0];
+        const cell = (name) => row[result.results.columns.indexOf(name)];
+        $("s-summary").replaceChildren(
+            statTile(["Result", cell("Result"), "", cell("Result") === "Excluded" ? "excluded" : "kept"]),
+            statTile(["p-value", cell("p")]), statTile(["Reference sample", cell("n")]), settingsTile(request));
         // Both specimens are the ones on screen, so their accessions are left out.
         // Which reference groups were used shows on hovering the sample size, and is copied.
         const columns = result.results.columns;
@@ -123,6 +130,9 @@ export function initSingle(reference) {
         lastTable = [copied.map((i) => columns[i]), ...result.results.rows.map((row) => copied.map((i) => row[i]))];
         const plot = result.plot;
         const paper = { ...PLOT_LAYOUT, showlegend: false };
+        // The gold mark is the comparison being made. Its label goes on the side
+        // away from the nearer edge of the plot.
+        const leftOf = (value, others) => value - Math.min(value, ...others) > Math.max(value, ...others) - value;
         if (result.analysis === "regression") {
             // no line or band when the reference sample is too small to fit one
             const line = (y, name, color, dash = "dash") =>
@@ -134,15 +144,17 @@ export function initSingle(reference) {
                     line(plot.band.lower, "Lower PI", "black"),
                     line(plot.band.upper, "Upper PI", "black"),
                 ] : []),
-                { x: [plot.specimen_x], y: [plot.specimen_y], name: "Specimen", type: "scatter", mode: "markers",
+                { x: [plot.specimen_x], y: [plot.specimen_y], name: "Comparison", type: "scatter", mode: "markers",
                   marker: { color: COLORS.gold, size: 10 } },
-            ], { ...paper, xaxis: { title: { text: capFirst(plot.x_label) } }, yaxis: { title: { text: capFirst(plot.y_label) } } }, PLOT_CONFIG);
+            ], { ...paper, xaxis: { title: { text: capFirst(plot.x_label) } }, yaxis: { title: { text: capFirst(plot.y_label) } },
+                annotations: [markLabel(plot.specimen_x, "Comparison", leftOf(plot.specimen_x, plot.ref_x), plot.specimen_y)] }, PLOT_CONFIG);
         } else {
             Plotly.react("s-plot", [
                 { x: plot.reference, name: "Reference", type: "histogram",
                   marker: { color: COLORS.reference, line: { color: "grey", width: 1 } } },
             ], { ...paper, shapes: [{ type: "line", x0: plot.specimen, x1: plot.specimen, y0: 0, y1: 1, yref: "paper",
-                line: { color: COLORS.gold, dash: "dash", width: 2 } }] }, PLOT_CONFIG);
+                line: { color: COLORS.gold, dash: "dash", width: 2 } }],
+                annotations: [markLabel(plot.specimen, "Comparison", leftOf(plot.specimen, plot.reference))] }, PLOT_CONFIG);
         }
     }
 
@@ -157,8 +169,8 @@ export function initSingle(reference) {
         progress.show("Running comparison...");
         progress.set(50, "Running comparison...");
         try {
-            const result = await postJSON("api/single", requestBody());
-            renderResult(result);
+            const request = requestBody();
+            renderResult(await postJSON("api/single", request), request);
         } catch (error) {
             showError(error.message);
         } finally {

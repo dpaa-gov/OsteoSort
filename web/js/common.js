@@ -304,6 +304,45 @@ export const PLOT_LAYOUT = {
     modebar: { color: "rgba(68, 68, 68, 0.35)", activecolor: "#d4a843", bgcolor: "rgba(255, 255, 255, 0)" },
 };
 export const COLORS = { reference: "#3d5a73", excluded: "#cc4444", gold: "#d4a843" };
+// What a mark is, written beside it on the side with room for it: a dashed
+// vertical line is labelled at its top, a point (given its y) next to it.
+export const markLabel = (x, text, onLeft = false, y = null) => ({
+    x, text, showarrow: false, xanchor: onLeft ? "right" : "left", xshift: onLeft ? -6 : 6,
+    font: { size: 12, color: "#2a4051" },
+    ...(y === null ? { y: 1, yref: "paper", yanchor: "top" } : { y, yanchor: "middle", xshift: onLeft ? -10 : 10 }),
+});
+
+// --- Stat tiles ---
+
+// One headline figure: the value large, an optional note beside it, its label underneath
+export function statTile([label, value, note, kind]) {
+    const element = document.createElement("div");
+    element.className = "stat-tile" + (kind ? " " + kind : "");
+    const number = document.createElement("div");
+    number.className = "stat-value";
+    // thousands separators on whole numbers; anything else exactly as given
+    number.textContent = Number.isInteger(value) ? value.toLocaleString("en-US") : String(value);
+    if (note) {
+        const small = document.createElement("span");
+        small.className = "stat-note";
+        small.textContent = note;
+        number.append(small);
+    }
+    const name = document.createElement("div");
+    name.className = "stat-label";
+    name.textContent = label;
+    element.append(number, name);
+    return element;
+}
+
+// The settings a result was made with, read from the request that made it. The
+// form can be changed afterwards; this stays with the result.
+export function settingsTile(body) {
+    const chosen = body.settings ?? {};
+    const options = [chosen.absolute && "Absolute", chosen.yeojohnson && "Yeo-Johnson", chosen.zeromean && "Zero mean"].filter(Boolean);
+    const tails = body.settings ? (chosen.tails === 1 ? "1 tail" : "2 tails") : "";
+    return statTile([options.length ? "Settings: " + options.join(", ") : "Settings", `α ${body.alpha}`, tails]);
+}
 
 // --- Plain tables ---
 

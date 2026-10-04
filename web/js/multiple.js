@@ -2,7 +2,7 @@
 
 import {
     $, getJSON, postJSON, capFirst, showError, progress, makeSelect, boneName, setChoices, valueOf, valuesOf,
-    initSettings, fillTable, markRun, PLOT_CONFIG, PLOT_LAYOUT, COLORS,
+    initSettings, fillTable, markRun, PLOT_CONFIG, PLOT_LAYOUT, COLORS, markLabel, statTile, settingsTile,
 } from "./common.js";
 import { ResultTable } from "./table.js";
 
@@ -234,15 +234,17 @@ export function initMultiple(reference) {
         }
     }
 
-    function renderResults(job, status) {
+    function renderResults(job, status, body) {
         markRun($("m-results"));
         const s = status.summary;
-        const percent = s.exclusion_percent === null ? "" : ` (${s.exclusion_percent}%)`;
-        fillTable($("m-summary"), [], [
-            ["Completed in", `${s.seconds.toFixed(2)} seconds`], ["Comparisons", s.comparisons], ["Specimens", s.specimens],
-            ["Potential matches", s.potential_matches], ["Exclusions", `${s.exclusions}${percent}`], ["Rejected", s.rejected],
-        ]);
-        $("m-summary").tHead.remove();
+        // The run's headline numbers, one tile each. Potential matches is what the
+        // run is for and carries the accent; the last tile is what the run was made with.
+        $("m-summary").replaceChildren(...[
+            ["Comparisons", s.comparisons], ["Specimens", s.specimens], ["Potential matches", s.potential_matches, "", "accent"],
+            ["Exclusions", s.exclusions, s.exclusion_percent === null ? "" : `${s.exclusion_percent}%`],
+            ["Rejected", s.rejected],
+        ].map(statTile), settingsTile(body));
+        $("m-run").textContent = `Completed in ${s.seconds.toFixed(2)} seconds`;
 
         const h = status.histogram;
         const centres = h.excluded.map((_, i) => (i + 0.5) * h.bin_width);
@@ -254,6 +256,7 @@ export function initMultiple(reference) {
             barmode: "stack",
             shapes: [{ type: "line", x0: h.alpha, x1: h.alpha, y0: 0, y1: 1, yref: "paper",
                 line: { color: COLORS.gold, dash: "dash", width: 2 } }],
+            annotations: [markLabel(h.alpha, `α = ${h.alpha}`)],
             xaxis: { title: { text: "p" }, range: [0, 1] },
             yaxis: { title: { text: "Count" } },
             legend: { orientation: "h", x: 0.5, xanchor: "center", y: 1.1, traceorder: "normal" },
@@ -276,7 +279,7 @@ export function initMultiple(reference) {
             currentJob = job;
             $("m-results").hidden = true; // they are gone from the server, whether or not this run succeeds
             const status = await waitFor(job);
-            renderResults(job, status);
+            renderResults(job, status, body);
         } catch (error) {
             showError(error.message);
         } finally {

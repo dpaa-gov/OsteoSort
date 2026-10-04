@@ -114,6 +114,23 @@ def table_rows(page, selector):
         "rows => rows.map(row => [...row.cells].map(cell => cell.textContent))")
 
 
+def tiles(page, selector):
+    """Stat tiles as {label: value}, a note beside a value in brackets."""
+    return dict(page.locator(f"{selector} .stat-tile").evaluate_all(
+        """tiles => tiles.map(tile => {
+            const note = tile.querySelector(".stat-note")?.textContent ?? "";
+            const value = tile.querySelector(".stat-value").firstChild.textContent.replaceAll(",", "");
+            return [tile.querySelector(".stat-label").textContent, note ? `${value} (${note})` : value];
+        })"""))
+
+
+def summary_numbers(page):
+    """The batch summary: each tile, and how long the run took."""
+    numbers = tiles(page, "#m-summary")
+    numbers["Completed in"] = page.locator("#m-run").inner_text().removeprefix("Completed in ")
+    return numbers
+
+
 def process(page, prefix):
     """Click Analyze and wait for the new result to be on screen."""
     runs = page.locator(f"#{prefix}-results").get_attribute("data-run") or "0"
@@ -177,6 +194,10 @@ def run(page):
     used = cell.get_attribute("data-tooltip")
     check(used == want[12] and sum(int(part.rsplit(" ", 1)[1]) for part in used.split(", ")) == int(cell.inner_text()),
           f"hovering the sample size shows the reference groups, adding up to n: {used}")
+    check(page.locator("#s-plot .annotation-text").all_text_contents() == ["Comparison"], "the dashed line on the single plot is labelled Comparison")
+    shown = tiles(page, "#s-summary")
+    check(shown == {"Result": want[11], "p-value": str(want[10]), "Reference sample": str(want[7]), "Settings": "α 0.1 (2 tails)"},
+          f"the result, its p-value, the reference sample and the settings used are shown above the plot: {shown}")
     page.screenshot(path=SCREENS / "2-single-pairmatch.png", full_page=True)
 
     # notes under the settings
@@ -221,6 +242,7 @@ def run(page):
     check(headers[-3:] == ["R²", "p", "Result"] and same(row, want[1:3] + want[4:11]) and row[0] == "Humerus",
           f"single regression shows what the API returns: R²={row[-3]} p={row[-2]}")
     check(page.locator("#s-plot .scatterlayer .trace").count() == 5, "regression plot has points, line, band and specimen")
+    check(page.locator("#s-plot .annotation-text").all_text_contents() == ["Comparison"], "the gold point on the regression plot is labelled Comparison")
     page.screenshot(path=SCREENS / "3-single-regression.png", full_page=True)
 
     # The camera asks for a size, starting from the size on screen, and saves at exactly that
@@ -312,16 +334,18 @@ def run(page):
     status, tables = api_batch({**common, "analysis": "pairmatch", "settings": SETTINGS, "element": "humerus",
                                 "measurements": measurements, "csv": classic})
     kept, excluded, rejected = tables["not_excluded"], tables["excluded"], tables["rejected"]
-    numbers = dict(table_rows(page, "#m-summary"))
+    numbers = summary_numbers(page)
     check(numbers["Comparisons"] == str(len(kept) + len(excluded)) and numbers["Potential matches"] == str(len(kept))
           and numbers["Rejected"] == str(len(rejected)) and len(kept) > 20 and len(excluded) > 20,
           f"summary shows what the API returns: {numbers}")
+    check(numbers["Settings"] == "α 0.1 (2 tails)", "the summary records the settings the run was made with")
     pane = "#m-pane-not_excluded"
     expect(page.locator(f"{pane} .table-count")).to_have_text(f"Showing 1 to 10 of {len(kept)} entries")
     first = table_rows(page, pane)[0]
     check(same(first, kept[0][:12]) and first[1:3] == ["Humerus", "Left"] and first[6].startswith("Hum_"),
           f"first result row shows what the API returns, capitalised: {first[1:3] + first[6:7]}")
     check(page.locator("#m-histogram .bars path").count() > 5, "p-value histogram is drawn")
+    check(page.locator("#m-histogram .annotation-text").all_text_contents() == ["α = 0.1"], "the dashed line is labelled with the alpha used")
     check("Reference" not in page.locator(f"{pane} thead th").all_text_contents(), "no reference column on screen")
     cell = page.locator(f"{pane} tbody tr").first.locator("td[data-tooltip]")
     used = cell.get_attribute("data-tooltip")
@@ -376,7 +400,7 @@ def run(page):
             "measurements_a": chosen(page, "m-measurements-a"), "measurements_b": chosen(page, "m-measurements-b"), "csv": classic}
     process(page, "m")
     status, _ = api_batch(body)
-    numbers = dict(table_rows(page, "#m-summary"))
+    numbers = summary_numbers(page)
     check(numbers["Comparisons"] == str(status["summary"]["comparisons"]) == "400" and sides == ["Left", "Right"],
           f"multiple regression: {numbers['Comparisons']} comparisons, sides offered {sides}")
     second_run = last_job()
@@ -420,7 +444,7 @@ def run(page):
     choose(page, "m-analysis", "Pair-match")
     choose(page, "m-element", "Calcaneus")
     process(page, "m")
-    numbers = dict(table_rows(page, "#m-summary"))
+    numbers = summary_numbers(page)
     check(numbers["Comparisons"] == "400" and numbers["Specimens"] == "40", f"example calcaneus pair-match: {numbers}")
     page.screenshot(path=SCREENS / "8-example-file.png", full_page=True)
 
@@ -432,7 +456,7 @@ def run(page):
     process(page, "m")
     status, _ = api_batch({**common, "analysis": "articulation", "settings": SETTINGS, "element_a": "humerus", "element_b": "ulna",
                            "side": "Left", "measurements_a": ["hum_06"], "measurements_b": ["uln_11"], "csv": example})
-    numbers = dict(table_rows(page, "#m-summary"))
+    numbers = summary_numbers(page)
     check(numbers["Comparisons"] == str(status["summary"]["comparisons"]) and int(numbers["Comparisons"]) > 100,
           f"multiple articulation: {numbers['Comparisons']} comparisons")
     page.get_by_role("tab", name="Not excluded", exact=True).click()
