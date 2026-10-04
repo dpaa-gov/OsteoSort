@@ -225,7 +225,6 @@ function multiple_handler(state::AppState, req::HTTP.Request)
     fields = multiple_fields(body, analysis)
     job = start_job!(state.jobs) do job
         started = time()
-        @atomic job.stage = "reading"
         upload = try
             read_upload(csv)
         catch e

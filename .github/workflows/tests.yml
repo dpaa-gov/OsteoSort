@@ -1,9 +1,9 @@
 name: Tests
 
 # Runs on every push and pull request. OSJ's tests need no database. The
-# server's tests are run too: without ARDS they cover its configuration and,
-# by loading the package, its precompile workload, which exercises every
-# endpoint on made-up data. The tests that need ARDS, and the browser test,
+# server's tests are run too: without ARDS they cover its configuration, that
+# memory is given back when results are released and, by loading the package,
+# its precompile workload, which exercises every endpoint on made-up data. The tests that need ARDS, and the browser test,
 # are run locally (see the README).
 
 on:
@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
-          version: '1.11'
+          version: '1.13'
       - uses: julia-actions/cache@v2
 
       - name: OSJ

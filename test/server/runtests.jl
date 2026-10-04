@@ -16,6 +16,8 @@ const HAVE_DB = !isempty(get(ENV, "DB_NAME", ""))
     @test config.port == 3838
 end
 
+include("memory.jl")
+
 if HAVE_DB
     config = OSS.Config()
     snapshot = OSS.load_reference(config)

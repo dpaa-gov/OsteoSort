@@ -4,7 +4,7 @@
 #
 #   docker build -f build/Dockerfile --output type=local,dest=dist .
 
-ARG JULIA_VERSION=1.11.9
+ARG JULIA_VERSION=1.13.1
 FROM julia:${JULIA_VERSION}-bookworm AS build
 
 ENV JULIA_DEPOT_PATH=/opt/julia-depot: \
@@ -26,13 +26,20 @@ RUN julia --project=server -e 'using Pkg; Pkg.instantiate()' && \
     julia -e 'using Pkg; Pkg.add(name = "PackageCompiler", version = "2")'
 
 # Compiled for generic x86-64, since it runs on other hardware than it is
-# built on. `incremental` is required on Julia 1.11: a from-scratch system
-# image fails with "cannot register new atexit hook".
+# built on. `incremental` adds the app to the system image Julia ships with
+# instead of compiling Julia's own code again first: the bundle comes out the
+# same size and the build takes a third of the time.
 RUN julia -e 'using PackageCompiler; \
     create_app("server", "/out/osteosort"; \
         executables = ["osteosort" => "julia_main"], \
         cpu_target = PackageCompiler.default_app_cpu_target(), \
         incremental = true, include_lazy_artifacts = true, force = true)'
+
+# The packages bring whole installations along and only their shared
+# libraries are loaded: LibPQ's holds a complete PostgreSQL (the server, psql,
+# pg_dump), about 95 MB of the 110 MB this removes.
+RUN cd /out/osteosort/share/julia/artifacts && \
+    rm -rf */bin */sbin */include */lib/*.a */lib/pkgconfig */lib/postgresql */share/postgresql
 
 FROM scratch
 COPY --from=build /out/osteosort /osteosort

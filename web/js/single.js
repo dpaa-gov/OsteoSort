@@ -158,7 +158,6 @@ export function initSingle(reference) {
         progress.set(50, "Running comparison...");
         try {
             const result = await postJSON("api/single", requestBody());
-            progress.set(100, "Completed!");
             renderResult(result);
         } catch (error) {
             showError(error.message);

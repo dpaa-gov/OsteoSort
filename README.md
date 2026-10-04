@@ -43,7 +43,7 @@ The server reads the reference groups from ARDS when the page is opened, so a co
 
 ## Local development
 
-You need Docker, Julia 1.11 and a copy of ARDS.
+You need Docker, Julia 1.13 and a copy of ARDS.
 
 **1. Start ARDS.** Build and load it as its own README describes, as a container named `ards-db`, then put it on a network the app can share:
 
@@ -69,7 +69,7 @@ dev/julia.sh -e 'using Pkg; Pkg.instantiate()'                       # first tim
 dev/julia.sh -e 'using OsteoSortServer; OsteoSortServer.main()'      # http://127.0.0.1:3838/
 ```
 
-`dev/julia.sh` runs Julia for the server package with the variables from `.env`. It uses the Julia 1.11 on your machine if there is one (reaching ARDS on `127.0.0.1`), and a Julia container on the `osteosort-dev` network otherwise. Changes to files in `web/` show on reload; changes to Julia code need a restart.
+`dev/julia.sh` runs Julia for the server package with the variables from `.env`. It uses the Julia 1.13 on your machine if there is one (reaching ARDS on `127.0.0.1`), and a Julia container on the `osteosort-dev` network otherwise. Changes to files in `web/` show on reload; changes to Julia code need a restart.
 
 ### Tests
 

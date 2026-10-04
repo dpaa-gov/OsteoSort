@@ -7,7 +7,7 @@ import {
 import { ResultTable } from "./table.js";
 
 const NA_STRINGS = ["", " ", "NA"];
-const STAGES = { queued: [10, "Starting..."], reading: [25, "Reading file..."], sorting: [50, "Sorting data..."], comparing: [75, "Running comparisons..."] };
+const STAGES = { queued: [10, "Starting..."], sorting: [50, "Sorting data..."], comparing: [75, "Running comparisons..."] };
 const TABLES = ["not_excluded", "excluded", "rejected"];
 const MAX_FILE_BYTES = 5 * 1024 ** 2; // the server refuses a larger one
 
@@ -276,7 +276,6 @@ export function initMultiple(reference) {
             currentJob = job;
             $("m-results").hidden = true; // they are gone from the server, whether or not this run succeeds
             const status = await waitFor(job);
-            progress.set(100, "Completed!");
             renderResults(job, status);
         } catch (error) {
             showError(error.message);
