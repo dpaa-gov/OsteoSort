@@ -59,7 +59,10 @@ export function makeSelect(id, onChange, describe) {
     const chip = (data, escape) =>
         `<div${data.tooltip ? ` data-tooltip="${escape(data.tooltip)}"` : ""}>${escape(data.text)}</div>`;
     const select = new TomSelect(element, {
-        render: { item: chip, option: (data, escape) => `<div>${escape(data.text)}</div>` },
+        // each tag in a tag list carries a small × that takes it out
+        plugins: element.multiple ? { remove_button: { title: "Remove" } } : {},
+        // a measurement shows its full name on hover, as a tag and in the list
+        render: { item: chip, option: chip },
         maxOptions: null,
         hidePlaceholder: true,
         hideSelected: element.multiple,

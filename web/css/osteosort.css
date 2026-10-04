@@ -430,6 +430,27 @@ textarea {
   margin: 0 !important;
 }
 
+/* A tag's ×: faint until the tag or the × itself is pointed at, so a row of
+   tags stays readable. The theme's divider line and padding are taken off. */
+.well .ts-wrapper.multi .ts-control > .item .remove {
+  border: none;
+  padding: 0 1px 0 3px;
+  margin: 0;
+  color: var(--os-muted);
+  opacity: 0.55;
+  font-weight: normal;
+  text-decoration: none;
+}
+
+.well .ts-wrapper.multi .ts-control > .item:hover .remove {
+  opacity: 1;
+}
+
+.well .ts-wrapper.multi .ts-control > .item .remove:hover {
+  background: none;
+  color: #ffffff;
+}
+
 .well .ts-wrapper.multi .ts-control > .item.active {
   background-color: var(--os-gold-tint);
   color: var(--os-gold);
@@ -583,6 +604,17 @@ textarea {
   z-index: 1000;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
   pointer-events: none;
+}
+
+/* In an open list the tooltip goes beside the name. The list scrolls, which
+   would cut off a tooltip placed above it; `fixed` with no position of its own
+   keeps it where the name is and lets it reach past the list's edge. */
+.well .ts-dropdown .option[data-tooltip]:hover::after {
+  position: fixed;
+  bottom: auto;
+  left: auto;
+  margin-left: 12px;
+  margin-top: -2px;
 }
 
 /* Main panel */

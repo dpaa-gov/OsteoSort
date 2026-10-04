@@ -312,8 +312,16 @@ def run(page):
     measurements = chosen(page, "m-measurements")
     check(measurements == list(LEFT_HUMERUS), "all available measurements selected by default")
     tag = page.locator("#m-measurements + .ts-wrapper .item").first
-    check(tag.inner_text() == "Hum_01" and "Length" in tag.get_attribute("data-tooltip") and tag.get_attribute("data-tooltip").endswith("(mm)"),
-          f"measurement tags are capitalised with a tooltip: {tag.inner_text()} = {tag.get_attribute('data-tooltip')}")
+    name = tag.inner_text().removesuffix("×").strip()
+    check(name == "Hum_01" and "Length" in tag.get_attribute("data-tooltip") and tag.get_attribute("data-tooltip").endswith("(mm)"),
+          f"measurement tags are capitalised with a tooltip: {name} = {tag.get_attribute('data-tooltip')}")
+    # a tag's × takes it out, without selecting it first
+    page.locator("#m-measurements + .ts-wrapper .item").last.locator(".remove").click()
+    check(chosen(page, "m-measurements") == measurements[:-1], f"clicking a tag's × removes that measurement: {measurements[-1]}")
+    page.evaluate("value => document.getElementById('m-measurements').tomselect.addItem(value)", measurements[-1])
+    check(chosen(page, "m-measurements") == measurements, "and it can be added back")
+    page.keyboard.press("Escape")
+    page.locator("#m-results, #m-upload-summary").first.click(force=True)
     tag.hover()
     page.screenshot(path=SCREENS / "7-measurement-tooltip.png", clip={"x": 0, "y": 330, "width": 620, "height": 240})
     # a measurement the user has removed stays removed when the reference groups change
