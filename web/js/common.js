@@ -107,7 +107,8 @@ export class Reference {
             new Map(group.elements.map((e) => [e.element, new Set(e.measurements)])),
         ]));
         this.bone = new Map(meta.measurements.map((m) => [m.code, m.bone]));
-        this.name = new Map(meta.measurements.map((m) => [m.code, m.name]));
+        // every measurement is a length in millimetres; the tooltip is where that is said
+        this.name = new Map(meta.measurements.map((m) => [m.code, m.name ? `${m.name} (mm)` : m.name]));
         this.codes = new Map();
         for (const m of meta.measurements) {
             if (!this.codes.has(m.bone)) this.codes.set(m.bone, []);

@@ -283,7 +283,7 @@ def run(page):
     measurements = chosen(page, "m-measurements")
     check(measurements == list(LEFT_HUMERUS), "all available measurements selected by default")
     tag = page.locator("#m-measurements + .ts-wrapper .item").first
-    check(tag.inner_text() == "Hum_01" and "Length" in tag.get_attribute("data-tooltip"),
+    check(tag.inner_text() == "Hum_01" and "Length" in tag.get_attribute("data-tooltip") and tag.get_attribute("data-tooltip").endswith("(mm)"),
           f"measurement tags are capitalised with a tooltip: {tag.inner_text()} = {tag.get_attribute('data-tooltip')}")
     tag.hover()
     page.screenshot(path=SCREENS / "7-measurement-tooltip.png", clip={"x": 0, "y": 330, "width": 620, "height": 240})
