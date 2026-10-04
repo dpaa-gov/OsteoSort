@@ -244,6 +244,23 @@ end
             @test failed isa TaskFailedException && occursin("boom", sprint(showerror, failed))
         end
 
+        @testset "memory is given back when results are dropped" begin
+            store = OSS.JobStore()
+            output = OSS.JobOutput("pairmatch", Dict{String, NamedTuple}(), (;), (;))
+            job = OSS.start_job!(_ -> output, store)
+            while (@atomic job.status) == "running"
+                sleep(0.01)
+            end
+            sleep(2.5)                                   # let any earlier tidy-up finish
+            cleanups = Base.gc_num().full_sweep
+            OSS.release_job!(store, "no such job")       # nothing dropped, nothing to clear out
+            @test !OSS.TIDYING[]
+            OSS.release_job!(store, job.id)              # as Clear, a new run or closing the page does
+            @test OSS.TIDYING[]
+            sleep(2.5)
+            @test Base.gc_num().full_sweep > cleanups && !OSS.TIDYING[]
+        end
+
         @testset "search sees what the table shows" begin
             @test OSS.cell_text(1.0e-4) == "0.0001" && OSS.cell_text(0.5) == "0.5" && OSS.cell_text(261) == "261"
             @test OSS.cell_text("Humerus") == "Humerus"

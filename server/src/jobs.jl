@@ -53,6 +53,22 @@ function result_rows(job::Job)
     return output === nothing ? 0 : sum(row_count, values(output.tables); init = 0)
 end
 
+# Julia only clears memory out when it needs room for something new, so on an
+# idle server the results just dropped would stay counted against the pod.
+# This gives them back a moment later; requests arriving together share one.
+const TIDYING = Threads.Atomic{Bool}(false)
+function tidy()
+    ccall(:jl_generating_output, Cint, ()) == 1 && return   # not while the package is being compiled
+    Threads.atomic_cas!(TIDYING, false, true) && return      # one is already on its way
+    Threads.@spawn try
+        sleep(1)
+        GC.gc()
+    finally
+        TIDYING[] = false
+    end
+    return
+end
+
 # Drops finished jobs not used for an hour, beyond the newest 50, or, oldest
 # first, over the row cap. The newest job is always kept.
 function prune!(store::JobStore)
@@ -66,6 +82,7 @@ function prune!(store::JobStore)
         if i <= excess || (@atomic job.used) < cutoff || over
             held -= result_rows(job)
             delete!(store.jobs, job.id)
+            tidy()
         end
     end
     return
@@ -87,7 +104,10 @@ find_job(store::JobStore, id) = lock(() -> get(store.jobs, id, nothing), store.l
 
 # Forgets a job and its results. One waiting for its turn is not computed;
 # one already computing finishes unseen.
-release_job!(store::JobStore, id) = lock(() -> (delete!(store.jobs, id); nothing), store.lock)
+function release_job!(store::JobStore, id)
+    lock(() -> pop!(store.jobs, id, nothing), store.lock) === nothing || tidy()
+    return
+end
 
 # Runs `work(job)` on a worker thread; it returns the JobOutput. Batches take
 # turns, which leaves the other worker thread free for single comparisons,
