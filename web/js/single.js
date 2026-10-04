@@ -125,12 +125,12 @@ export function initSingle(reference) {
         const paper = { ...PLOT_LAYOUT, showlegend: false };
         if (result.analysis === "regression") {
             // no line or band when the reference sample is too small to fit one
-            const line = (y, name, color) =>
-                ({ x: plot.band.x, y, name, type: "scatter", mode: "lines", line: { color, dash: "dash" } });
+            const line = (y, name, color, dash = "dash") =>
+                ({ x: plot.band.x, y, name, type: "scatter", mode: "lines", line: { color, dash } });
             Plotly.react("s-plot", [
                 { x: plot.ref_x, y: plot.ref_y, name: "Reference", type: "scatter", mode: "markers", marker: { color: "grey", size: 6 } },
                 ...(plot.band ? [
-                    line(plot.band.fit, "OLS", COLORS.gold),
+                    line(plot.band.fit, "OLS", COLORS.gold, "solid"),
                     line(plot.band.lower, "Lower PI", "black"),
                     line(plot.band.upper, "Upper PI", "black"),
                 ] : []),

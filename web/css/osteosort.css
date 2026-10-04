@@ -1,4 +1,6 @@
-/* ===== OsteoSort: dark sidebar theme on Bootstrap 5 (Flatly) ===== */
+/* ===== OsteoSort: dark sidebar theme on Bootstrap 5 (Flatly) =====
+   The navy and greys are the Atlas platform's (its midnight shell and its
+   blue-grey scale); the gold accent is OsteoSort's own. */
 
 @font-face {
   font-family: 'Inter';
@@ -24,15 +26,16 @@
 :root {
   --os-gold: #d4a843;
   --os-gold-tint: rgba(212, 168, 67, 0.15);
-  --os-navy: #1e2a3a;
-  --os-navy-dark: #15202d;
-  --os-field: #2a3a4a;
-  --os-text: #e0e6ed;
-  --os-muted: #8899aa;
+  --os-navy: #0c2030;
+  --os-navy-dark: #081726;
+  --os-field: #192e3f;
+  --os-text: #dae6ec;
+  --os-muted: #778f9e;
   --os-line: rgba(255, 255, 255, 0.08);
   --bs-body-font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --bs-body-font-size: 15px;
-  --bs-body-bg: #ecf0f1;
+  --bs-body-bg: #f4f8fa;
+  --bs-body-color: #2a4051;
 }
 
 body {
@@ -241,7 +244,7 @@ textarea {
 }
 
 .well .form-control::placeholder {
-  color: #6b7d8e;
+  color: #586f80;
 }
 
 .well .measurement {
@@ -328,7 +331,7 @@ textarea {
 }
 
 .well .ts-wrapper .ts-control > input::placeholder {
-  color: #6b7d8e;
+  color: #586f80;
 }
 
 /* A dropdown must not change height when it gains or loses focus: the form
@@ -546,7 +549,7 @@ textarea {
 /* Main panel */
 .panel {
   background-color: #ffffff;
-  border: 1px solid #ccc;
+  border: 1px solid #dae6ec;
   border-radius: 4px;
   padding: 15px;
   margin-bottom: 20px;
@@ -556,7 +559,7 @@ textarea {
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.5px;
-  color: #2c3e50;
+  color: #2a4051;
   margin-bottom: 12px;
   padding-bottom: 6px;
   border-bottom: 2px solid var(--os-gold);
@@ -575,9 +578,9 @@ textarea {
 /* Tables */
 .panel .table {
   margin-bottom: 0;
-  --bs-table-striped-bg: #f9f9f9;
+  --bs-table-striped-bg: #f7fafc;
   --bs-table-hover-bg: var(--os-gold-tint);
-  --bs-table-border-color: #f1f1f1;
+  --bs-table-border-color: #eef4f7;
 }
 
 .panel .table th {
@@ -597,13 +600,13 @@ textarea {
 
 .result-table th.sortable::after {
   content: "\2195";
-  color: #c5cbd1;
+  color: #becfd9;
   margin-left: 6px;
   font-weight: 400;
 }
 
-.result-table th.sorted-asc::after { content: "\2191"; color: #2c3e50; }
-.result-table th.sorted-desc::after { content: "\2193"; color: #2c3e50; }
+.result-table th.sorted-asc::after { content: "\2191"; color: #2a4051; }
+.result-table th.sorted-desc::after { content: "\2193"; color: #2a4051; }
 
 .table-toolbar {
   display: flex;
@@ -638,7 +641,7 @@ textarea {
 
 .table-footer .pagination {
   margin: 0;
-  --bs-pagination-color: #2c3e50;
+  --bs-pagination-color: #2a4051;
   --bs-pagination-bg: transparent;
   --bs-pagination-border-color: transparent;
   --bs-pagination-hover-color: var(--os-navy);
@@ -649,7 +652,7 @@ textarea {
   --bs-pagination-active-border-color: var(--os-gold);
   --bs-pagination-disabled-bg: transparent;
   --bs-pagination-disabled-border-color: transparent;
-  --bs-pagination-disabled-color: #95a5a6;
+  --bs-pagination-disabled-color: #778f9e;
   --bs-pagination-focus-box-shadow: none;
 }
 
@@ -659,7 +662,7 @@ textarea {
 .panel td[data-tooltip] {
   position: relative;
   cursor: help;
-  text-decoration: underline dotted #b8c0c8;
+  text-decoration: underline dotted #becfd9;
   text-underline-offset: 3px;
 }
 
