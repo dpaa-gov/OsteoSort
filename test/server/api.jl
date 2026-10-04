@@ -82,6 +82,9 @@ end
                 refused = post("/api/single", merge(base, (left = (hum_01 = bad,),)))
                 @test refused.status == 400 && JSON3.read(refused.body).error == "Hum_01 must be a number above 0"
             end
+            # a batch with a field missing is refused when it is asked for, not after it has queued
+            incomplete = post("/api/multiple", merge(common, (analysis = "pairmatch", settings = settings, csv = "a,b,c,d\n")))
+            @test incomplete.status == 400 && JSON3.read(incomplete.body).error == "Missing field: element"
             # a run is refused when it would make more comparisons than may be held
             @test OSS.check_size(2_000_000, 2_000_000)
             too_big = try OSS.check_size(9_000_000, 2_000_000) catch e; e end
@@ -242,11 +245,11 @@ end
         end
 
         @testset "search sees what the table shows" begin
-            @test OSS.cell_text(1.0e-5) == "0.00001" && OSS.cell_text(0.5) == "0.5" && OSS.cell_text(261) == "261"
+            @test OSS.cell_text(1.0e-4) == "0.0001" && OSS.cell_text(0.5) == "0.5" && OSS.cell_text(261) == "261"
             @test OSS.cell_text("Humerus") == "Humerus"
-            table = (accession = ["a", "b"], p = [1.0e-5, 0.25])
-            @test OSS.table_page(table, Dict("search" => "0.00001")).filtered == 1
-            @test OSS.table_page(table, Dict("search" => "e-5")).filtered == 0
+            table = (accession = ["a", "b"], p = [1.0e-4, 0.25])
+            @test OSS.table_page(table, Dict("search" => "0.0001")).filtered == 1
+            @test OSS.table_page(table, Dict("search" => "e-4")).filtered == 0
             # the reference breakdown is not on screen, so a search does not match it
             hidden = (accession = ["UT1", "b"], p = [0.5, 0.25], reference = ["UT white male 12", "UT white male 12"])
             @test OSS.table_page(hidden, Dict("search" => "UT")).filtered == 1

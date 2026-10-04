@@ -47,7 +47,8 @@ end
 struct PairComparisons
     a::Vector{Int}                      # row of the first bone
     b::Vector{Int}                      # row of the second bone
-    used::Vector{Vector{Int}}           # measurements both have; empty when they share none
+    used::Vector{Vector{Int}}           # measurements both have; empty when they share none. Pairs with
+                                        # the same set share one list (a key of `reference`): read, never change
     value::Vector{Float64}              # the pair's summed difference, as tested
     n::Vector{Int}                      # reference sample size
     mean::Vector{Float64}
@@ -140,7 +141,7 @@ end
 struct RegressionComparisons
     a::Vector{Int}
     b::Vector{Int}
-    useda::Vector{Vector{Int}}
+    useda::Vector{Vector{Int}}          # one list per bone, shared by its pairs: read, never change
     usedb::Vector{Vector{Int}}
     x::Vector{Float64}                  # log size of the first bone
     y::Vector{Float64}                  # log size of the second
@@ -157,12 +158,13 @@ end
 function compare_regression(a::Measurements, b::Measurements, refa::Measurements, refb::Measurements; minimum::Integer = 0)
     out = RegressionComparisons(Int[], Int[], Vector{Int}[], Vector{Int}[], Float64[], Float64[], Int[], Float64[], Float64[],
         Dict{Tuple{Vector{Int}, Vector{Int}}, ReferenceRegression}())
-    # one list of measurements per bone, shared by every pair it is in
+    # one list of measurements and one size per bone, shared by every pair it is in
     measureda, measuredb = [measured(a, o) for o in axes(a, 1)], [measured(b, j) for j in axes(b, 1)]
+    sizea, sizeb = [log_size(a, o) for o in axes(a, 1)], [log_size(b, j) for j in axes(b, 1)]
     for o in axes(a, 1), j in axes(b, 1)
         useda, usedb = measureda[o], measuredb[j]
         reference = get!(() -> reference_regression(refa, refb, useda, usedb; minimum), out.reference, (useda, usedb))
-        x, y = log_size(a, o), log_size(b, j)
+        x, y = sizea[o], sizeb[j]
         n = length(reference.x)
         predicted = reference.intercept + reference.slope * x
         t = abs(predicted - y) /

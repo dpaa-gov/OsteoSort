@@ -101,8 +101,8 @@ end
 
 csv_cell(value::AbstractString) = "\"" * replace(value, "\"" => "\"\"") * "\""
 csv_cell(value::Integer) = string(value)
-# Fixed notation; values are already rounded to at most four places
-csv_cell(value::AbstractFloat) = isfinite(value) ? rstrip(rstrip(@sprintf("%.5f", value), '0'), '.') : string(value)
+# Fixed notation. Every number in a result table is rounded to four places.
+csv_cell(value::AbstractFloat) = isfinite(value) ? rstrip(rstrip(@sprintf("%.4f", value), '0'), '.') : string(value)
 
 # A cell as the table shows it, which is what a search is matched against
 cell_text(value::AbstractFloat) = csv_cell(value)
@@ -183,16 +183,25 @@ end
 
 # --- Batch analyses ---
 
-function prepare_multiple(body, analysis, groups, upload::SortTable)
+# What a batch is to be run on. Read from the request before the run is
+# queued, so a waiting run does not hold the request, and a missing field is
+# refused straight away.
+function multiple_fields(body, analysis)
     measurements(name) = lowercase.(list_field(body, name))
+    analysis == "pairmatch" && return (element = text_field(body, :element), measurements = measurements(:measurements))
+    bones = (element_a = text_field(body, :element_a), element_b = text_field(body, :element_b),
+             measurements_a = measurements(:measurements_a), measurements_b = measurements(:measurements_b))
+    analysis == "articulation" && return merge(bones, (side = text_field(body, :side),))
+    return merge(bones, (side_a = text_field(body, :side_a), side_b = text_field(body, :side_b)))
+end
+
+function prepare_multiple(f, analysis, groups, upload::SortTable)
     if analysis == "pairmatch"
-        return prepare_pair_match(groups, upload, text_field(body, :element), measurements(:measurements))
+        return prepare_pair_match(groups, upload, f.element, f.measurements)
     elseif analysis == "articulation"
-        return prepare_articulation(groups, upload, text_field(body, :element_a), text_field(body, :element_b),
-            text_field(body, :side), measurements(:measurements_a), measurements(:measurements_b))
+        return prepare_articulation(groups, upload, f.element_a, f.element_b, f.side, f.measurements_a, f.measurements_b)
     end
-    return prepare_regression(groups, upload, text_field(body, :element_a), text_field(body, :element_b),
-        text_field(body, :side_a), text_field(body, :side_b), measurements(:measurements_a), measurements(:measurements_b))
+    return prepare_regression(groups, upload, f.element_a, f.element_b, f.side_a, f.side_b, f.measurements_a, f.measurements_b)
 end
 
 thousands(n) = replace(string(n), r"(?<=\d)(?=(\d{3})+$)" => ",")
@@ -213,6 +222,7 @@ function multiple_handler(state::AppState, req::HTTP.Request)
     settings = analysis == "regression" ? nothing : settings_field(body)
     csv = text_field(body, :csv)
     sizeof(csv) <= MAX_FILE_BYTES || throw(RequestError(413, TOO_LARGE))
+    fields = multiple_fields(body, analysis)
     job = start_job!(state.jobs) do job
         started = time()
         @atomic job.stage = "reading"
@@ -222,7 +232,7 @@ function multiple_handler(state::AppState, req::HTTP.Request)
             e isa ArgumentError ? throw(RequestError(400, e.msg)) : rethrow()
         end
         @atomic job.stage = "sorting"
-        data = prepare_multiple(body, analysis, groups, upload)
+        data = prepare_multiple(fields, analysis, groups, upload)
         data === nothing || check_size(length(data.sorta) * length(data.sortb), state.jobs.max_rows)
         @atomic job.stage = "comparing"
         result = analyse(data, analysis, alpha, settings)
