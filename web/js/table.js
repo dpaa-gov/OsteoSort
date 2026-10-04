@@ -60,7 +60,7 @@ export class ResultTable {
         this.total = page.total;
         // The reference breakdown is not a column on screen: it shows when the
         // sample size is hovered, and it is in the download.
-        const hidden = page.columns.indexOf("reference");
+        const hidden = page.columns.indexOf("Reference");
         const sample = page.columns.indexOf("n");
         this.renderHead(page.columns, hidden);
         const body = this.container.querySelector("tbody");

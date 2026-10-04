@@ -80,12 +80,14 @@ end
 # --- Tables as JSON and CSV ---
 
 # Column headings. The two specimens of a comparison are numbered:
-# "accession 1", "element 1", "side 1", then "accession 2" and so on.
+# "Accession 1", "Element 1", "Side 1", then "Accession 2" and so on. Words
+# start with a capital; the symbols n and p keep the case they are written in.
 function display_name(name::Symbol)
     text = replace(String(name), r"^x_(.*)$" => s"\1_1", r"^y_(.*)$" => s"\1_2")
     text = replace(text, r"^id(?=_)" => "accession")
     text = replace(text, r"_([12])$" => s" \1")
-    return text == "r2" ? "R²" : text
+    text in ("n", "p") && return text
+    return text == "r2" ? "R²" : text == "sd" ? "SD" : uppercasefirst(text)
 end
 
 json_cell(value::AbstractFloat) = isfinite(value) ? value : nothing

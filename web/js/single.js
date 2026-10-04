@@ -113,8 +113,8 @@ export function initSingle(reference) {
         // Both specimens are the ones on screen, so their accessions are left out.
         // Which reference groups were used shows on hovering the sample size, and is copied.
         const columns = result.results.columns;
-        const reference = columns.indexOf("reference");
-        const copied = columns.map((column, i) => (column.startsWith("accession") ? -1 : i)).filter((i) => i >= 0);
+        const reference = columns.indexOf("Reference");
+        const copied = columns.map((column, i) => (column.startsWith("Accession") ? -1 : i)).filter((i) => i >= 0);
         const shown = copied.filter((i) => i !== reference);
         const body = fillTable($("s-table"), shown.map((i) => columns[i]), result.results.rows.map((row) => shown.map((i) => row[i])));
         result.results.rows.forEach((row, r) => {

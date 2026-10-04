@@ -33,7 +33,7 @@ end
             body = JSON3.read(response.body)
             direct = OSJ.ttest(OSJ.prepare_single_pair_match(groups, "humerus", left, right), 0.1, osj_settings)
             @test collect(body.results.columns) ==
-                  ["accession 1", "element 1", "side 1", "accession 2", "element 2", "side 2", "measurements", "n", "mean", "sd", "p", "result", "reference"]
+                  ["Accession 1", "Element 1", "Side 1", "Accession 2", "Element 2", "Side 2", "Measurements", "n", "Mean", "SD", "p", "Result", "Reference"]
             row = only(body.results.rows)
             @test row[1:6] == ["X", "Humerus", "Left", "Y", "Humerus", "Right"]      # capitalised for display
             @test row[7] == "Hum_01 Hum_02 Hum_03 Hum_06"
@@ -51,8 +51,8 @@ end
             body = JSON3.read(response.body)
             direct = OSJ.regression_test(OSJ.prepare_single_regression(groups, "humerus", "femur", "Left", "Left", values_a, values_b), 0.1)
             row = only(body.results.rows)
-            @test collect(body.results.columns)[8:11] == ["n", "R²", "p", "result"]
-            @test collect(body.results.columns)[1:6] == ["accession 1", "element 1", "side 1", "accession 2", "element 2", "side 2"]
+            @test collect(body.results.columns)[8:11] == ["n", "R²", "p", "Result"]
+            @test collect(body.results.columns)[1:6] == ["Accession 1", "Element 1", "Side 1", "Accession 2", "Element 2", "Side 2"]
             @test (row[8], row[9], row[10], row[11]) ==
                   (only(direct.results.n), only(direct.results.r2), only(direct.results.p), only(direct.results.result))
             @test row[10] == round(row[10]; digits = 4)                              # four places, like every other p-value
@@ -132,7 +132,7 @@ end
             csv = String(HTTP.get(API * "/api/jobs/$job/download?table=excluded").body)
             rows = OSS.parse_csv(csv)
             @test length(rows) == page.total + 1
-            @test rows[1][13] == "reference" && occursin("white male", rows[2][13])   # the download says which groups were used
+            @test rows[1][13] == "Reference" && occursin("white male", rows[2][13])   # the download says which groups were used
             @test parse(Float64, rows[2][11]) == found.p[first_excluded] && !occursin("e-", csv)   # p-values in fixed notation
 
             # releasing a run frees its results at once

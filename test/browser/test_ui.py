@@ -165,12 +165,12 @@ def run(page):
     check(same(row, want[1:3] + want[4:12]) and row[0] == "Humerus" and row[4].startswith("Hum_01 Hum_02"),
           f"single pair-match shows what the API returns: p={row[8]} {row[9]}")
     headings = page.locator("#s-table thead th").all_text_contents()
-    check(headings[:4] == ["element 1", "side 1", "element 2", "side 2"], f"the two specimens' columns are numbered: {headings[:4]}")
+    check(headings[:4] == ["Element 1", "Side 1", "Element 2", "Side 2"], f"the two specimens' columns are numbered: {headings[:4]}")
     check(page.locator("#s-plot .bars path").count() > 3, "reference histogram is drawn")
     page.locator("#s-copy").click()
     expect(page.locator("#s-copy span")).to_have_text("Copied")
     copied = page.evaluate("navigator.clipboard.readText()").split("\n")
-    check(copied[0].split("\t")[-3:] == ["p", "result", "reference"] and copied[1].split("\t")[-2:] == [want[11], want[12]]
+    check(copied[0].split("\t")[-3:] == ["p", "Result", "Reference"] and copied[1].split("\t")[-2:] == [want[11], want[12]]
           and float(copied[1].split("\t")[-3]) == want[10],
           f"Copy puts the table on the clipboard, tab-separated, with the reference groups: {copied[1][-90:]!r}")
     cell = page.locator("#s-table tbody td[data-tooltip]")
@@ -211,7 +211,7 @@ def run(page):
                               "side_a": "Left", "side_b": "Left", "values_a": LEFT_HUMERUS, "values_b": LEFT_FEMUR})["results"]["rows"][0]
     headers = page.locator("#s-table thead th").all_text_contents()
     row = table_rows(page, "#s-table")[0]
-    check(headers[-3:] == ["R²", "p", "result"] and same(row, want[1:3] + want[4:11]) and row[0] == "Humerus",
+    check(headers[-3:] == ["R²", "p", "Result"] and same(row, want[1:3] + want[4:11]) and row[0] == "Humerus",
           f"single regression shows what the API returns: R²={row[-3]} p={row[-2]}")
     check(page.locator("#s-plot .scatterlayer .trace").count() == 5, "regression plot has points, line, band and specimen")
     page.screenshot(path=SCREENS / "3-single-regression.png", full_page=True)
@@ -315,7 +315,7 @@ def run(page):
     check(same(first, kept[0][:12]) and first[1:3] == ["Humerus", "Left"] and first[6].startswith("Hum_"),
           f"first result row shows what the API returns, capitalised: {first[1:3] + first[6:7]}")
     check(page.locator("#m-histogram .bars path").count() > 5, "p-value histogram is drawn")
-    check("reference" not in page.locator(f"{pane} thead th").all_text_contents(), "no reference column on screen")
+    check("Reference" not in page.locator(f"{pane} thead th").all_text_contents(), "no reference column on screen")
     cell = page.locator(f"{pane} tbody tr").first.locator("td[data-tooltip]")
     used = cell.get_attribute("data-tooltip")
     check(used == kept[0][12] and sum(int(part.rsplit(" ", 1)[1]) for part in used.split(", ")) == int(cell.inner_text()),
@@ -343,7 +343,7 @@ def run(page):
         page.locator("#m-pane-excluded .btn", has_text="Download").click()
     lines = pathlib.Path(download.value.path()).read_text().splitlines()
     check(download.value.suggested_filename == "excluded.csv" and len(lines) == len(excluded) + 1
-          and lines[0].endswith('"reference"'), f"download has every excluded row ({len(lines) - 1}) and the reference groups")
+          and lines[0].endswith('"Reference"'), f"download has every excluded row ({len(lines) - 1}) and the reference groups")
     page.get_by_role("tab", name="Rejected", exact=True).click()
     expect(page.locator("#m-pane-rejected .table-count")).to_have_text(f"Showing 1 to 10 of {len(rejected)} entries")
     first_run = last_job()
@@ -393,7 +393,7 @@ def run(page):
     page.fill("#m-pane-rejected input[type=search]", "H4")
     expect(page.locator("#m-pane-rejected .table-count")).to_contain_text("Showing 1 to 1 of 1 entries")
     row = table_rows(page, "#m-pane-rejected")[0]
-    check(page.locator("#m-pane-rejected thead th").all_text_contents()[-1] == "reason"
+    check(page.locator("#m-pane-rejected thead th").all_text_contents()[-1] == "Reason"
           and row == ["H4", "Humerus", "Left", "", "", "", "None of the selected measurements"],
           f"a specimen with no measurements is listed under Rejected with the reason: {row[-1]}")
     page.fill("#m-pane-rejected input[type=search]", "No measurements in common")
