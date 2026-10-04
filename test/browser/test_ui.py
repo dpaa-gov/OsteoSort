@@ -216,6 +216,36 @@ def run(page):
     check(page.locator("#s-plot .scatterlayer .trace").count() == 5, "regression plot has points, line, band and specimen")
     page.screenshot(path=SCREENS / "3-single-regression.png", full_page=True)
 
+    # The camera asks for a size, starting from the size on screen, and saves at exactly that
+    shown = page.locator("#s-plot").bounding_box()
+    page.locator("#s-plot").hover()
+    check(page.locator("#s-plot .modebar-btn").count() == 1, "the plot's toolbar has the save button only")
+    ranges = "() => { const l = document.getElementById('s-plot')._fullLayout; return [...l.xaxis.range, ...l.yaxis.range]; }"
+    before = page.evaluate(ranges)
+    box = page.locator("#s-plot").bounding_box()  # where it is now that hovering has scrolled it into view
+    for (x0, y0, x1, y1) in ((0.4, 0.4, 0.7, 0.7), (0.4, 0.93, 0.7, 0.93)):  # across the plot, then along the x axis
+        page.mouse.move(box["x"] + x0 * box["width"], box["y"] + y0 * box["height"])
+        page.mouse.down()
+        page.mouse.move(box["x"] + x1 * box["width"], box["y"] + y1 * box["height"], steps=20)
+        page.mouse.up()
+        page.wait_for_timeout(300)
+    check(page.evaluate(ranges) == before, "dragging on the plot does not zoom or move it")
+    page.locator("#s-plot").hover()
+    page.locator('#s-plot .modebar-btn[data-title="Save plot as an image"]').click()
+    expect(page.locator("#image-modal")).to_be_visible()
+    check(page.input_value("#image-width") == str(round(shown["width"])) and page.input_value("#image-height") == str(round(shown["height"])),
+          "the save dialog starts at the plot's size on screen")
+    page.screenshot(path=SCREENS / "10-save-plot.png", full_page=True)
+    page.fill("#image-width", "900")
+    page.fill("#image-height", "500")
+    with page.expect_download() as download:
+        page.locator("#image-form button[type=submit]").click()
+    image = pathlib.Path(download.value.path()).read_bytes()
+    size = (int.from_bytes(image[16:20], "big"), int.from_bytes(image[20:24], "big"))
+    check(download.value.suggested_filename == "osteosort-comparison.png" and image[1:4] == b"PNG" and size == (900, 500),
+          f"the plot is saved as a PNG at the size asked for: {size}")
+    expect(page.locator("#image-modal")).to_be_hidden()
+
     # --- Single: articulation ---
     choose(page, "s-analysis", "Articulation")
     choose(page, "s-pair", "Humerus-Ulna")

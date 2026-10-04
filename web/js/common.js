@@ -257,10 +257,41 @@ export function markRun(panel) {
 
 // --- Plots ---
 
-export const PLOT_CONFIG = { displaylogo: false, responsive: true };
+// The toolbar's camera asks what size to save at. Plotly's own saves at the
+// size on screen, which is rarely the size a figure is wanted at. The dialog
+// starts at the size on screen and then keeps what was last asked for.
+let imagePlot = null;
+let imageSizeChosen = false;
+function askImageSize(plot) {
+    imagePlot = plot;
+    if (!imageSizeChosen) {
+        $("image-width").value = plot.offsetWidth;
+        $("image-height").value = plot.offsetHeight;
+    }
+    bootstrap.Modal.getOrCreateInstance($("image-modal")).show();
+}
+$("image-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    imageSizeChosen = true;
+    Plotly.downloadImage(imagePlot, {
+        format: $("image-format").value, width: Number($("image-width").value), height: Number($("image-height").value),
+        filename: imagePlot.dataset.filename,
+    });
+    bootstrap.Modal.getOrCreateInstance($("image-modal")).hide();
+});
+
+export const PLOT_CONFIG = {
+    displaylogo: false,
+    responsive: true,
+    // the only button on the toolbar
+    modeBarButtons: [[{ name: "saveImage", title: "Save plot as an image", icon: Plotly.Icons.camera, click: askImageSize }]],
+};
 // Shared by every plot. Toolbar colours are set explicitly so they do not
-// depend on the theme's link colour.
+// depend on the theme's link colour. Plots stay as drawn: there is no button
+// to undo a zoom, so dragging on the plot or along an axis does nothing.
 export const PLOT_LAYOUT = {
+    dragmode: false,
+    template: { layout: { xaxis: { fixedrange: true }, yaxis: { fixedrange: true } } },
     plot_bgcolor: "#ffffff",
     paper_bgcolor: "#ffffff",
     modebar: { color: "rgba(68, 68, 68, 0.35)", activecolor: "#d4a843", bgcolor: "rgba(255, 255, 255, 0)" },

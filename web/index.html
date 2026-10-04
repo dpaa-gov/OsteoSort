@@ -115,7 +115,7 @@
                         <div id="s-results" hidden>
                             <div class="panel">
                                 <div class="main-section-label">Plot</div>
-                                <div id="s-plot" class="plot-single"></div>
+                                <div id="s-plot" class="plot-single" data-filename="osteosort-comparison"></div>
                             </div>
                             <div class="panel">
                                 <div class="main-section-label">Results</div>
@@ -207,7 +207,7 @@
                                 <div class="main-section-label">Summary</div>
                                 <div class="row">
                                     <div class="col-md-4"><table class="table table-striped table-bordered" id="m-summary"></table></div>
-                                    <div class="col-md-8"><div id="m-histogram" class="plot-histogram"></div></div>
+                                    <div class="col-md-8"><div id="m-histogram" class="plot-histogram" data-filename="osteosort-p-values"></div></div>
                                 </div>
                             </div>
                             <div class="panel">
@@ -247,6 +247,35 @@
                 <p id="error-text"></p>
                 <button type="button" class="btn btn-gold" data-bs-dismiss="modal">Dismiss</button>
             </div>
+        </div></div>
+    </div>
+
+    <div class="modal fade" id="image-modal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content">
+            <form id="image-form" autocomplete="off">
+                <div class="modal-header"><h4 class="modal-title">Save plot</h4></div>
+                <div class="modal-body">
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label" for="image-width">Width (px)</label>
+                            <input class="form-control" type="number" id="image-width" min="100" max="8000" step="1" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label" for="image-height">Height (px)</label>
+                            <input class="form-control" type="number" id="image-height" min="100" max="8000" step="1" required>
+                        </div>
+                    </div>
+                    <label class="form-label mt-2" for="image-format">Format</label>
+                    <select class="form-select" id="image-format">
+                        <option value="png">PNG</option>
+                        <option value="svg">SVG</option>
+                    </select>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-gold">Save</button>
+                </div>
+            </form>
         </div></div>
     </div>
 
