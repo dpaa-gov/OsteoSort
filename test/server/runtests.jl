@@ -82,6 +82,28 @@ if HAVE_DB
             close(server)
         end
     end
+
+    # Results nobody has used for an hour go on their own: the running server
+    # looks for them on a timer (every 5 minutes; every second here).
+    @testset "unused results expire by themselves" begin
+        server, state = OSS.serve(config; host = "127.0.0.1", port = 8769, sweep = 1)
+        try
+            output = OSS.JobOutput("pairmatch", Dict{String, NamedTuple}(), (;), (;))
+            job = OSS.start_job!(_ -> output, state.jobs)
+            while (@atomic job.status) == "running"
+                sleep(0.01)
+            end
+            sleep(2.5)
+            @test OSS.find_job(state.jobs, job.id) !== nothing        # in use within the hour: kept
+            @atomic job.used = OSS.now(OSS.UTC) - OSS.Hour(2)
+            cleanups = Base.gc_num().full_sweep
+            sleep(4.0)
+            @test OSS.find_job(state.jobs, job.id) === nothing        # dropped by the timer, no other run needed
+            @test Base.gc_num().full_sweep > cleanups                 # and its memory cleared out
+        finally
+            close(server)
+        end
+    end
 else
     @warn "DB_NAME is not set; skipping tests that need ARDS"
 end

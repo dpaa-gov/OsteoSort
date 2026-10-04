@@ -130,13 +130,13 @@ end
 
 # Starts listening straight away; the first reference load runs in the
 # background so the health check answers while the database is slow or down.
-function serve(config::Config; host = "0.0.0.0", port = config.port)
+function serve(config::Config; host = "0.0.0.0", port = config.port, sweep = SWEEP_SECONDS)
     state = AppState(config)
     errormonitor(Threads.@spawn ensure_fresh!(state))
     server = HTTP.serve!(handler(state), host, port)
     # results nobody has used for an hour are dropped even when no other run comes along
     errormonitor(Threads.@spawn while isopen(server)
-        sleep(SWEEP_SECONDS)
+        sleep(sweep)
         sweep!(state.jobs)
     end)
     @info "OsteoSort listening" host port version = config.version

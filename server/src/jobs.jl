@@ -63,6 +63,9 @@ function tidy()
     Threads.@spawn try
         sleep(1)
         GC.gc()
+        # Julia has now let go of the memory, but the C library keeps what it
+        # was handed for reuse; this passes it back to the system
+        Sys.islinux() && ccall(:malloc_trim, Cint, (Cint,), 0)
     finally
         TIDYING[] = false
     end
@@ -127,6 +130,7 @@ function start_job!(work, store::JobStore)
             @atomic job.used = now(UTC)
             @atomic job.status = "done"
             lock(() -> prune!(store), store.lock)
+            tidy() # what the run used along the way, beyond the results it leaves
         catch e
             if e isa RequestError
                 @atomic job.error = e.message

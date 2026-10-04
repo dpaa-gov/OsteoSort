@@ -413,6 +413,25 @@ def run(page):
           and len(header) == 3 + len(meta["measurements"]), "the template downloads with the current measurement columns")
     check(page.locator(".files-menu a").all_text_contents() == ["Template", "Example"], "the Files menu offers the template and the example")
 
+    # a slow load of the reference data says so, then gets out of the way; a quick one shows nothing
+    slow = page.context.new_page()
+    held_back = []
+    slow.route("**/api/meta", lambda route: held_back.append(route))   # the answer waits until it is let through
+    slow.goto(URL, wait_until="commit")
+    expect(slow.locator("#progress-modal")).to_be_visible()
+    check(slow.locator("#progress-text").inner_text() == "Loading reference data..."
+          and slow.locator("#progress-modal .modal-title").inner_text() == "Loading...", "a slow load shows the loading dialog")
+    held_back[0].continue_()
+    expect(slow.locator("#progress-modal")).to_be_hidden()
+    expect(slow.locator("#s-reference + .ts-wrapper .item").first).to_be_visible()
+    check(slow.locator("#progress-modal .modal-title").inner_text() == "Analyzing...", "the dialog goes once the page is ready")
+    slow.close()
+    quick = page.context.new_page()
+    quick.goto(URL)
+    expect(quick.locator("#s-reference + .ts-wrapper .item").first).to_be_visible()
+    check(not quick.locator("#progress-modal").is_visible(), "a quick load shows no dialog")
+    quick.close()
+
     # leaving or closing the page frees its results too
     open_run = last_job()
     check(held(open_run), "results are held while the page is open")
