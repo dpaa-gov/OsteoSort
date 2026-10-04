@@ -182,24 +182,31 @@ def run(page):
     # notes under the settings
     note = lambda name: page.locator(f"#s-notes [data-note='{name}']")
     check(page.locator("#s-notes .settings-note").count() == 0, "no setting notes by default")
+    # the settings are folded away, with what is set beside the heading
+    check(not page.locator("#s-absolute").is_visible() and page.locator("#s-settings-summary").inner_text() == "2 tails · α 0.1",
+          f"settings start folded and say what is set: {page.locator('#s-settings-summary').inner_text()}")
+    page.locator("#s-form .settings-toggle").click()
+    expect(page.locator("#s-settings")).to_have_class("collapse show")  # fully open, not still unfolding
+    check(not page.locator("#s-settings-summary").is_visible(), "opened, the heading no longer repeats them")
     page.check("#s-absolute")
     check(note("absolute").is_visible() and note("tails").is_visible(), "absolute explained, with the two-tails warning")
-    page.check("#s-tails-1")
+    page.locator('label[for="s-tails-1"]').click()
     check(note("absolute").is_visible() and note("tails").count() == 0, "two-tails warning gone with one tail")
     page.check("#s-yeojohnson")
     page.check("#s-zeromean")
     check(note("yeojohnson").is_visible() and note("zeromean").is_visible() and note("zeromean-absolute").is_visible(),
           "Yeo-Johnson and Zero mean explained, with the absolute + zero mean warning")
-    box = page.locator("#s-form .ttest-settings").bounding_box()
+    box = page.locator("#s-settings").bounding_box()
     page.screenshot(path=SCREENS / "2b-setting-notes.png", full_page=True,
                     clip={"x": 0, "y": box["y"] - 30, "width": 400, "height": box["height"] + 40})
     for checkbox in ("#s-absolute", "#s-yeojohnson", "#s-zeromean"):
         page.uncheck(checkbox)
-    page.check("#s-tails-2")
+    page.locator('label[for="s-tails-2"]').click()
 
     # --- Single: regression ---
     choose(page, "s-analysis", "Regression")
-    check(page.locator("#s-form .ttest-settings").is_hidden(), "t-test settings hidden for regression")
+    check(page.locator("#s-form .ttest-settings").is_hidden() and page.locator("#s-form .tails-group").is_hidden()
+          and page.locator("#s-form .alpha-group").is_visible(), "regression shows alpha alone: no tails, no t-test switches")
     choose(page, "s-element-a", "Humerus")
     check("humerus" not in choices(page, "s-element-b"), "dependent bone excludes the independent one")
     choose(page, "s-element-b", "Femur")

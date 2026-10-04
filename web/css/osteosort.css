@@ -188,6 +188,58 @@ textarea {
   border-bottom: 1px solid var(--os-line);
 }
 
+/* The Settings heading opens and closes its section. While closed it says
+   what is set, so nothing that changes a result is out of sight. */
+.settings-toggle {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--os-line);
+  padding-left: 0;
+  padding-right: 0;
+  text-align: left;
+}
+
+.settings-toggle::after {
+  content: "";
+  margin-left: auto;
+  align-self: center;
+  border: 4px solid transparent;
+  border-top-color: var(--os-muted);
+  border-bottom-width: 0;
+  transition: transform 0.15s;
+}
+
+/* closed, the rule above Analyze is the only line needed */
+.settings-toggle.collapsed {
+  border-bottom-color: transparent;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.settings-toggle.collapsed::after {
+  transform: rotate(-90deg);
+}
+
+.settings-toggle:hover,
+.settings-toggle:focus-visible {
+  color: var(--os-text);
+}
+
+.settings-summary {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: normal;
+  color: var(--os-text);
+}
+
+.settings-toggle:not(.collapsed) .settings-summary {
+  display: none;
+}
+
 .well > .sidebar-section-label:first-child {
   margin-top: 0;
 }
@@ -425,66 +477,53 @@ textarea {
   box-shadow: 0 0 0 2px rgba(212, 168, 67, 0.3);
 }
 
-.well .tails-label {
-  display: block;
+/* The on/off settings are switches: a dark pill with a grey dot when off,
+   gold with a white dot when on. */
+.well .form-switch .form-check-input:not(:checked) {
+  background-color: var(--os-field);
+  border-color: var(--os-muted);
+  --bs-form-switch-bg: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23778f9e'/%3e%3c/svg%3e");
 }
 
-.settings-notes {
+/* Tails and Alpha: one control in a few parts, the chosen part gold */
+.tails-group {
+  margin-top: 4px;
+}
+
+.alpha-group {
   margin-top: 8px;
 }
 
-.settings-note {
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--os-muted);
-  border-left: 2px solid var(--os-line);
-  padding: 2px 0 2px 8px;
-  margin-top: 6px;
+.well .ttest-settings {
+  margin-top: 12px;
 }
 
-.settings-note.has-warning {
-  border-left-color: var(--os-gold);
+.segmented .btn {
+  background-color: var(--os-field);
+  border: 1px solid var(--os-line);
+  color: var(--os-text);
+  font-size: 13px;
+  padding: 5px 8px;
+}
+
+.segmented .btn:hover {
+  border-color: var(--os-muted);
+  color: #ffffff;
+}
+
+.segmented .btn-check:checked + .btn {
+  background-color: var(--os-gold);
+  border-color: var(--os-gold);
+  color: var(--os-navy);
+  font-weight: 500;
+}
+
+.segmented .btn-check:focus-visible + .btn {
+  box-shadow: 0 0 0 2px rgba(212, 168, 67, 0.3);
 }
 
 .settings-note .warning {
   color: #f5e6c0;
-}
-
-.alpha-label {
-  display: block;
-}
-
-.alpha-value {
-  background: var(--os-gold);
-  color: var(--os-navy);
-  font-size: 12px;
-  border-radius: 3px;
-  padding: 1px 5px;
-  margin-left: 4px;
-}
-
-.well .form-range::-webkit-slider-thumb {
-  background-color: var(--os-gold);
-}
-
-.well .form-range::-moz-range-thumb {
-  background-color: var(--os-gold);
-}
-
-.well .form-range::-webkit-slider-runnable-track {
-  background-color: var(--os-field);
-}
-
-.well .form-range::-moz-range-track {
-  background-color: var(--os-field);
-}
-
-.range-ends {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10px;
-  color: var(--os-muted);
-  margin-top: -4px;
 }
 
 .well hr {

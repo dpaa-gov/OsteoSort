@@ -93,21 +93,27 @@
                                 </div>
                             </div>
 
-                            <div class="sidebar-section-label">Settings</div>
+                            <!-- folded away until asked for; what is set shows beside the heading -->
+                            <button class="sidebar-section-label settings-toggle collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#s-settings" aria-expanded="false" aria-controls="s-settings">
+                                <span>Settings</span><span class="settings-summary" id="s-settings-summary"></span>
+                            </button>
+                            <div class="collapse" id="s-settings">
+                            <div class="btn-group segmented tails-group w-100" role="group" aria-label="Tails">
+                                <input type="radio" class="btn-check" name="s-tails" id="s-tails-1" value="1"><label class="btn" for="s-tails-1">One-tailed</label>
+                                <input type="radio" class="btn-check" name="s-tails" id="s-tails-2" value="2" checked><label class="btn" for="s-tails-2">Two-tailed</label>
+                            </div>
+                            <div class="btn-group segmented alpha-group w-100" role="group" aria-label="Alpha">
+                                <input type="radio" class="btn-check" name="s-alpha" id="s-alpha-001" value="0.01"><label class="btn" for="s-alpha-001">&alpha; 0.01</label>
+                                <input type="radio" class="btn-check" name="s-alpha" id="s-alpha-005" value="0.05"><label class="btn" for="s-alpha-005">&alpha; 0.05</label>
+                                <input type="radio" class="btn-check" name="s-alpha" id="s-alpha-01" value="0.1" checked><label class="btn" for="s-alpha-01">&alpha; 0.1</label>
+                            </div>
                             <div class="ttest-settings">
-                                <div class="form-check"><input class="form-check-input" type="checkbox" id="s-absolute"><label class="form-check-label" for="s-absolute">Absolute differences</label></div>
-                                <div class="form-check"><input class="form-check-input" type="checkbox" id="s-yeojohnson"><label class="form-check-label" for="s-yeojohnson">Yeo-Johnson transformation</label></div>
-                                <div class="form-check"><input class="form-check-input" type="checkbox" id="s-zeromean"><label class="form-check-label" for="s-zeromean">Zero mean</label></div>
-                                <label class="form-label tails-label">Tails</label>
-                                <div>
-                                    <div class="form-check form-check-inline"><input class="form-check-input" type="radio" name="s-tails" id="s-tails-1" value="1"><label class="form-check-label" for="s-tails-1">1</label></div>
-                                    <div class="form-check form-check-inline"><input class="form-check-input" type="radio" name="s-tails" id="s-tails-2" value="2" checked><label class="form-check-label" for="s-tails-2">2</label></div>
-                                </div>
+                                <div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="s-absolute"><label class="form-check-label" for="s-absolute">Absolute differences</label></div>
+                                <div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="s-yeojohnson"><label class="form-check-label" for="s-yeojohnson">Yeo-Johnson transformation</label></div>
+                                <div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="s-zeromean"><label class="form-check-label" for="s-zeromean">Zero mean</label></div>
                                 <div class="settings-notes" id="s-notes"></div>
                             </div>
-                            <label class="form-label alpha-label" for="s-alpha">Alpha <output id="s-alpha-value" class="alpha-value">0.1</output></label>
-                            <input type="range" class="form-range" id="s-alpha" min="0.01" max="0.1" step="0.01" value="0.1">
-                            <div class="range-ends"><span>0.01</span><span>0.1</span></div>
+                            </div>
                             <hr>
                             <button class="btn btn-gold w-100" type="submit" id="s-process"><i class="os-icon icon-play"></i> Analyze</button>
                         </form>
@@ -180,21 +186,27 @@
                                 </div>
                             </div>
 
-                            <div class="sidebar-section-label">Settings</div>
+                            <!-- folded away until asked for; what is set shows beside the heading -->
+                            <button class="sidebar-section-label settings-toggle collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#m-settings" aria-expanded="false" aria-controls="m-settings">
+                                <span>Settings</span><span class="settings-summary" id="m-settings-summary"></span>
+                            </button>
+                            <div class="collapse" id="m-settings">
+                            <div class="btn-group segmented tails-group w-100" role="group" aria-label="Tails">
+                                <input type="radio" class="btn-check" name="m-tails" id="m-tails-1" value="1"><label class="btn" for="m-tails-1">One-tailed</label>
+                                <input type="radio" class="btn-check" name="m-tails" id="m-tails-2" value="2" checked><label class="btn" for="m-tails-2">Two-tailed</label>
+                            </div>
+                            <div class="btn-group segmented alpha-group w-100" role="group" aria-label="Alpha">
+                                <input type="radio" class="btn-check" name="m-alpha" id="m-alpha-001" value="0.01"><label class="btn" for="m-alpha-001">&alpha; 0.01</label>
+                                <input type="radio" class="btn-check" name="m-alpha" id="m-alpha-005" value="0.05"><label class="btn" for="m-alpha-005">&alpha; 0.05</label>
+                                <input type="radio" class="btn-check" name="m-alpha" id="m-alpha-01" value="0.1" checked><label class="btn" for="m-alpha-01">&alpha; 0.1</label>
+                            </div>
                             <div class="ttest-settings">
-                                <div class="form-check"><input class="form-check-input" type="checkbox" id="m-absolute"><label class="form-check-label" for="m-absolute">Absolute differences</label></div>
-                                <div class="form-check"><input class="form-check-input" type="checkbox" id="m-yeojohnson"><label class="form-check-label" for="m-yeojohnson">Yeo-Johnson transformation</label></div>
-                                <div class="form-check"><input class="form-check-input" type="checkbox" id="m-zeromean"><label class="form-check-label" for="m-zeromean">Zero mean</label></div>
-                                <label class="form-label tails-label">Tails</label>
-                                <div>
-                                    <div class="form-check form-check-inline"><input class="form-check-input" type="radio" name="m-tails" id="m-tails-1" value="1"><label class="form-check-label" for="m-tails-1">1</label></div>
-                                    <div class="form-check form-check-inline"><input class="form-check-input" type="radio" name="m-tails" id="m-tails-2" value="2" checked><label class="form-check-label" for="m-tails-2">2</label></div>
-                                </div>
+                                <div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="m-absolute"><label class="form-check-label" for="m-absolute">Absolute differences</label></div>
+                                <div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="m-yeojohnson"><label class="form-check-label" for="m-yeojohnson">Yeo-Johnson transformation</label></div>
+                                <div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="m-zeromean"><label class="form-check-label" for="m-zeromean">Zero mean</label></div>
                                 <div class="settings-notes" id="m-notes"></div>
                             </div>
-                            <label class="form-label alpha-label" for="m-alpha">Alpha <output id="m-alpha-value" class="alpha-value">0.1</output></label>
-                            <input type="range" class="form-range" id="m-alpha" min="0.01" max="0.1" step="0.01" value="0.1">
-                            <div class="range-ends"><span>0.01</span><span>0.1</span></div>
+                            </div>
                             <hr>
                             <div class="row gx-3">
                                 <div class="col-6"><button class="btn btn-gold w-100" type="submit" id="m-process"><i class="os-icon icon-play"></i> Analyze</button></div>

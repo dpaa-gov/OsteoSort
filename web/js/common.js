@@ -188,7 +188,7 @@ function settingNotes({ absolute, yeojohnson, zeromean, tails }) {
 
 export function initSettings(prefix, analysisSelect) {
     const form = $(prefix + "form");
-    const alpha = $(prefix + "alpha");
+    const alpha = () => Number(form.querySelector(`input[name="${prefix}alpha"]:checked`).value);
     const tails = () => Number(form.querySelector(`input[name="${prefix}tails"]:checked`).value);
     const settings = () => ({
         absolute: $(prefix + "absolute").checked,
@@ -199,8 +199,14 @@ export function initSettings(prefix, analysisSelect) {
     const refresh = () => {
         const analysis = valueOf(analysisSelect);
         for (const block of form.querySelectorAll("[data-analysis]")) block.hidden = block.dataset.analysis !== analysis;
-        form.querySelector(".ttest-settings").hidden = analysis === "regression";
-        $(prefix + "alpha-value").textContent = alpha.value;
+        for (const part of form.querySelectorAll(".tails-group, .ttest-settings")) part.hidden = analysis === "regression";
+        // what is set, beside the heading while the settings are folded away
+        const chosen = settings();
+        const summary = analysis === "regression" ? [] : [
+            chosen.absolute && "Absolute", chosen.yeojohnson && "Yeo-Johnson", chosen.zeromean && "Zero mean",
+            chosen.tails === 1 ? "1 tail" : "2 tails",
+        ];
+        $(prefix + "settings-summary").textContent = [...summary, `α ${alpha()}`].filter(Boolean).join(" · ");
         const notes = analysis === "regression" ? [] : settingNotes(settings());
         $(prefix + "notes").replaceChildren(...notes.map((note) => {
             const element = document.createElement("div");
@@ -223,7 +229,7 @@ export function initSettings(prefix, analysisSelect) {
     refresh();
     return {
         refresh,
-        alpha: () => Number(alpha.value),
+        alpha,
         settings,
     };
 }
