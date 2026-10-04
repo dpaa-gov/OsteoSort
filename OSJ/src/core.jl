@@ -60,18 +60,28 @@ function compare_pairs(a::Measurements, b::Measurements, refa::Measurements, ref
                        tails::Integer, absolute::Bool = false, yeojohnson::Bool = false, zeromean::Bool = false)
     out = PairComparisons(Int[], Int[], Vector{Int}[], Float64[], Int[], Float64[], Float64[], Float64[],
         Dict{Vector{Int}, ReferenceDifferences}())
+    # A run has many pairs but few distinct sets of measurements. Each set is
+    # stored once, as the key of `out.reference`, and shared by its pairs.
+    shared, none = Int[], Int[]
     for x in axes(a, 1), j in axes(b, 1)
-        used = [g for g in axes(a, 2) if !ismissing(a[x, g]) && !ismissing(b[j, g])]
+        empty!(shared)
+        for g in axes(a, 2)
+            !ismissing(a[x, g]) && !ismissing(b[j, g]) && push!(shared, g)
+        end
         push!(out.a, x)
         push!(out.b, j)
-        push!(out.used, used)
-        if isempty(used)
+        if isempty(shared)
+            push!(out.used, none)
             push!(out.value, NaN); push!(out.n, 0); push!(out.mean, NaN); push!(out.sd, NaN); push!(out.p, NaN)
             continue
         end
-        reference = get!(out.reference, used) do
-            reference_differences(refa, refb, used; absolute, yeojohnson, zeromean)
+        used = getkey(out.reference, shared, nothing)
+        if used === nothing
+            used = copy(shared)
+            out.reference[used] = reference_differences(refa, refb, used; absolute, yeojohnson, zeromean)
         end
+        push!(out.used, used)
+        reference = out.reference[used]
         value = summed_difference(a, x, b, j, used, absolute)
         yeojohnson && (value = yeo_johnson(value, reference.lambda))
         n = length(reference.values)
@@ -147,8 +157,10 @@ end
 function compare_regression(a::Measurements, b::Measurements, refa::Measurements, refb::Measurements; minimum::Integer = 0)
     out = RegressionComparisons(Int[], Int[], Vector{Int}[], Vector{Int}[], Float64[], Float64[], Int[], Float64[], Float64[],
         Dict{Tuple{Vector{Int}, Vector{Int}}, ReferenceRegression}())
+    # one list of measurements per bone, shared by every pair it is in
+    measureda, measuredb = [measured(a, o) for o in axes(a, 1)], [measured(b, j) for j in axes(b, 1)]
     for o in axes(a, 1), j in axes(b, 1)
-        useda, usedb = measured(a, o), measured(b, j)
+        useda, usedb = measureda[o], measuredb[j]
         reference = get!(() -> reference_regression(refa, refb, useda, usedb; minimum), out.reference, (useda, usedb))
         x, y = log_size(a, o), log_size(b, j)
         n = length(reference.x)

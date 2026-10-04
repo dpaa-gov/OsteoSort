@@ -33,7 +33,7 @@ end
             body = JSON3.read(response.body)
             direct = OSJ.ttest(OSJ.prepare_single_pair_match(groups, "humerus", left, right), 0.1, osj_settings)
             @test collect(body.results.columns) ==
-                  ["accession", "element", "side", "accession", "element", "side", "measurements", "n", "mean", "sd", "p", "result", "reference"]
+                  ["accession 1", "element 1", "side 1", "accession 2", "element 2", "side 2", "measurements", "n", "mean", "sd", "p", "result", "reference"]
             row = only(body.results.rows)
             @test row[1:6] == ["X", "Humerus", "Left", "Y", "Humerus", "Right"]      # capitalised for display
             @test row[7] == "Hum_01 Hum_02 Hum_03 Hum_06"
@@ -52,9 +52,10 @@ end
             direct = OSJ.regression_test(OSJ.prepare_single_regression(groups, "humerus", "femur", "Left", "Left", values_a, values_b), 0.1)
             row = only(body.results.rows)
             @test collect(body.results.columns)[8:11] == ["n", "R²", "p", "result"]
+            @test collect(body.results.columns)[1:6] == ["accession 1", "element 1", "side 1", "accession 2", "element 2", "side 2"]
             @test (row[8], row[9], row[10], row[11]) ==
                   (only(direct.results.n), only(direct.results.r2), only(direct.results.p), only(direct.results.result))
-            @test row[10] == round(row[10]; digits = 5)                              # five places, like every other p-value
+            @test row[10] == round(row[10]; digits = 4)                              # four places, like every other p-value
             @test length(body.plot.ref_x) == row[8] == length(body.plot.band.fit)
             @test all(body.plot.band.lower .< body.plot.band.fit .< body.plot.band.upper)
 

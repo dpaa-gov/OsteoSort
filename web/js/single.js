@@ -114,7 +114,7 @@ export function initSingle(reference) {
         // Which reference groups were used shows on hovering the sample size, and is copied.
         const columns = result.results.columns;
         const reference = columns.indexOf("reference");
-        const copied = columns.map((column, i) => (column === "accession" ? -1 : i)).filter((i) => i >= 0);
+        const copied = columns.map((column, i) => (column.startsWith("accession") ? -1 : i)).filter((i) => i >= 0);
         const shown = copied.filter((i) => i !== reference);
         const body = fillTable($("s-table"), shown.map((i) => columns[i]), result.results.rows.map((row) => shown.map((i) => row[i])));
         result.results.rows.forEach((row, r) => {

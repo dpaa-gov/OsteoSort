@@ -130,7 +130,7 @@
             @test status.status == "done"
             @test (status.summary.comparisons, status.summary.rejected, status.summary.specimens) == (15, 4, 8)
             page = JSON3.read(HTTP.get("$api/api/jobs/$(status.id)/rows?table=rejected").body)
-            @test collect(page.columns) == ["accession", "element", "side", "accession", "element", "side", "reason"]
+            @test collect(page.columns) == ["accession 1", "element 1", "side 1", "accession 2", "element 2", "side 2", "reason"]
             @test collect(page.rows[1]) == ["H4", "Humerus", "Left", "", "", "", OSJ.UNMEASURED]
             csv = OSS.parse_csv(String(HTTP.get("$api/api/jobs/$(status.id)/download?table=not_excluded").body))
             @test any(row -> "H12, a" in row, csv)                # the comma survives the download too

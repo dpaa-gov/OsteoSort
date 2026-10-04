@@ -79,11 +79,13 @@ end
 
 # --- Tables as JSON and CSV ---
 
-# Column headings as the app has always shown them: both specimens share
-# "accession", "element" and "side".
+# Column headings. The two specimens of a comparison are numbered:
+# "accession 1", "element 1", "side 1", then "accession 2" and so on.
 function display_name(name::Symbol)
-    text = replace(String(name), r"_[12]$" => "", r"^[xy]_" => "")
-    return text == "id" ? "accession" : text == "r2" ? "R²" : text
+    text = replace(String(name), r"^x_(.*)$" => s"\1_1", r"^y_(.*)$" => s"\1_2")
+    text = replace(text, r"^id(?=_)" => "accession")
+    text = replace(text, r"_([12])$" => s" \1")
+    return text == "r2" ? "R²" : text
 end
 
 json_cell(value::AbstractFloat) = isfinite(value) ? value : nothing
@@ -99,7 +101,7 @@ end
 
 csv_cell(value::AbstractString) = "\"" * replace(value, "\"" => "\"\"") * "\""
 csv_cell(value::Integer) = string(value)
-# Fixed notation; values are already rounded to at most five places
+# Fixed notation; values are already rounded to at most four places
 csv_cell(value::AbstractFloat) = isfinite(value) ? rstrip(rstrip(@sprintf("%.5f", value), '0'), '.') : string(value)
 
 # A cell as the table shows it, which is what a search is matched against

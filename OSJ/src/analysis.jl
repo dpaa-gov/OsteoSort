@@ -15,7 +15,7 @@ end
 
 # Decimal places of every p-value. Exclusion is decided on the rounded value,
 # so the result can always be checked against the p shown and alpha.
-const P_DIGITS = 5
+const P_DIGITS = 4
 
 classify(p, alpha) = p <= alpha ? "Excluded" : "Cannot Exclude"
 
@@ -42,6 +42,13 @@ function reference_breakdowns(data::Prepared, patterns)
     return [get!(() -> reference_breakdown(data, pattern...), seen, pattern) for pattern in patterns]
 end
 
+# The text of the measurements column. A run has few distinct sets of
+# measurements, so each label is made once and its rows share it.
+function labels(label, patterns)
+    seen = Dict{Any, String}()
+    return String[get!(() -> label(pattern), seen, pattern) for pattern in patterns]
+end
+
 # Fewest reference individuals a comparison may be tested against. Below it
 # the pair is rejected. Deliberately not a setting.
 const MINIMUM_REFERENCE = 10
@@ -66,11 +73,12 @@ function ttest(data::Prepared, alpha, settings::Settings; articulation::Bool = f
         # The two bones' measurements pair up by position, not by name: list
         # the ones compared, first bone's then second bone's.
         namesa, namesb = data.sorta.measurements, data.sortb.measurements
-        measurements = [join(vcat(namesa[used], namesb[used]), " ") for used in found.used]
+        label = used -> join(vcat(namesa[used], namesb[used]), " ")
     else
         names = data.sorta.measurements
-        measurements = [join(names[k] * " " for k in used) for used in found.used]
+        label = used -> join(names[k] * " " for k in used)
     end
+    measurements = labels(label, found.used)
     p = round.(found.p; digits = P_DIGITS)
     table = (
         id_1 = data.sorta.accession[a], element_1 = data.sorta.element[a], side_1 = data.sorta.side[a],
@@ -99,7 +107,7 @@ function regression_test(data::Prepared, alpha; minimum_reference::Integer = MIN
 
     a, b = found.a, found.b
     namesa, namesb = data.sorta.measurements, data.sortb.measurements
-    measurements = [join(vcat(namesa[found.useda[r]], namesb[found.usedb[r]]) .* " ") for r in eachindex(a)]
+    measurements = labels(((useda, usedb),) -> join(vcat(namesa[useda], namesb[usedb]) .* " "), zip(found.useda, found.usedb))
     p = round.(found.p; digits = P_DIGITS)
     table = (
         x_id = data.sorta.accession[a], x_element = data.sorta.element[a], x_side = data.sorta.side[a],

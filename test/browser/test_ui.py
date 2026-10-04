@@ -164,6 +164,8 @@ def run(page):
     # the page leaves out the two accessions and keeps the reference groups for the hover
     check(same(row, want[1:3] + want[4:12]) and row[0] == "Humerus" and row[4].startswith("Hum_01 Hum_02"),
           f"single pair-match shows what the API returns: p={row[8]} {row[9]}")
+    headings = page.locator("#s-table thead th").all_text_contents()
+    check(headings[:4] == ["element 1", "side 1", "element 2", "side 2"], f"the two specimens' columns are numbered: {headings[:4]}")
     check(page.locator("#s-plot .bars path").count() > 3, "reference histogram is drawn")
     page.locator("#s-copy").click()
     expect(page.locator("#s-copy span")).to_have_text("Copied")
