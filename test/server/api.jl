@@ -184,6 +184,15 @@ end
             oversized = post("/api/multiple", merge(common, (analysis = "pairmatch", settings = settings, element = "humerus",
                 measurements = ["hum_01"], csv = "accession,side,element,Hum_01\n" * repeat("H1,Left,Humerus,300\n", 320_000))))
             @test oversized.status == 413 && occursin("at most 5 MB", JSON3.read(oversized.body).error)
+            # the limit is on the file, not on the request carrying it: a file with every cell in
+            # quotes is under 5 MB although its request is well over
+            quoted = "accession,side,element,Hum_01,Hum_02,Hum_03,Hum_04,Hum_05\n" *
+                     repeat("\"H1\",\"Left\",\"Humerus\",\"300\",\"\",\"\",\"\",\"\"\n", 120_000)
+            request = merge(common, (analysis = "pairmatch", settings = settings, element = "humerus", measurements = ["hum_01"], csv = quoted))
+            @test sizeof(quoted) < 5 * 1024^2 && sizeof(JSON3.write(request)) > 6 * 1024^2
+            accepted = post("/api/multiple", request)
+            @test accepted.status == 202
+            wait_for(JSON3.read(accepted.body).job)
             # twenty runs may compute or wait; the next is told the server is busy, until one finishes
             store = OSS.JobStore()
             output = OSS.JobOutput("pairmatch", Dict{String, NamedTuple}(), (;), (;))
@@ -219,6 +228,16 @@ end
             @atomic viewed.used = OSS.now(OSS.UTC) - OSS.Hour(2)
             OSS.sweep!(store)
             @test OSS.find_job(store, viewed.id) === nothing
+        end
+
+        @testset "work off the request thread" begin
+            @test OSS.off_thread(() -> 41 + 1) == 42
+            # an answer meant for the user comes back as it was thrown
+            refused = try OSS.off_thread(() -> throw(OSS.RequestError(422, "no"))) catch e; e end
+            @test refused isa OSS.RequestError && refused.message == "no"
+            # anything else arrives with the worker thread's own backtrace attached
+            failed = try OSS.off_thread(() -> error("boom")) catch e; e end
+            @test failed isa TaskFailedException && occursin("boom", sprint(showerror, failed))
         end
 
         @testset "search sees what the table shows" begin

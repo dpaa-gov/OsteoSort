@@ -19,6 +19,20 @@ export class ResultTable {
             </div>
             <div class="table-responsive"><table class="table table-striped result-table"><thead><tr></tr></thead><tbody></tbody></table></div>
             <div class="table-footer"><div class="table-count"></div><ul class="pagination pagination-sm"></ul></div>`;
+        // A link alone would save the server's "expired" message as the file; ask first.
+        container.querySelector("a[download]").addEventListener("click", async (event) => {
+            event.preventDefault();
+            const link = event.currentTarget.cloneNode(); // a copy, which does not ask again
+            try {
+                await getJSON(this.base);
+            } catch (error) {
+                return showError(error.message);
+            }
+            link.hidden = true;
+            document.body.append(link);
+            link.click();
+            link.remove();
+        });
         let timer;
         container.querySelector("input").addEventListener("input", (event) => {
             clearTimeout(timer);

@@ -48,13 +48,15 @@ end
 # Requests are all handled on one thread. Anything slow runs on a worker
 # thread instead, so the server keeps answering other requests meanwhile.
 function off_thread(work)
-    result = fetch(Threads.@spawn try
-        work()
+    task = Threads.@spawn work()
+    try
+        return fetch(task)
     catch e
-        e
-    end)
-    result isa Exception && throw(result)
-    return result
+        # an answer for the user is passed on as it is; anything else is
+        # rethrown whole, so the log shows where on the worker thread it failed
+        e isa TaskFailedException && e.task.exception isa RequestError && throw(e.task.exception)
+        rethrow()
+    end
 end
 
 json_response(status, body::AbstractString) =

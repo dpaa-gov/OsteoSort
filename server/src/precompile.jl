@@ -43,7 +43,8 @@ using PrecompileTools: @setup_workload, @compile_workload
         get("/healthz")
         get("/api/meta")
         get("/api/template.csv")
-        get("/")
+        page = get("/")
+        respond(HTTP.Request("GET", "/", ["If-None-Match" => HTTP.header(page, "ETag")]))
         for flags in (settings, (absolute = false, yeojohnson = false, zeromean = true, tails = 2))
             post("/api/single", merge(common, (analysis = "pairmatch", settings = flags, element = "humerus",
                 left = (hum_01 = 50.0, hum_02 = 57.5), right = (hum_01 = 51.0, hum_02 = 56.0))))

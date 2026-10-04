@@ -316,6 +316,14 @@ def run(page):
     expect(page.locator("#m-pane-rejected .table-count")).to_have_text(f"Showing 1 to 10 of {len(rejected)} entries")
     first_run = last_job()
     check(held(first_run), "the server holds the results of the run on screen")
+    # Download says so when the results are gone, instead of saving the error as a file
+    urllib.request.urlopen(urllib.request.Request(URL + f"api/jobs/{first_run}/release", b""))
+    page.locator("#m-pane-rejected .btn", has_text="Download").click()
+    expect(page.locator("#error-modal")).to_be_visible()
+    check("expired" in page.locator("#error-text").inner_text(), "Download of results that are gone shows the error dialog")
+    page.locator("#error-modal button").click()
+    expect(page.locator("#error-modal")).to_be_hidden()
+    problems[:] = [p for p in problems if "status of 404" not in p]   # the browser logs the answer just asked for
 
     # --- Multiple: regression ---
     choose(page, "m-analysis", "Regression")

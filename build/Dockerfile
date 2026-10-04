@@ -20,6 +20,8 @@ RUN apt-get update && \
 WORKDIR /app
 COPY OSJ OSJ
 COPY server server
+# only so that compiling exercises the code that serves the page
+COPY web/index.html web/index.html
 RUN julia --project=server -e 'using Pkg; Pkg.instantiate()' && \
     julia -e 'using Pkg; Pkg.add(name = "PackageCompiler", version = "2")'
 

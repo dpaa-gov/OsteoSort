@@ -2,15 +2,17 @@
 # paged results and CSV downloads.
 
 # A case file can be at most 5 MB, about 30,000 specimens with every
-# measurement filled in; the page checks that. The request carrying it is a
-# little larger, as line ends and quotes are escaped.
-const MAX_BODY_BYTES = 6 * 1024^2
+# measurement filled in; the page checks that too. The request carrying it
+# can be up to twice the size, as line ends and quotes are escaped.
+const MAX_FILE_BYTES = 5 * 1024^2
+const MAX_BODY_BYTES = 12 * 1024^2
+const TOO_LARGE = "The file is too large: a case file can be at most 5 MB"
 const REFERENCE_CHANGED = "The reference data has changed. Reload the page and try again."
 
 bad_request(message) = throw(RequestError(400, message))
 
 function read_json(req::HTTP.Request)
-    length(req.body) <= MAX_BODY_BYTES || throw(RequestError(413, "The file is too large: a case file can be at most 5 MB"))
+    length(req.body) <= MAX_BODY_BYTES || throw(RequestError(413, TOO_LARGE))
     body = try
         JSON3.read(req.body)
     catch
@@ -208,6 +210,7 @@ function multiple_handler(state::AppState, req::HTTP.Request)
     alpha = alpha_field(body)
     settings = analysis == "regression" ? nothing : settings_field(body)
     csv = text_field(body, :csv)
+    sizeof(csv) <= MAX_FILE_BYTES || throw(RequestError(413, TOO_LARGE))
     job = start_job!(state.jobs) do job
         started = time()
         @atomic job.stage = "reading"

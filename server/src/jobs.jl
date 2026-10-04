@@ -18,7 +18,6 @@ end
 
 mutable struct Job
     const id::String
-    const created::DateTime
     @atomic status::String # running, done or error
     @atomic stage::String
     @atomic error::String
@@ -51,7 +50,7 @@ JobStore(; max_rows = MAX_RESULT_ROWS) =
 
 function result_rows(job::Job)
     output = @atomic job.output
-    return output === nothing ? 0 : sum(table -> isempty(table) ? 0 : length(first(table)), values(output.tables); init = 0)
+    return output === nothing ? 0 : sum(row_count, values(output.tables); init = 0)
 end
 
 # Drops finished jobs not used for an hour, beyond the newest 50, or, oldest
@@ -76,7 +75,7 @@ sweep!(store::JobStore) = lock(() -> prune!(store), store.lock)
 
 # The id is the only key to a job's results, so it must be unguessable.
 function create_job!(store::JobStore)
-    job = Job(bytes2hex(rand(Random.RandomDevice(), UInt8, 16)), now(UTC), "running", "queued", "", DateTime(0), now(UTC), nothing)
+    job = Job(bytes2hex(rand(Random.RandomDevice(), UInt8, 16)), "running", "queued", "", DateTime(0), now(UTC), nothing)
     lock(store.lock) do
         prune!(store)
         store.jobs[job.id] = job
