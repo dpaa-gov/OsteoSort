@@ -5,7 +5,8 @@ import { initSingle } from "./single.js";
 import { initMultiple } from "./multiple.js";
 
 // Reading the reference data from ARDS can take a few seconds. If it does, say
-// so; when it is quick, nothing is shown.
+// so; when it is quick, nothing is shown. The forms stay hidden until their
+// dropdowns are built, so they are never seen half-made.
 const title = document.querySelector("#progress-modal .modal-title");
 const waiting = setTimeout(() => {
     title.textContent = "Loading...";
@@ -18,6 +19,7 @@ try {
     const reference = new Reference(meta);
     initSingle(reference);
     initMultiple(reference);
+    $("app-content").hidden = false;
 } catch (error) {
     $("load-error").textContent = error.message;
     $("load-error").hidden = false;

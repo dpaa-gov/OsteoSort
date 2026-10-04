@@ -451,6 +451,7 @@ def run(page):
     expect(slow.locator("#progress-modal")).to_be_visible()
     check(slow.locator("#progress-text").inner_text() == "Loading reference data..."
           and slow.locator("#progress-modal .modal-title").inner_text() == "Loading...", "a slow load shows the loading dialog")
+    check(not slow.locator("#app-content").is_visible(), "the forms are hidden until the reference data has loaded")
     held_back[0].continue_()
     expect(slow.locator("#progress-modal")).to_be_hidden()
     expect(slow.locator("#s-reference + .ts-wrapper .item").first).to_be_visible()
