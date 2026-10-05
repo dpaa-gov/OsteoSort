@@ -76,6 +76,14 @@ function id_columns(header)
     return any(isnothing, named) ? [1, 2, 3] : Int.(named)
 end
 
+# The table of measurements has a cell for every row under every column of
+# the header, filled in or not, at 9 bytes each. A file's size on disk does
+# not bound that: a very wide header over many near-empty rows is small to
+# upload and gigabytes as a table, more than the pod has. So a file may have
+# at most this many cells, about 90 MB: half as many again as 30,000
+# specimens with every measurement ARDS has.
+const MAX_UPLOAD_CELLS = 10_000_000
+
 # Every other column is a measurement, matched to ARDS by lower-cased name.
 function read_upload(text::AbstractString)
     rows = parse_csv(text)
@@ -85,6 +93,11 @@ function read_upload(text::AbstractString)
     ids = id_columns(header)
     columns = setdiff(eachindex(header), ids)
     data = rows[2:end]
+    cells = length(data) * length(columns)
+    cells <= MAX_UPLOAD_CELLS || throw(ArgumentError(
+        "The file is too large a table: $(thousands(length(data))) rows by $(thousands(length(columns))) measurement columns " *
+        "is $(thousands(cells)) cells, and a case file can have at most $(thousands(MAX_UPLOAD_CELLS)). " *
+        "Remove the columns that are not measurements, or upload fewer specimens at a time."))
     cell(row, j) = j <= length(row) ? row[j] : ""
     values = Matrix{Union{Missing, Float64}}(undef, length(data), length(columns))
     for (i, row) in enumerate(data), (k, j) in enumerate(columns)

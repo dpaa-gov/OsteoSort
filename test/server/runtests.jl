@@ -28,6 +28,23 @@ end
     @test OSS.bone_order(["talus", "capitate"], bone_of, fill(missing, 7)) == ["capitate", "talus"]
 end
 
+# A file small on disk can be a table too large to hold: it is refused before
+# the table is made. 70 KB here would be 540 MB.
+@testset "an upload's table has a size limit" begin
+    wide = "accession,side,element," * join(("m$i" for i in 1:2000), ",") * "\n" * "a\n"^30_000
+    @test sizeof(wide) < 100_000
+    allocated = @allocated error = try
+        OSS.read_upload(wide)
+    catch e
+        e
+    end
+    @test error isa ArgumentError && occursin("30,000 rows by 2,000 measurement columns is 60,000,000 cells", error.msg)
+    @test allocated < 100 * 1024^2 # refused without making the table
+    # a file at the limit is read
+    full = "accession,side,element," * join(("m$i" for i in 1:1000), ",") * "\n" * "a\n"^10_000
+    @test size(OSS.read_upload(full).values) == (10_000, 1000)
+end
+
 include("memory.jl")
 
 if HAVE_DB
