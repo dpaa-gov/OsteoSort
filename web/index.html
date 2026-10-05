@@ -51,11 +51,11 @@
                             <div class="sidebar-section-label">Reference</div>
                             <select id="s-reference" multiple placeholder="Select reference group(s)..."></select>
                             <div class="sidebar-section-label">Analysis</div>
-                            <select id="s-analysis">
-                                <option value="pairmatch">Pair-match</option>
-                                <option value="articulation">Articulation</option>
-                                <option value="regression">Regression</option>
-                            </select>
+                            <div class="btn-group segmented analysis-group w-100" role="group" aria-label="Analysis" id="s-analysis">
+                                <input type="radio" class="btn-check" name="s-analysis" id="s-analysis-pairmatch" value="pairmatch" checked><label class="btn" for="s-analysis-pairmatch">Pair-match</label>
+                                <input type="radio" class="btn-check" name="s-analysis" id="s-analysis-articulation" value="articulation"><label class="btn" for="s-analysis-articulation">Articulation</label>
+                                <input type="radio" class="btn-check" name="s-analysis" id="s-analysis-regression" value="regression"><label class="btn" for="s-analysis-regression">Regression</label>
+                            </div>
 
                             <div data-analysis="pairmatch">
                                 <div class="stacked"><select id="s-element" aria-label="Element"></select></div>
@@ -67,13 +67,13 @@
                                     <div class="col-6">
                                         <h5 class="side-label">Independent</h5>
                                         <select id="s-element-a" aria-label="Independent element"></select>
-                                        <div class="stacked"><select id="s-side-a" aria-label="Independent side"><option>Left</option><option>Right</option></select></div>
+                                        <div class="stacked"><div class="btn-group segmented side-group w-100" role="group" aria-label="Independent side" id="s-side-a"><input type="radio" class="btn-check" name="s-side-a" id="s-side-a-left" value="Left" checked><label class="btn" for="s-side-a-left">Left</label><input type="radio" class="btn-check" name="s-side-a" id="s-side-a-right" value="Right"><label class="btn" for="s-side-a-right">Right</label></div></div>
                                         <div class="measure-list" id="s-values-a"></div>
                                     </div>
                                     <div class="col-6">
                                         <h5 class="side-label">Dependent</h5>
                                         <select id="s-element-b" aria-label="Dependent element"></select>
-                                        <div class="stacked"><select id="s-side-b" aria-label="Dependent side"><option>Left</option><option>Right</option></select></div>
+                                        <div class="stacked"><div class="btn-group segmented side-group w-100" role="group" aria-label="Dependent side" id="s-side-b"><input type="radio" class="btn-check" name="s-side-b" id="s-side-b-left" value="Left" checked><label class="btn" for="s-side-b-left">Left</label><input type="radio" class="btn-check" name="s-side-b" id="s-side-b-right" value="Right"><label class="btn" for="s-side-b-right">Right</label></div></div>
                                         <div class="measure-list" id="s-values-b"></div>
                                     </div>
                                 </div>
@@ -82,7 +82,7 @@
                             <div data-analysis="articulation" hidden>
                                 <div class="row gx-3 stacked">
                                     <div class="col-6"><select id="s-pair" aria-label="Elements"></select></div>
-                                    <div class="col-6"><select id="s-art-side" aria-label="Side"><option>Left</option><option>Right</option></select></div>
+                                    <div class="col-6"><div class="btn-group segmented side-group w-100" role="group" aria-label="Side" id="s-art-side"><input type="radio" class="btn-check" name="s-art-side" id="s-art-side-left" value="Left" checked><label class="btn" for="s-art-side-left">Left</label><input type="radio" class="btn-check" name="s-art-side" id="s-art-side-right" value="Right"><label class="btn" for="s-art-side-right">Right</label></div></div>
                                 </div>
                                 <div class="row gx-3">
                                     <div class="col-6"><div class="measure-list" id="s-art-a"></div></div>
@@ -112,7 +112,10 @@
                             </div>
                             </div>
                             <hr>
-                            <button class="btn btn-gold w-100" type="submit" id="s-process"><i class="os-icon icon-play"></i> Analyze</button>
+                            <div class="row gx-3">
+                                <div class="col-6"><button class="btn btn-gold w-100" type="submit" id="s-process"><i class="os-icon icon-play"></i> Analyze</button></div>
+                                <div class="col-6"><button class="btn btn-outline-gold w-100" type="button" id="s-clear"><i class="os-icon icon-eraser"></i> Clear</button></div>
+                            </div>
                         </form>
                     </div>
                     <div class="app-results">
@@ -145,11 +148,11 @@
                             <input class="form-control" type="file" id="m-file" accept=".csv,text/csv,text/plain">
                             <div class="upload-summary" id="m-upload-summary" hidden></div>
                             <div class="sidebar-section-label">Analysis</div>
-                            <select id="m-analysis">
-                                <option value="pairmatch">Pair-match</option>
-                                <option value="articulation">Articulation</option>
-                                <option value="regression">Regression</option>
-                            </select>
+                            <div class="btn-group segmented analysis-group w-100" role="group" aria-label="Analysis" id="m-analysis">
+                                <input type="radio" class="btn-check" name="m-analysis" id="m-analysis-pairmatch" value="pairmatch" checked><label class="btn" for="m-analysis-pairmatch">Pair-match</label>
+                                <input type="radio" class="btn-check" name="m-analysis" id="m-analysis-articulation" value="articulation"><label class="btn" for="m-analysis-articulation">Articulation</label>
+                                <input type="radio" class="btn-check" name="m-analysis" id="m-analysis-regression" value="regression"><label class="btn" for="m-analysis-regression">Regression</label>
+                            </div>
 
                             <div data-analysis="pairmatch">
                                 <div class="stacked"><select id="m-element" aria-label="Element"></select></div>
@@ -159,7 +162,7 @@
                             <div data-analysis="articulation" hidden>
                                 <div class="row gx-3 stacked">
                                     <div class="col-6"><select id="m-pair" aria-label="Elements"></select></div>
-                                    <div class="col-6"><select id="m-art-side" aria-label="Side"></select></div>
+                                    <div class="col-6"><div class="btn-group segmented side-group w-100" role="group" aria-label="Side" id="m-art-side"><input type="radio" class="btn-check" name="m-art-side" id="m-art-side-left" value="Left" checked><label class="btn" for="m-art-side-left">Left</label><input type="radio" class="btn-check" name="m-art-side" id="m-art-side-right" value="Right"><label class="btn" for="m-art-side-right">Right</label></div></div>
                                 </div>
                                 <div class="row gx-3 stacked">
                                     <div class="col-6"><select id="m-art-a" multiple></select></div>
@@ -172,13 +175,13 @@
                                     <div class="col-6">
                                         <h5 class="side-label">Independent</h5>
                                         <select id="m-element-a" aria-label="Independent element"></select>
-                                        <div class="stacked"><select id="m-side-a" aria-label="Independent side"></select></div>
+                                        <div class="stacked"><div class="btn-group segmented side-group w-100" role="group" aria-label="Independent side" id="m-side-a"><input type="radio" class="btn-check" name="m-side-a" id="m-side-a-left" value="Left" checked><label class="btn" for="m-side-a-left">Left</label><input type="radio" class="btn-check" name="m-side-a" id="m-side-a-right" value="Right"><label class="btn" for="m-side-a-right">Right</label></div></div>
                                         <div class="stacked"><select id="m-measurements-a" multiple></select></div>
                                     </div>
                                     <div class="col-6">
                                         <h5 class="side-label">Dependent</h5>
                                         <select id="m-element-b" aria-label="Dependent element"></select>
-                                        <div class="stacked"><select id="m-side-b" aria-label="Dependent side"></select></div>
+                                        <div class="stacked"><div class="btn-group segmented side-group w-100" role="group" aria-label="Dependent side" id="m-side-b"><input type="radio" class="btn-check" name="m-side-b" id="m-side-b-left" value="Left" checked><label class="btn" for="m-side-b-left">Left</label><input type="radio" class="btn-check" name="m-side-b" id="m-side-b-right" value="Right"><label class="btn" for="m-side-b-right">Right</label></div></div>
                                         <div class="stacked"><select id="m-measurements-b" multiple></select></div>
                                     </div>
                                 </div>
@@ -208,7 +211,7 @@
                             <hr>
                             <div class="row gx-3">
                                 <div class="col-6"><button class="btn btn-gold w-100" type="submit" id="m-process"><i class="os-icon icon-play"></i> Analyze</button></div>
-                                <div class="col-6"><button class="btn btn-gold w-100" type="button" id="m-clear"><i class="os-icon icon-eraser"></i> Clear</button></div>
+                                <div class="col-6"><button class="btn btn-outline-gold w-100" type="button" id="m-clear"><i class="os-icon icon-eraser"></i> Clear</button></div>
                             </div>
                         </form>
                     </div>
@@ -257,7 +260,6 @@
     <div class="modal fade" id="error-modal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered"><div class="modal-content error-dialog">
             <div class="modal-body">
-                <h2>ERROR!</h2>
                 <p id="error-text"></p>
                 <button type="button" class="btn btn-gold" data-bs-dismiss="modal">Dismiss</button>
             </div>

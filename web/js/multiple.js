@@ -1,7 +1,7 @@
 // Multiple tab: an uploaded case file compared against the reference groups.
 
 import {
-    $, getJSON, postJSON, capFirst, showError, progress, makeSelect, boneName, setChoices, valueOf, valuesOf,
+    $, getJSON, postJSON, capFirst, showError, progress, makeSelect, makeChoice, boneName, setChoices, valueOf, valuesOf,
     initSettings, fillTable, markRun, PLOT_CONFIG, PLOT_LAYOUT, COLORS, markLabel, statTile, settingsTile,
 } from "./common.js";
 import { ResultTable } from "./table.js";
@@ -78,15 +78,15 @@ export function initMultiple(reference) {
 
     const selects = {
         reference: makeSelect("m-reference", () => refresh()),
-        analysis: makeSelect("m-analysis", () => form.refresh()),
+        analysis: makeChoice("m-analysis", () => form.refresh()),
         element: makeSelect("m-element", () => measurementChoices(), boneName),
         measurements: makeSelect("m-measurements", null, reference.describe),
         pair: makeSelect("m-pair", () => articulationChoices(), boneName),
         artA: makeSelect("m-art-a", null, reference.describe),
         artB: makeSelect("m-art-b", null, reference.describe),
-        sideA: makeSelect("m-side-a"),
-        sideB: makeSelect("m-side-b"),
-        artSide: makeSelect("m-art-side"),
+        sideA: makeChoice("m-side-a"),
+        sideB: makeChoice("m-side-b"),
+        artSide: makeChoice("m-art-side"),
         elementA: makeSelect("m-element-a", () => { dependentChoices(); regressionChoices("a"); }, boneName),
         elementB: makeSelect("m-element-b", () => regressionChoices("b"), boneName),
         measurementsA: makeSelect("m-measurements-a", null, reference.describe),
@@ -118,13 +118,13 @@ export function initMultiple(reference) {
         const pair = currentPair();
         setChoices(selects.artA, pair ? inFileFor(pair.bonea, pair.a) : []);
         setChoices(selects.artB, pair ? inFileFor(pair.boneb, pair.b) : []);
-        setChoices(selects.artSide, pair ? sidesFor(pair.bonea, pair.boneb) : ["Left", "Right"]);
+        selects.artSide.setAvailable(pair ? sidesFor(pair.bonea, pair.boneb) : ["Left", "Right"]);
     }
 
     function regressionChoices(which) {
         const bone = valueOf(which === "a" ? selects.elementA : selects.elementB);
         setChoices(which === "a" ? selects.measurementsA : selects.measurementsB, measured(bone));
-        setChoices(which === "a" ? selects.sideA : selects.sideB, bone ? sidesFor(bone) : ["Left", "Right"]);
+        (which === "a" ? selects.sideA : selects.sideB).setAvailable(bone ? sidesFor(bone) : ["Left", "Right"]);
     }
 
     function dependentChoices() {

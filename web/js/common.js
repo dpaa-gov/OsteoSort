@@ -75,6 +75,23 @@ export function makeSelect(id, onChange, describe) {
     return select;
 }
 
+// A choice between a few fixed options, as a row of buttons: the analysis, a
+// side. Read like a dropdown (`getValue`), so the forms treat the two alike.
+// An option that is not on offer, such as a side the uploaded file has no bone
+// of, is greyed out and the choice moves to one that is.
+export function makeChoice(id, onChange) {
+    const inputs = [...$(id).querySelectorAll("input")];
+    $(id).addEventListener("change", () => onChange && onChange());
+    return {
+        getValue: () => inputs.find((input) => input.checked).value,
+        setAvailable(sides) {
+            const known = inputs.some((input) => sides.includes(input.value));
+            for (const input of inputs) input.disabled = known && !sides.includes(input.value);
+            if (inputs.find((input) => input.checked).disabled) inputs.find((input) => !input.disabled).checked = true;
+        },
+    };
+}
+
 // Replaces the choices. A dropdown keeps its value, and a tag list the user
 // has removed tags from keeps what is left, where still valid; otherwise
 // selects `fallback` (all given values for a tag list, the first for a dropdown).
@@ -290,11 +307,26 @@ $("image-form").addEventListener("submit", (event) => {
     bootstrap.Modal.getOrCreateInstance($("image-modal")).hide();
 });
 
+// The labels written on a plot ("Comparison", the alpha) can be taken off, for
+// a figure that is captioned elsewhere. The choice holds for later plots too,
+// until the button is pressed again.
+let labelsHidden = false;
+function toggleLabels(plot) {
+    labelsHidden = !labelsHidden;
+    const labels = plot.layout.annotations ?? [];
+    if (labels.length) Plotly.relayout(plot, Object.fromEntries(labels.map((_, i) => [`annotations[${i}].visible`, !labelsHidden])));
+}
+const LABEL_ICON = { width: 24, height: 24,
+    path: "M17.63 5.84C17.27 5.33 16.67 5 16 5L5 5.01C3.9 5.01 3 5.9 3 7v10c0 1.1.9 1.99 2 1.99L16 19c.67 0 1.27-.33 1.63-.84L22 12l-4.37-6.16z" };
+
 export const PLOT_CONFIG = {
     displaylogo: false,
     responsive: true,
-    // the only button on the toolbar
-    modeBarButtons: [[{ name: "saveImage", title: "Save plot as an image", icon: Plotly.Icons.camera, click: askImageSize }]],
+    // the only two buttons on the toolbar
+    modeBarButtons: [[
+        { name: "toggleLabels", title: "Hide or show labels", icon: LABEL_ICON, click: toggleLabels },
+        { name: "saveImage", title: "Save plot as an image", icon: Plotly.Icons.camera, click: askImageSize },
+    ]],
 };
 // Shared by every plot. Toolbar colours are set explicitly so they do not
 // depend on the theme's link colour. Plots stay as drawn: there is no button
@@ -311,7 +343,7 @@ export const COLORS = { reference: "#3d5a73", excluded: "#cc4444", gold: "#d4a84
 // vertical line is labelled at its top, a point (given its y) next to it.
 export const markLabel = (x, text, onLeft = false, y = null) => ({
     x, text, showarrow: false, xanchor: onLeft ? "right" : "left", xshift: onLeft ? -6 : 6,
-    font: { size: 12, color: "#2a4051" },
+    font: { size: 12, color: "#2a4051" }, visible: !labelsHidden,
     ...(y === null ? { y: 1, yref: "paper", yanchor: "top" } : { y, yanchor: "middle", xshift: onLeft ? -10 : 10 }),
 });
 
@@ -349,18 +381,26 @@ export function settingsTile(body) {
 
 // --- Plain tables ---
 
+// Columns of numbers are set against the right edge, so their digits line up
+export const NUMERIC_COLUMNS = new Set(["n", "Mean", "SD", "p", "R²"]);
+
 export function fillTable(table, columns, rows) {
     table.replaceChildren();
     const head = table.createTHead().insertRow();
     for (const column of columns) {
         const th = document.createElement("th");
         th.textContent = column;
+        if (NUMERIC_COLUMNS.has(column)) th.className = "num";
         head.append(th);
     }
     const body = table.createTBody();
     for (const row of rows) {
         const tr = body.insertRow();
-        for (const cell of row) tr.insertCell().textContent = cell ?? "";
+        row.forEach((cell, i) => {
+            const td = tr.insertCell();
+            td.textContent = cell ?? "";
+            if (NUMERIC_COLUMNS.has(columns[i])) td.className = "num";
+        });
     }
     return body;
 }

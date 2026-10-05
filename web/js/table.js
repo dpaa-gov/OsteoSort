@@ -1,24 +1,32 @@
 // A result table backed by the server: paging, search and sorting are done
 // there, so a batch of any size stays quick in the browser.
 
-import { getJSON, showError } from "./common.js";
+import { getJSON, showError, NUMERIC_COLUMNS } from "./common.js";
 
-const PAGE_SIZE = 10;
+const PAGE_SIZES = [10, 25, 50];
 
 export class ResultTable {
     constructor(container, jobId, name) {
         this.container = container;
         this.base = `api/jobs/${jobId}`;
         this.name = name;
-        this.state = { offset: 0, search: "", sort: 0, dir: "asc" };
+        this.state = { offset: 0, limit: PAGE_SIZES[0], search: "", sort: 0, dir: "asc" };
         this.total = 0;
         container.innerHTML = `
             <div class="table-toolbar">
                 <a class="btn btn-gold btn-sm" href="${this.base}/download?table=${name}" download="${name}.csv"><i class="os-icon icon-download"></i> Download</a>
-                <label>Search: <input type="search" class="form-control form-control-sm"></label>
+                <input type="search" class="form-control form-control-sm table-search" placeholder="Search" aria-label="Search">
             </div>
             <div class="table-responsive"><table class="table table-striped result-table"><thead><tr></tr></thead><tbody></tbody></table></div>
-            <div class="table-footer"><div class="table-count"></div><ul class="pagination pagination-sm"></ul></div>`;
+            <div class="table-footer">
+                <div class="table-count"></div>
+                <div class="table-paging">
+                    <select class="form-select form-select-sm page-size" aria-label="Rows per page">
+                        ${PAGE_SIZES.map((size) => `<option value="${size}">${size} per page</option>`).join("")}
+                    </select>
+                    <ul class="pagination pagination-sm"></ul>
+                </div>
+            </div>`;
         // A link alone would save the server's "expired" message as the file; ask first.
         container.querySelector("a[download]").addEventListener("click", async (event) => {
             event.preventDefault();
@@ -34,7 +42,12 @@ export class ResultTable {
             link.remove();
         });
         let timer;
-        container.querySelector("input").addEventListener("input", (event) => {
+        container.querySelector(".page-size").addEventListener("change", (event) => {
+            this.state.limit = Number(event.target.value);
+            this.state.offset = 0;
+            this.load();
+        });
+        container.querySelector(".table-search").addEventListener("input", (event) => {
             clearTimeout(timer);
             timer = setTimeout(() => {
                 this.state.search = event.target.value;
@@ -46,8 +59,8 @@ export class ResultTable {
     }
 
     async load() {
-        const { offset, search, sort, dir } = this.state;
-        const query = new URLSearchParams({ table: this.name, offset, limit: PAGE_SIZE, search, sort, dir });
+        const { offset, limit, search, sort, dir } = this.state;
+        const query = new URLSearchParams({ table: this.name, offset, limit, search, sort, dir });
         const request = (this.request = (this.request ?? 0) + 1);
         let page;
         try {
@@ -71,6 +84,7 @@ export class ResultTable {
                 if (index === hidden) return;
                 const td = tr.insertCell();
                 td.textContent = cell ?? "";
+                if (NUMERIC_COLUMNS.has(page.columns[index])) td.className = "num";
                 if (index === sample && hidden >= 0 && row[hidden]) td.dataset.tooltip = row[hidden];
             });
         }
@@ -91,7 +105,8 @@ export class ResultTable {
             const th = document.createElement("th");
             const number = index + 1;
             th.textContent = column;
-            th.className = "sortable" + (this.state.sort === number ? ` sorted-${this.state.dir}` : "");
+            th.className = "sortable" + (this.state.sort === number ? ` sorted-${this.state.dir}` : "") +
+                (NUMERIC_COLUMNS.has(column) ? " num" : "");
             th.addEventListener("click", () => {
                 const same = this.state.sort === number;
                 this.state.dir = same && this.state.dir === "asc" ? "desc" : "asc";
@@ -105,37 +120,39 @@ export class ResultTable {
 
     renderFooter(page) {
         const first = page.filtered ? this.state.offset + 1 : 0;
-        const last = Math.min(this.state.offset + PAGE_SIZE, page.filtered);
+        const size = this.state.limit;
+        const last = Math.min(this.state.offset + size, page.filtered);
         let info = `Showing ${first} to ${last} of ${page.filtered.toLocaleString()} entries`;
         if (page.filtered !== page.total) info += ` (filtered from ${page.total.toLocaleString()} total entries)`;
         this.container.querySelector(".table-count").textContent = info;
 
-        const pages = Math.max(1, Math.ceil(page.filtered / PAGE_SIZE));
-        const current = Math.floor(this.state.offset / PAGE_SIZE) + 1;
+        const pages = Math.max(1, Math.ceil(page.filtered / size));
+        const current = Math.floor(this.state.offset / size) + 1;
         const list = this.container.querySelector(".pagination");
         list.replaceChildren();
-        const add = (label, target, { active = false, disabled = false } = {}) => {
+        const add = (label, target, { active = false, disabled = false, name = "" } = {}) => {
             const item = document.createElement("li");
             item.className = "page-item" + (active ? " active" : "") + (disabled ? " disabled" : "");
             const link = document.createElement("button");
             link.type = "button";
             link.className = "page-link";
             link.textContent = label;
+            if (name) link.setAttribute("aria-label", name);
             if (!disabled && !active) {
                 link.addEventListener("click", () => {
-                    this.state.offset = (target - 1) * PAGE_SIZE;
+                    this.state.offset = (target - 1) * size;
                     this.load();
                 });
             }
             item.append(link);
             list.append(item);
         };
-        add("Previous", current - 1, { disabled: current === 1 });
+        add("\u2039", current - 1, { disabled: current === 1, name: "Previous page" });
         for (const number of pageNumbers(current, pages)) {
             if (number === null) add("…", 0, { disabled: true });
             else add(String(number), number, { active: number === current });
         }
-        add("Next", current + 1, { disabled: current === pages });
+        add("\u203a", current + 1, { disabled: current === pages, name: "Next page" });
     }
 }
 

@@ -541,6 +541,16 @@ textarea {
   font-weight: 500;
 }
 
+/* a side, beside or under a dropdown: the same height as one */
+.side-group .btn {
+  font-size: 15px;
+  padding: 6px 8px;
+}
+
+.segmented .btn-check:disabled + .btn {
+  opacity: 0.4;
+}
+
 .segmented .btn-check:focus-visible + .btn {
   box-shadow: 0 0 0 2px rgba(212, 168, 67, 0.3);
 }
@@ -555,6 +565,22 @@ textarea {
 }
 
 /* Gold buttons */
+/* The quieter of two buttons: Clear beside Analyze. An outline, so the solid
+   one reads as the thing to press. */
+.btn-outline-gold,
+.btn-outline-gold:focus {
+  background-color: transparent;
+  border: 1px solid var(--os-gold);
+  color: var(--os-gold);
+}
+
+.btn-outline-gold:hover,
+.btn-outline-gold:active {
+  background-color: var(--os-gold-tint) !important;
+  border-color: var(--os-gold) !important;
+  color: var(--os-gold) !important;
+}
+
 .btn-gold,
 .btn-gold:focus {
   background-color: var(--os-gold);
@@ -709,12 +735,24 @@ textarea {
   height: 250px;
 }
 
+/* The three analyses share the sidebar's width */
+.analysis-group .btn {
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
 /* Tables */
 .panel .table {
   margin-bottom: 0;
   --bs-table-striped-bg: #f7fafc;
   --bs-table-hover-bg: var(--os-gold-tint);
   --bs-table-border-color: #eef4f7;
+}
+
+/* numbers against the right edge of their column, each digit the same width */
+.panel .table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .panel .table th {
@@ -749,15 +787,11 @@ textarea {
   margin: 15px 0;
 }
 
-.table-toolbar label {
-  font-weight: 600;
-  margin: 0;
-}
-
-.table-toolbar input {
-  display: inline-block;
-  width: 220px;
-  margin-left: 6px;
+/* the search box says what it is with a magnifier and a word inside it */
+.table-toolbar .table-search {
+  width: 240px;
+  padding-left: 30px;
+  background: #ffffff url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23778f9e' stroke-width='1.6' stroke-linecap='round'%3e%3ccircle cx='7' cy='7' r='4.5'/%3e%3cpath d='M10.5 10.5 14 14'/%3e%3c/svg%3e") no-repeat 9px center / 14px;
 }
 
 .table-toolbar input:focus {
@@ -771,6 +805,21 @@ textarea {
   justify-content: space-between;
   align-items: center;
   margin-top: 12px;
+}
+
+.table-paging {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.table-paging .page-size {
+  width: auto;
+}
+
+.table-paging .page-size:focus {
+  border-color: var(--os-gold);
+  box-shadow: 0 0 0 2px rgba(212, 168, 67, 0.3);
 }
 
 .table-footer .pagination {
@@ -854,11 +903,12 @@ textarea {
   padding: 30px;
 }
 
-.error-dialog h2 {
-  color: #c0392b;
-  font-weight: 600;
+/* what went wrong, said plainly: a red edge marks it, the words do the rest */
+.error-dialog {
+  border-top: 3px solid #c0392b;
 }
 
 .error-dialog p {
-  margin: 16px 0 22px;
+  font-size: 16px;
+  margin: 4px 0 22px;
 }

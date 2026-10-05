@@ -105,6 +105,16 @@ def chosen(page, select_id):
     return page.evaluate("id => [].concat(document.getElementById(id).tomselect.getValue())", select_id)
 
 
+def sides_offered(page, group_id):
+    """The sides a Left/Right control lets you pick."""
+    return page.locator(f"#{group_id} input:not(:disabled)").evaluate_all("inputs => inputs.map(input => input.value)")
+
+
+def pick(page, group_id, text):
+    """Press one of a row of buttons: an analysis, a side."""
+    page.locator(f"#{group_id} label", has_text=text).click()
+
+
 def choices(page, select_id):
     return page.evaluate("id => Object.keys(document.getElementById(id).tomselect.options)", select_id)
 
@@ -235,7 +245,7 @@ def run(page):
     page.locator('label[for="s-tails-2"]').click()
 
     # --- Single: regression ---
-    choose(page, "s-analysis", "Regression")
+    pick(page, "s-analysis", "Regression")
     check(page.locator("#s-form .ttest-settings").is_hidden() and page.locator("#s-form .tails-group").is_hidden()
           and page.locator("#s-form .alpha-group").is_visible(), "regression shows alpha alone: no tails, no t-test switches")
     choose(page, "s-element-a", "Humerus")
@@ -258,7 +268,13 @@ def run(page):
     # The camera asks for a size, starting from the size on screen, and saves at exactly that
     shown = page.locator("#s-plot").bounding_box()
     page.locator("#s-plot").hover()
-    check(page.locator("#s-plot .modebar-btn").count() == 1, "the plot's toolbar has the save button only")
+    check(page.locator("#s-plot .modebar-btn").count() == 2, "the plot's toolbar has two buttons: labels and save")
+    # the labels button takes the label off the plot and puts it back
+    labels = page.locator("#s-plot .annotation-text")
+    page.locator('#s-plot .modebar-btn[data-title="Hide or show labels"]').click()
+    hidden = labels.count()
+    page.locator('#s-plot .modebar-btn[data-title="Hide or show labels"]').click()
+    check(hidden == 0 and labels.all_text_contents() == ["Comparison"], "the labels button hides the plot's label and shows it again")
     ranges = "() => { const l = document.getElementById('s-plot')._fullLayout; return [...l.xaxis.range, ...l.yaxis.range]; }"
     before = page.evaluate(ranges)
     box = page.locator("#s-plot").bounding_box()  # where it is now that hovering has scrolled it into view
@@ -286,7 +302,7 @@ def run(page):
     expect(page.locator("#image-modal")).to_be_hidden()
 
     # --- Single: articulation ---
-    choose(page, "s-analysis", "Articulation")
+    pick(page, "s-analysis", "Articulation")
     choose(page, "s-pair", "Humerus-Ulna")
     page.fill("#s-hum_06-art-a", "45.5")
     page.fill("#s-uln_11-art-b", "28.7")
@@ -302,9 +318,19 @@ def run(page):
     page.locator("#s-process").click()
     expect(page.locator("#error-modal")).to_be_visible()
     check("No comparison could be made" in page.locator("#error-text").inner_text(), "empty input shows the error dialog")
+    check(page.locator("#error-modal h2").count() == 0 and "ERROR" not in page.locator("#error-modal").inner_text(),
+          "the dialog gives the message without a shouted heading")
     page.locator("#error-modal button").click()
     expect(page.locator("#error-modal")).to_be_hidden()
     expect(page.locator("#progress-modal")).to_be_hidden()
+
+    # Clear readies the tab for the next pair: typed values and the result go, the choices stay
+    page.fill("#s-hum_06-art-a", "45.5")
+    page.locator("#s-clear").click()
+    typed = page.locator("#s-form .measure-list input").evaluate_all("inputs => inputs.filter(input => input.value !== '').length")
+    check(typed == 0 and page.locator("#s-results").is_hidden() and page.locator("#s-analysis-articulation").is_checked()
+          and page.evaluate("document.activeElement.id") == "s-hum_06-art-a",
+          "Clear empties every measurement field and the result, keeps the analysis chosen, and puts the cursor in the first field")
 
     # --- Multiple: pair-match on the classic case file ---
     classic = (DATA / "classic_case_data.csv").read_text()
@@ -377,6 +403,18 @@ def run(page):
     page.locator(f"{pane} .page-link", has_text="2").first.click()
     expect(page.locator(f"{pane} .table-count")).to_have_text(f"Showing 11 to 20 of {len(kept)} entries")
     check(same(table_rows(page, pane)[0], kept[10][:12]), "page 2 continues where page 1 ended")
+    # more rows to a page, and back; the arrows step a page at a time
+    page.select_option(f"{pane} .page-size", "25")
+    expect(page.locator(f"{pane} .table-count")).to_have_text(f"Showing 1 to 25 of {len(kept)} entries")
+    check(len(table_rows(page, pane)) == 25, "25 rows to a page when asked for")
+    page.get_by_role("button", name="Next page").first.click()
+    expect(page.locator(f"{pane} .table-count")).to_have_text(f"Showing 26 to 50 of {len(kept)} entries")
+    page.select_option(f"{pane} .page-size", "10")
+    expect(page.locator(f"{pane} .table-count")).to_have_text(f"Showing 1 to 10 of {len(kept)} entries")
+    numeric = page.locator(f"{pane} thead th.num").all_text_contents()
+    aligned = page.locator(f"{pane} tbody tr").first.locator("td.num").first.evaluate("cell => getComputedStyle(cell).textAlign")
+    check(numeric == ["n", "Mean", "SD", "p"] and aligned == "right", f"the number columns are set to the right: {numeric}")
+    check(page.locator(f"{pane} .table-search").get_attribute("placeholder") == "Search", "the search box says what it is")
     page.locator(f"{pane} th", has_text="p").last.click()
     page.locator(f"{pane} th", has_text="p").last.click()
     expect(page.locator(f"{pane} th.sorted-desc")).to_have_text("p")
@@ -408,12 +446,12 @@ def run(page):
     problems[seen:] = [p for p in problems[seen:] if "status of 404" not in p]   # the browser logs the answer just asked for
 
     # --- Multiple: regression ---
-    choose(page, "m-analysis", "Regression")
+    pick(page, "m-analysis", "Regression")
     choose(page, "m-element-a", "Humerus")
     choose(page, "m-element-b", "Femur")
-    sides = choices(page, "m-side-a")
-    choose(page, "m-side-a", "Left")
-    choose(page, "m-side-b", "Left")
+    sides = sides_offered(page, "m-side-a")
+    pick(page, "m-side-a", "Left")
+    pick(page, "m-side-b", "Left")
     body = {**common, "analysis": "regression", "element_a": "humerus", "element_b": "femur", "side_a": "Left", "side_b": "Left",
             "measurements_a": chosen(page, "m-measurements-a"), "measurements_b": chosen(page, "m-measurements-b"), "csv": classic}
     process(page, "m")
@@ -435,7 +473,7 @@ def run(page):
     summary = page.locator("#m-upload-summary").inner_text()
     check("Not in reference data: humerous" in summary and "Columns not in ARDS: bogus_99" in summary and "uln_06" not in summary,
           "misspelt element and unknown column are reported: " + summary.replace("\n", " | "))
-    choose(page, "m-analysis", "Pair-match")
+    pick(page, "m-analysis", "Pair-match")
     choose(page, "m-element", "Humerus")
     process(page, "m")
     page.get_by_role("tab", name="Rejected", exact=True).click()
@@ -459,7 +497,7 @@ def run(page):
     check("Not in reference data" not in summary and "not in ARDS" not in summary and "Metatarsal 1 (40)" in summary,
           "the example file loads cleanly: 1,056 specimens, every element and column recognised")
     check(len(choices(page, "m-element")) == 27, "the example covers 27 bones")
-    choose(page, "m-analysis", "Pair-match")
+    pick(page, "m-analysis", "Pair-match")
     choose(page, "m-element", "Calcaneus")
     process(page, "m")
     numbers = summary_numbers(page)
@@ -467,10 +505,10 @@ def run(page):
     page.screenshot(path=SCREENS / "8-example-file.png", full_page=True)
 
     # articulation on it
-    choose(page, "m-analysis", "Articulation")
+    pick(page, "m-analysis", "Articulation")
     choose(page, "m-pair", "Humerus-Ulna")
-    check(choices(page, "m-art-side") == ["Left", "Right"], "sides offered are those both bones have in the file")
-    choose(page, "m-art-side", "Left")
+    check(sides_offered(page, "m-art-side") == ["Left", "Right"], "sides offered are those both bones have in the file")
+    pick(page, "m-art-side", "Left")
     process(page, "m")
     status, _ = api_batch({**common, "analysis": "articulation", "settings": SETTINGS, "element_a": "humerus", "element_b": "ulna",
                            "side": "Left", "measurements_a": ["hum_06"], "measurements_b": ["uln_11"], "csv": example})

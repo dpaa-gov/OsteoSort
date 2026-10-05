@@ -1,7 +1,7 @@
 // Single tab: two typed-in specimens compared against the reference groups.
 
 import {
-    $, postJSON, capFirst, showError, progress, makeSelect, boneName, setChoices, valueOf, valuesOf,
+    $, postJSON, capFirst, showError, progress, makeSelect, makeChoice, boneName, setChoices, valueOf, valuesOf,
     initSettings, fillTable, copyRows, markRun, PLOT_CONFIG, PLOT_LAYOUT, COLORS, markLabel, statTile, settingsTile,
 } from "./common.js";
 
@@ -12,11 +12,11 @@ export function initSingle(reference) {
 
     const selects = {
         reference: makeSelect("s-reference", () => referenceChanged()),
-        analysis: makeSelect("s-analysis", () => form.refresh()),
+        analysis: makeChoice("s-analysis", () => form.refresh()),
         element: makeSelect("s-element", () => renderPairMatch(), boneName),
-        sideA: makeSelect("s-side-a"),
-        sideB: makeSelect("s-side-b"),
-        artSide: makeSelect("s-art-side"),
+        sideA: makeChoice("s-side-a"),
+        sideB: makeChoice("s-side-b"),
+        artSide: makeChoice("s-art-side"),
         elementA: makeSelect("s-element-a", () => { dependentChoices(); renderRegression("a"); }, boneName),
         elementB: makeSelect("s-element-b", () => renderRegression("b"), boneName),
         pair: makeSelect("s-pair", () => renderArticulation(), boneName),
@@ -194,6 +194,15 @@ export function initSingle(reference) {
         const label = $("s-copy").querySelector("span");
         label.textContent = (await copyRows(lastTable)) ? "Copied" : "Copy failed";
         setTimeout(() => { label.textContent = "Copy"; }, 1500);
+    });
+
+    // Ready for the next pair of bones: the typed measurements and the result go,
+    // for every analysis; the reference groups, the bones chosen and the settings stay.
+    $("s-clear").addEventListener("click", () => {
+        const fields = [...$("s-form").querySelectorAll(".measure-list input")];
+        for (const field of fields) field.value = "";
+        $("s-results").hidden = true;
+        fields.find((field) => field.offsetParent !== null)?.focus();
     });
 
     $("s-form").addEventListener("submit", async (event) => {
