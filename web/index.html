@@ -59,10 +59,7 @@
 
                             <div data-analysis="pairmatch">
                                 <div class="stacked"><select id="s-element" aria-label="Element"></select></div>
-                                <div class="row gx-3">
-                                    <div class="col-6"><h5 class="side-label">&larr; Left</h5><div id="s-left"></div></div>
-                                    <div class="col-6"><h5 class="side-label">&rarr; Right</h5><div id="s-right"></div></div>
-                                </div>
+                                <div class="measure-list for-a-pair" id="s-sides"></div>
                             </div>
 
                             <div data-analysis="regression" hidden>
@@ -71,13 +68,13 @@
                                         <h5 class="side-label">Independent</h5>
                                         <select id="s-element-a" aria-label="Independent element"></select>
                                         <div class="stacked"><select id="s-side-a" aria-label="Independent side"><option>Left</option><option>Right</option></select></div>
-                                        <div id="s-values-a"></div>
+                                        <div class="measure-list" id="s-values-a"></div>
                                     </div>
                                     <div class="col-6">
                                         <h5 class="side-label">Dependent</h5>
                                         <select id="s-element-b" aria-label="Dependent element"></select>
                                         <div class="stacked"><select id="s-side-b" aria-label="Dependent side"><option>Left</option><option>Right</option></select></div>
-                                        <div id="s-values-b"></div>
+                                        <div class="measure-list" id="s-values-b"></div>
                                     </div>
                                 </div>
                             </div>
@@ -88,8 +85,8 @@
                                     <div class="col-6"><select id="s-art-side" aria-label="Side"><option>Left</option><option>Right</option></select></div>
                                 </div>
                                 <div class="row gx-3">
-                                    <div class="col-6" id="s-art-a"></div>
-                                    <div class="col-6" id="s-art-b"></div>
+                                    <div class="col-6"><div class="measure-list" id="s-art-a"></div></div>
+                                    <div class="col-6"><div class="measure-list" id="s-art-b"></div></div>
                                 </div>
                             </div>
 

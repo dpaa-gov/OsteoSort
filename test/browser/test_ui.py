@@ -171,7 +171,17 @@ def run(page):
     for code in LEFT_HUMERUS:
         page.fill(f"#s-{code}-left", str(LEFT_HUMERUS[code]))
         page.fill(f"#s-{code}-right", str(RIGHT_HUMERUS[code]))
-    check(page.locator("#s-left .measurement").count() == len(LEFT_HUMERUS), "one input per available measurement")
+    check(page.locator('#s-sides input[data-suffix="left"]').count() == len(LEFT_HUMERUS), "one input per available measurement")
+    # Tab goes down one bone and then the other, though the two are side by side
+    codes = list(LEFT_HUMERUS)
+    focused = "() => document.activeElement.id"
+    page.focus(f"#s-{codes[0]}-left")
+    page.keyboard.press("Tab")
+    down = page.evaluate(focused)
+    page.focus(f"#s-{codes[-1]}-left")
+    page.keyboard.press("Tab")
+    across = page.evaluate(focused)
+    check(down == f"s-{codes[1]}-left" and across == f"s-{codes[0]}-right", f"Tab moves down the left side, then to the top of the right: {down}, {across}")
     page.screenshot(path=SCREENS / "1-single-form.png", full_page=True)
     process(page, "s")
     expect(page.locator("#s-results")).to_be_visible()

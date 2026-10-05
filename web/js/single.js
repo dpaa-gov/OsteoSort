@@ -23,41 +23,73 @@ export function initSingle(reference) {
     };
     const form = initSettings("s-", selects.analysis);
 
-    // One labelled number field per measurement, keeping what was already typed
+    // A measurement's row in a list of fields: its code, with its full name on
+    // hover, then one number field per bone it is typed in for.
+    function measurementLabel(code, suffix) {
+        const label = document.createElement("label");
+        const text = document.createElement("span");
+        text.textContent = capFirst(code);
+        if (reference.name.get(code)) text.dataset.tooltip = reference.name.get(code);
+        label.htmlFor = `s-${code}-${suffix}`;
+        label.append(text);
+        return label;
+    }
+
+    function measurementField(code, suffix, value) {
+        const input = document.createElement("input");
+        input.type = "number";
+        input.className = "form-control";
+        input.id = `s-${code}-${suffix}`;
+        input.dataset.code = code;
+        input.dataset.suffix = suffix;
+        input.min = 0;
+        input.max = 999;
+        input.step = "any";
+        input.value = value ?? "";
+        return input;
+    }
+
+    // What is in the fields now, by field, to put back after they are redrawn
+    const typedIn = (container) => new Map([...container.querySelectorAll("input")].map((input) => [input.id, input.value]));
+
+    // One row per measurement, the code beside its field, keeping what was already typed
     function renderInputs(container, codes, suffix) {
-        const typed = new Map([...container.querySelectorAll("input")].map((input) => [input.dataset.code, input.value]));
+        const typed = typedIn(container);
         container.replaceChildren();
         for (const code of codes) {
-            const wrapper = document.createElement("div");
-            wrapper.className = "measurement";
-            const label = document.createElement("label");
-            const text = document.createElement("span");
-            text.textContent = capFirst(code);
-            if (reference.name.get(code)) text.dataset.tooltip = reference.name.get(code);
-            label.htmlFor = `s-${code}-${suffix}`;
-            label.append(text);
-            const input = document.createElement("input");
-            input.type = "number";
-            input.className = "form-control";
-            input.id = `s-${code}-${suffix}`;
-            input.dataset.code = code;
-            input.min = 0;
-            input.max = 999;
-            input.step = "any";
-            input.value = typed.get(code) ?? "";
-            wrapper.append(label, input);
-            container.append(wrapper);
+            container.append(measurementLabel(code, suffix), measurementField(code, suffix, typed.get(`s-${code}-${suffix}`)));
         }
     }
 
-    const entered = (container) => Object.fromEntries(
-        [...container.querySelectorAll("input")].map((input) => [input.dataset.code, input.value === "" ? null : Number(input.value)]));
-
+    // Both sides are the same bone, so each measurement is named once with its left and right
+    // fields beside it. A bone is measured whole before the next, so the Tab key goes down the
+    // left fields and then down the right: the fields are added in that order and each is told
+    // which row and column of the grid it sits in.
     function renderPairMatch() {
+        const container = $("s-sides");
+        const typed = typedIn(container);
+        const heading = (text) => {
+            const element = document.createElement("h5");
+            element.className = "side-label";
+            element.textContent = text;
+            return element;
+        };
+        const placed = (element, row, column) => {
+            element.style.gridRow = row;
+            element.style.gridColumn = column;
+            return element;
+        };
         const codes = reference.measurements(labels(), valueOf(selects.element));
-        renderInputs($("s-left"), codes, "left");
-        renderInputs($("s-right"), codes, "right");
+        container.replaceChildren(placed(heading("\u2190 Left"), 1, 2), placed(heading("\u2192 Right"), 1, 3));
+        codes.forEach((code, i) => container.append(placed(measurementLabel(code, "left"), i + 2, 1),
+            placed(measurementField(code, "left", typed.get(`s-${code}-left`)), i + 2, 2)));
+        codes.forEach((code, i) => container.append(placed(measurementField(code, "right", typed.get(`s-${code}-right`)), i + 2, 3)));
     }
+
+    // The values typed for one bone; `suffix` picks a side where a list holds both
+    const entered = (container, suffix) => Object.fromEntries(
+        [...container.querySelectorAll("input")].filter((input) => !suffix || input.dataset.suffix === suffix)
+            .map((input) => [input.dataset.code, input.value === "" ? null : Number(input.value)]));
 
     function renderRegression(which) {
         const select = which === "a" ? selects.elementA : selects.elementB;
@@ -96,7 +128,7 @@ export function initSingle(reference) {
         const body = { analysis, references: labels(), alpha: form.alpha() };
         if (analysis === "pairmatch") {
             return { ...body, settings: form.settings(), element: valueOf(selects.element),
-                left: entered($("s-left")), right: entered($("s-right")) };
+                left: entered($("s-sides"), "left"), right: entered($("s-sides"), "right") };
         }
         if (analysis === "articulation") {
             const pair = currentPair();

@@ -299,22 +299,24 @@ textarea {
   color: #586f80;
 }
 
-.well .measurement {
-  margin-top: 8px;
+/* Typed measurements: one row each, the code beside its field. A pair-match
+   has two fields a row, left and right, under their headings. */
+.well .measure-list {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 8px;
+  align-items: center;
+  margin-top: 12px;
 }
 
-/* The first field of a column sits under a dropdown: give its label room */
-.well .measurement:first-child {
-  margin-top: 16px;
+.well .measure-list.for-a-pair {
+  grid-template-columns: max-content minmax(0, 1fr) minmax(0, 1fr);
 }
 
-.well .side-label + div > .measurement:first-child {
-  margin-top: 4px;
-}
-
-.well .measurement label {
-  display: block;
-  margin-bottom: 4px;
+.well .measure-list label,
+.well .measure-list h5.side-label {
+  margin: 0;
+  white-space: nowrap;
 }
 
 /* Hide number input spinners */
