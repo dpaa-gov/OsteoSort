@@ -16,6 +16,18 @@ const HAVE_DB = !isempty(get(ENV, "DB_NAME", ""))
     @test config.port == 3838
 end
 
+# Bones are listed head to toe where the data collection manual numbers their
+# measurements, by a bone's lowest number; the rest follow by name.
+@testset "bone order" begin
+    @test OSS.manual_number("45") == 45 && OSS.manual_number(" 45a") == 45
+    @test OSS.manual_number(missing) === nothing && OSS.manual_number("MCAL") === nothing && OSS.manual_number("") === nothing
+    bone_of = ["ulna", "ulna", "humerus", "talus", "capitate", "cranium", "humerus"]
+    numbers = ["54", "55", "46", missing, missing, "1", "45"]
+    # only the bones in use are listed, yet every measurement helps place its bone
+    @test OSS.bone_order(["ulna", "talus", "humerus", "capitate", "ulna"], bone_of, numbers) == ["humerus", "ulna", "capitate", "talus"]
+    @test OSS.bone_order(["talus", "capitate"], bone_of, fill(missing, 7)) == ["capitate", "talus"]
+end
+
 include("memory.jl")
 
 if HAVE_DB
@@ -34,6 +46,12 @@ if HAVE_DB
         @test [g.label for g in meta.groups] == [g.label for g in snapshot.groups]
         @test allunique(g.label for g in meta.groups)
         @test collect(meta.bones) == snapshot.bones
+        # the long bones head to toe, then the bones the manual has no numbers for, by name
+        major = ["clavicle", "scapula", "humerus", "radius", "ulna", "os coxa", "femur", "tibia", "fibula", "calcaneus"]
+        @test first(snapshot.bones, length(major)) == major
+        @test issorted(snapshot.bones[length(major) + 1:end]) && "sacrum" ∉ snapshot.bones
+        @test [m.bone for m in snapshot.measurements] == sort([m.bone for m in snapshot.measurements]; by = bone -> findfirst(==(bone), snapshot.bones))
+        @test issorted(snapshot.disabled)
         @test [m.code for m in meta.measurements] == [m.code for m in snapshot.measurements]
         @test all(m -> m.code == lowercase(m.code) && m.bone in snapshot.bones, meta.measurements)
         @test isempty(intersect(collect(meta.disabled_measurements), [m.code for m in meta.measurements]))

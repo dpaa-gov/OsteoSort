@@ -2,7 +2,7 @@
 
 import {
     $, postJSON, capFirst, showError, progress, makeSelect, makeChoice, boneName, setChoices, valueOf, valuesOf,
-    initSettings, fillTable, copyRows, markRun, PLOT_CONFIG, PLOT_LAYOUT, COLORS, markLabel, statTile, settingsTile,
+    initSettings, fillTable, summariseMeasurements, copyRows, markRun, PLOT_CONFIG, PLOT_LAYOUT, COLORS, markLabel, statTile, settingsTile,
 } from "./common.js";
 
 export function initSingle(reference) {
@@ -80,7 +80,8 @@ export function initSingle(reference) {
             return element;
         };
         const codes = reference.measurements(labels(), valueOf(selects.element));
-        container.replaceChildren(placed(heading("\u2190 Left"), 1, 2), placed(heading("\u2192 Right"), 1, 3));
+        // the empty first caption covers the codes as they scroll up under the caption row
+        container.replaceChildren(placed(heading(""), 1, 1), placed(heading("\u2190 Left"), 1, 2), placed(heading("\u2192 Right"), 1, 3));
         codes.forEach((code, i) => container.append(placed(measurementLabel(code, "left"), i + 2, 1),
             placed(measurementField(code, "left", typed.get(`s-${code}-left`)), i + 2, 2)));
         codes.forEach((code, i) => container.append(placed(measurementField(code, "right", typed.get(`s-${code}-right`)), i + 2, 3)));
@@ -158,6 +159,7 @@ export function initSingle(reference) {
         const body = fillTable($("s-table"), shown.map((i) => columns[i]), result.results.rows.map((row) => shown.map((i) => row[i])));
         result.results.rows.forEach((row, r) => {
             if (reference >= 0 && row[reference]) body.rows[r].cells[shown.indexOf(columns.indexOf("n"))].dataset.tooltip = row[reference];
+            summariseMeasurements(body.rows[r].cells[shown.indexOf(columns.indexOf("Measurements"))]);
         });
         lastTable = [copied.map((i) => columns[i]), ...result.results.rows.map((row) => copied.map((i) => row[i]))];
         const plot = result.plot;

@@ -32,6 +32,10 @@
   --os-text: #dae6ec;
   --os-muted: #778f9e;
   --os-line: rgba(255, 255, 255, 0.08);
+  /* the sidebar's rhythm: every control is one height, and controls stacked
+     in a section are one gap apart */
+  --os-control: 38px;
+  --os-gap: 8px;
   --bs-body-font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --bs-body-font-size: 15px;
   --bs-body-bg: #f4f8fa;
@@ -240,21 +244,29 @@ textarea {
   display: none;
 }
 
+/* Under a heading, the first thing in each column of a row sits one gap
+   below it, as a control straight under a heading does */
+.well .sidebar-section-label + .row .side-label,
+.well .sidebar-section-label + .row .measure-list {
+  margin-top: 0;
+}
+
 .well > .sidebar-section-label:first-child {
   margin-top: 0;
 }
 
 /* Column headings (Left, Right, Independent, Dependent): the same type as
    the section labels, without the rule under them */
+/* A caption over a column of controls inside a section (Independent, Left):
+   plain small text, so it reads as belonging under the section's heading and
+   not as a second heading */
 .well h5.side-label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 1.5px;
+  font-size: 12px;
+  font-weight: 400;
   line-height: 1.5;
-  text-transform: uppercase;
   color: var(--os-muted);
-  margin-top: 12px;
-  margin-bottom: 6px;
+  margin-top: var(--os-gap);
+  margin-bottom: 4px;
 }
 
 /* Every control in the sidebar is the same size: dropdowns, tag lists,
@@ -279,7 +291,7 @@ textarea {
 
 /* A control placed directly under another, with no label between them */
 .well .stacked {
-  margin-top: 8px;
+  margin-top: var(--os-gap);
 }
 
 /* Dark form controls */
@@ -306,7 +318,7 @@ textarea {
   grid-template-columns: max-content minmax(0, 1fr);
   gap: 6px 8px;
   align-items: center;
-  margin-top: 12px;
+  margin-top: var(--os-gap);
 }
 
 .well .measure-list.for-a-pair {
@@ -317,6 +329,89 @@ textarea {
 .well .measure-list h5.side-label {
   margin: 0;
   white-space: nowrap;
+}
+
+/* A bone with many measurements: beyond about ten rows the fields scroll in
+   place, so the rest of the form and the Analyze button stay where they are.
+   The wheel stays with the list while the pointer is over it. The small inset
+   leaves room for a field's focus ring, which the scrolling edge would cut. */
+.well .measure-scroll {
+  max-height: 440px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #586f80 transparent;
+  margin: var(--os-gap) -3px 0;
+  padding: 3px;
+}
+
+.well .measure-scroll .measure-list {
+  margin-top: 0;
+}
+
+/* Left and Right sit centred over their column of fields */
+.well .for-a-pair .side-label {
+  text-align: center;
+}
+
+/* the Left and Right captions stay in view while their fields scroll under them */
+.well .measure-scroll .for-a-pair .side-label {
+  position: sticky;
+  top: -3px;
+  z-index: 2;
+  background-color: var(--os-navy);
+  padding: 3px 0;
+  align-self: stretch;
+}
+
+/* In the scrolling fields and in an open list the tooltip is the floating
+   one, placed by script (common.js); the one drawn in place would be cut off */
+.well .measure-scroll [data-tooltip]:hover::after,
+.well .ts-dropdown .option[data-tooltip]:hover::after {
+  content: none;
+}
+
+.floating-tip {
+  position: fixed;
+  z-index: 2000;
+  background-color: #f5e6c0;
+  color: var(--os-navy);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+
+/* Measurements that come with the choice above them and cannot be changed:
+   plain text at the height of a control, a line for each measurement and the
+   one it is compared with. With none, it says so. */
+.well .measure-given {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: var(--os-control);
+  color: var(--os-text);
+}
+
+.well .measure-given > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  line-height: 1.9;
+}
+
+.well .measure-given .with,
+.well .measure-given .absent {
+  color: var(--os-muted);
+}
+
+.well .measure-given:empty::before {
+  content: "Not in the file";
+  color: var(--os-muted);
 }
 
 /* Hide number input spinners */
@@ -424,6 +519,39 @@ textarea {
   padding-right: 5px;
 }
 
+/* The full-width list of one bone's measurements: four tags to a row in
+   columns of one width, so every row but the last is full and the tags line
+   up under each other. (Every measurement code is six characters.) */
+.well .ts-wrapper.tag-grid .ts-control {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  row-gap: 3px;
+}
+
+.well .ts-wrapper.tag-grid .ts-control > .item {
+  margin: 0;
+  padding-right: 0;
+}
+
+/* One bone of two, in half the width: two tags to a row. The box and its tags
+   give up a few pixels of padding so the widest code and its × fit a column. */
+.well .ts-wrapper.tag-grid.half .ts-control {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding-left: 5px;
+  padding-right: 3px;
+}
+
+/* a size down: the widest code with its × is otherwise exactly a column wide */
+.well .ts-wrapper.tag-grid.half .ts-control > .item {
+  padding-left: 2px;
+  font-size: 14px;
+}
+
+.well .ts-wrapper.tag-grid.half .ts-control > .item .remove {
+  padding-left: 2px;
+  padding-right: 0;
+}
+
 /* The theme gives a tag list's text field a 7rem minimum width, so it wraps
    onto an empty line of its own whenever the last row of tags is nearly full.
    Let it share the last row instead. */
@@ -509,24 +637,27 @@ textarea {
 }
 
 /* Tails and Alpha: one control in a few parts, the chosen part gold */
-.tails-group {
-  margin-top: 4px;
-}
-
-.alpha-group {
-  margin-top: 8px;
-}
-
+.alpha-group,
 .well .ttest-settings {
-  margin-top: 12px;
+  margin-top: var(--os-gap);
 }
 
+/* with no tails to choose (regression), alpha is the first thing under the heading */
+.tails-group[hidden] + .alpha-group {
+  margin-top: 0;
+}
+
+/* the same height as a dropdown or a field, whatever the words in it */
 .segmented .btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--os-control);
   background-color: var(--os-field);
   border: 1px solid var(--os-line);
   color: var(--os-text);
-  font-size: 13px;
-  padding: 5px 8px;
+  font-size: 14px;
+  padding: 0 6px;
 }
 
 .segmented .btn:hover {
@@ -539,12 +670,6 @@ textarea {
   border-color: var(--os-gold);
   color: var(--os-navy);
   font-weight: 500;
-}
-
-/* a side, beside or under a dropdown: the same height as one */
-.side-group .btn {
-  font-size: 15px;
-  padding: 6px 8px;
 }
 
 .segmented .btn-check:disabled + .btn {
@@ -632,17 +757,6 @@ textarea {
   z-index: 1000;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
   pointer-events: none;
-}
-
-/* In an open list the tooltip goes beside the name. The list scrolls, which
-   would cut off a tooltip placed above it; `fixed` with no position of its own
-   keeps it where the name is and lets it reach past the list's edge. */
-.well .ts-dropdown .option[data-tooltip]:hover::after {
-  position: fixed;
-  bottom: auto;
-  left: auto;
-  margin-left: 12px;
-  margin-top: -2px;
 }
 
 /* Main panel */
@@ -733,12 +847,6 @@ textarea {
 .plot-histogram {
   width: 100%;
   height: 250px;
-}
-
-/* The three analyses share the sidebar's width */
-.analysis-group .btn {
-  padding-left: 4px;
-  padding-right: 4px;
 }
 
 /* Tables */
@@ -839,6 +947,24 @@ textarea {
   --bs-pagination-focus-box-shadow: none;
 }
 
+/* Regression goes one way: the first bone predicts the second. An arrow in
+   the gap between the two bone dropdowns says so, level with them. */
+.well .predicts {
+  position: relative;
+}
+
+.well .predicts-arrow {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: auto;
+  padding: 0;
+  transform: translateX(-50%);
+  line-height: var(--os-control);
+  color: var(--os-muted);
+  cursor: help;
+}
+
 /* The sample size of a result row says, on hover, which reference groups it
    came from. The tooltip opens to the left, on the row's own line, so the
    scrolling table area never clips it. */
@@ -865,6 +991,13 @@ textarea {
   z-index: 1000;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
   pointer-events: none;
+}
+
+/* a list of measurement codes can be long: its tooltip wraps */
+.panel td.measures[data-tooltip]:hover::after {
+  white-space: normal;
+  width: max-content;
+  max-width: 280px;
 }
 
 /* Results tabset: gold active tab, gold text on inactive */

@@ -50,6 +50,29 @@ export const progress = {
     },
 };
 
+// --- Tooltips inside things that scroll ---
+
+// A tooltip drawn inside a scrolling list is cut off at the list's edge. For
+// the scrolling measurement fields and an open dropdown list, one tooltip that
+// floats over the page is placed by script from where the hovered thing is on
+// screen: above a field's code, beside a name in a list. It goes when the
+// pointer leaves or anything scrolls.
+const floatingTip = document.createElement("div");
+floatingTip.className = "floating-tip";
+floatingTip.hidden = true;
+document.body.append(floatingTip);
+document.addEventListener("mouseover", (event) => {
+    const target = event.target.closest?.(".measure-scroll [data-tooltip], .ts-dropdown .option[data-tooltip]");
+    floatingTip.hidden = !target;
+    if (!target) return;
+    floatingTip.textContent = target.dataset.tooltip;
+    const at = target.getBoundingClientRect();
+    const beside = target.matches(".option");
+    floatingTip.style.left = `${beside ? at.right + 8 : at.left}px`;
+    floatingTip.style.top = `${beside ? at.top + (at.height - floatingTip.offsetHeight) / 2 : at.top - floatingTip.offsetHeight - 6}px`;
+});
+document.addEventListener("scroll", () => { floatingTip.hidden = true; }, true);
+
 // --- Dropdowns (Tom Select) ---
 
 // `describe(value)` may return { text, tooltip } to show a choice differently
@@ -381,8 +404,19 @@ export function settingsTile(body) {
 
 // --- Plain tables ---
 
+// A cell listing the measurements a comparison used gives their number, with
+// the codes on hover, so a long list does not make its row taller than the
+// rest. Downloads and Copy keep the codes.
+export function summariseMeasurements(cell) {
+    const codes = cell.textContent.trim().split(/\s+/).filter(Boolean);
+    if (!codes.length) return;
+    cell.dataset.tooltip = codes.join(" ");
+    cell.classList.add("measures", "num");
+    cell.textContent = codes.length;
+}
+
 // Columns of numbers are set against the right edge, so their digits line up
-export const NUMERIC_COLUMNS = new Set(["n", "Mean", "SD", "p", "R²"]);
+export const NUMERIC_COLUMNS = new Set(["Measurements", "n", "Mean", "SD", "p", "R²"]);
 
 export function fillTable(table, columns, rows) {
     table.replaceChildren();

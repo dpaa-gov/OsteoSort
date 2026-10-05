@@ -82,8 +82,6 @@ export function initMultiple(reference) {
         element: makeSelect("m-element", () => measurementChoices(), boneName),
         measurements: makeSelect("m-measurements", null, reference.describe),
         pair: makeSelect("m-pair", () => articulationChoices(), boneName),
-        artA: makeSelect("m-art-a", null, reference.describe),
-        artB: makeSelect("m-art-b", null, reference.describe),
         sideA: makeChoice("m-side-a"),
         sideB: makeChoice("m-side-b"),
         artSide: makeChoice("m-art-side"),
@@ -114,10 +112,40 @@ export function initMultiple(reference) {
         setChoices(selects.measurements, measured(valueOf(selects.element)), undefined);
     }
 
+    // The measurements an articulating pair of bones is compared on are given by
+    // the pair: they are shown, not chosen, each line one measurement on the first
+    // bone and the one on the second it is compared with. One the file has no
+    // value for is left out, and the run is then refused for want of a measurement.
+    const given = { a: [], b: [] };
+    function showGiven(a, b) {
+        given.a = a;
+        given.b = b;
+        const code = (value) => {
+            const label = document.createElement("span");
+            if (value === undefined) {
+                label.className = "absent";
+                label.textContent = "not in the file";
+                return label;
+            }
+            const { text, tooltip } = reference.describe(value);
+            label.className = "code";
+            label.textContent = text;
+            if (tooltip) label.dataset.tooltip = tooltip;
+            return label;
+        };
+        $("m-art").replaceChildren(...Array.from({ length: Math.max(a.length, b.length) }, (_, i) => {
+            const line = document.createElement("div");
+            const with_ = document.createElement("span");
+            with_.className = "with";
+            with_.textContent = "\u2194";
+            line.append(code(a[i]), with_, code(b[i]));
+            return line;
+        }));
+    }
+
     function articulationChoices() {
         const pair = currentPair();
-        setChoices(selects.artA, pair ? inFileFor(pair.bonea, pair.a) : []);
-        setChoices(selects.artB, pair ? inFileFor(pair.boneb, pair.b) : []);
+        showGiven(pair ? inFileFor(pair.bonea, pair.a) : [], pair ? inFileFor(pair.boneb, pair.b) : []);
         selects.artSide.setAvailable(pair ? sidesFor(pair.bonea, pair.boneb) : ["Left", "Right"]);
     }
 
@@ -199,7 +227,7 @@ export function initMultiple(reference) {
         if (analysis === "articulation") {
             const pair = currentPair();
             return { ...body, settings: form.settings(), element_a: pair?.bonea ?? "", element_b: pair?.boneb ?? "",
-                side: valueOf(selects.artSide), measurements_a: valuesOf(selects.artA), measurements_b: valuesOf(selects.artB) };
+                side: valueOf(selects.artSide), measurements_a: given.a, measurements_b: given.b };
         }
         return { ...body, element_a: valueOf(selects.elementA), element_b: valueOf(selects.elementB),
             side_a: valueOf(selects.sideA), side_b: valueOf(selects.sideB),

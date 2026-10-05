@@ -21,6 +21,8 @@ Each analysis runs on a single pair typed in by hand, or on a whole case file at
 
 The server reads the reference groups from ARDS when the page is opened, so a collection, individual or measurement switched off for OsteoSort in ARDS disappears from the app on the next page load.
 
+Bones are listed head to toe, not by name. ARDS holds no order for bones, so the order comes from the number each measurement has in the data collection manual (the `utk2016` column of `osteometry.measurements`): a bone is placed by the lowest number among its measurements. Bones the manual does not number, such as the hand and foot bones, follow in alphabetical order.
+
 ## Using the app
 
 1. Choose one or more **reference groups**. Selecting several pools their individuals.

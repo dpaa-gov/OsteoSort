@@ -15,6 +15,42 @@ quote_identifier(name) = "\"" * replace(name, "\"" => "\"\"") * "\""
 
 query(conn, sql, params = ()) = Tables.columntable(LibPQ.execute(conn, sql, collect(params)))
 
+# A measurement's number in the data collection manual (ARDS column utk2016),
+# or nothing where it has none or it is not a number.
+function manual_number(value)
+    value isa AbstractString || return nothing
+    found = match(r"^\s*(\d+)", value)
+    return found === nothing ? nothing : parse(Int, found[1])
+end
+
+# The order bones are listed in. The manual numbers its measurements head to
+# toe, so a bone's lowest number places it: clavicle, scapula, humerus, radius,
+# ulna, os coxa, femur, tibia, fibula, calcaneus. Bones the manual does not
+# cover (hand and foot bones, patella, talus) follow, by name. ARDS holds no
+# order for bones as such; this one comes from numbers it keeps for another
+# reason, across all of a bone's measurements, so switching a measurement off
+# for OsteoSort never moves a bone.
+function bone_order(bones, bone_of_measurement, numbers)
+    lowest = Dict{String, Int}()
+    for (bone, value) in zip(bone_of_measurement, numbers)
+        number = manual_number(value)
+        number === nothing || (lowest[bone] = min(get(lowest, bone, typemax(Int)), number))
+    end
+    return sort(unique(bones); by = bone -> (get(lowest, bone, typemax(Int)), bone))
+end
+
+# Every measurement ARDS lists, with whether it is switched on for OsteoSort.
+# An ARDS without the manual's numbers still loads: its bones are then by name.
+function measurement_list(conn)
+    try
+        return query(conn, "SELECT ards, bone, full_name, osteosort_method, utk2016 FROM osteometry.measurements ORDER BY bone, ards")
+    catch e
+        e isa LibPQ.Errors.UndefinedColumn || rethrow()
+        rows = query(conn, "SELECT ards, bone, full_name, osteosort_method FROM osteometry.measurements ORDER BY bone, ards")
+        return merge(rows, (utk2016 = fill(missing, length(rows.ards)),))
+    end
+end
+
 function load_reference(config::Config)
     conn = LibPQ.Connection(conninfo(config))
     try
@@ -40,17 +76,16 @@ function load_reference(conn::LibPQ.Connection)
     end
     group_index = Dict((g.collection, g.ancestry, g.sex) => i for (i, g) in enumerate(groups))
 
-    measurement_rows = query(conn, """
-        SELECT ards, bone, full_name FROM osteometry.measurements
-        WHERE osteosort_method = TRUE ORDER BY bone, ards""")
+    listed = measurement_list(conn)
+    on = [i for i in eachindex(listed.ards) if listed.osteosort_method[i]]
+    bones = bone_order(listed.bone[on], listed.bone, listed.utk2016)
+    place = Dict(bone => i for (i, bone) in enumerate(bones))
+    # bone by bone in that order, a bone's measurements by code
     measurements = Measurement[
-        (code = lowercase(measurement_rows.ards[i]), bone = measurement_rows.bone[i],
-         name = coalesce(measurement_rows.full_name[i], nothing))
-        for i in eachindex(measurement_rows.ards)
+        (code = lowercase(listed.ards[i]), bone = listed.bone[i], name = coalesce(listed.full_name[i], nothing))
+        for i in sort(on; by = i -> (place[listed.bone[i]], listed.ards[i]))
     ]
-    bones = unique(m.bone for m in measurements)
-    disabled = lowercase.(query(conn, """
-        SELECT ards FROM osteometry.measurements WHERE osteosort_method = FALSE ORDER BY ards""").ards)
+    disabled = sort!(String[lowercase(listed.ards[i]) for i in eachindex(listed.ards) if !listed.osteosort_method[i]])
 
     for bone in bones
         isempty(groups) && break

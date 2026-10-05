@@ -120,8 +120,9 @@ def choices(page, select_id):
 
 
 def table_rows(page, selector):
+    """Rows of a table as text. A measurements cell that shows a count gives the codes it stands for."""
     return page.locator(f"{selector} tbody tr").evaluate_all(
-        "rows => rows.map(row => [...row.cells].map(cell => cell.textContent))")
+        "rows => rows.map(row => [...row.cells].map(cell => cell.classList.contains('measures') ? cell.dataset.tooltip : cell.textContent))")
 
 
 def tiles(page, selector):
@@ -177,6 +178,9 @@ def run(page):
 
     # --- Single: pair-match ---
     check(chosen(page, "s-reference") == references, "default reference groups are selected")
+    listed = choices(page, "s-element")
+    check(listed[:5] == ["clavicle", "scapula", "humerus", "radius", "ulna"] and listed[10:] == sorted(listed[10:]),
+          f"bones are listed head to toe, the rest by name: {listed[:10]}")
     choose(page, "s-element", "Humerus")
     for code in LEFT_HUMERUS:
         page.fill(f"#s-{code}-left", str(LEFT_HUMERUS[code]))
@@ -210,11 +214,14 @@ def run(page):
     check(copied[0].split("\t")[-3:] == ["p", "Result", "Reference"] and copied[1].split("\t")[-2:] == [want[11], want[12]]
           and float(copied[1].split("\t")[-3]) == want[10],
           f"Copy puts the table on the clipboard, tab-separated, with the reference groups: {copied[1][-90:]!r}")
-    cell = page.locator("#s-table tbody td[data-tooltip]")
+    cell = page.locator("#s-table tbody td[data-tooltip]:not(.measures)")
     used = cell.get_attribute("data-tooltip")
     check(used == want[12] and sum(int(part.rsplit(" ", 1)[1]) for part in used.split(", ")) == int(cell.inner_text()),
           f"hovering the sample size shows the reference groups, adding up to n: {used}")
     check(page.locator("#s-plot .annotation-text").all_text_contents() == ["Comparison"], "the dashed line on the single plot is labelled Comparison")
+    measures = page.locator("#s-table td.measures")
+    check(measures.inner_text() == "9" and measures.get_attribute("data-tooltip") == want[6].strip()
+          and "Hum_09" in copied[1], f"the measurements column gives their number, the codes on hover and in what is copied: {measures.inner_text()}")
     shown = tiles(page, "#s-summary")
     check(shown == {"Result": want[11], "p-value": str(want[10]), "Reference sample": str(want[7]), "Settings": "α 0.1 (2 tails)"},
           f"the result, its p-value, the reference sample and the settings used are shown above the plot: {shown}")
@@ -246,6 +253,12 @@ def run(page):
 
     # --- Single: regression ---
     pick(page, "s-analysis", "Regression")
+    arrow = page.locator("#s-form .predicts-arrow")
+    between = arrow.bounding_box()["x"] > page.locator("#s-element-a + .ts-wrapper").bounding_box()["x"] + 100 and \
+        arrow.bounding_box()["x"] < page.locator("#s-element-b + .ts-wrapper").bounding_box()["x"]
+    check(arrow.inner_text() == "\u2192" and between and arrow.get_attribute("data-tooltip") == "Predicts"
+          and page.locator("#s-form .side-label:visible").count() == 0,
+          "regression shows its direction as an arrow between the two bones, with no captions")
     check(page.locator("#s-form .ttest-settings").is_hidden() and page.locator("#s-form .tails-group").is_hidden()
           and page.locator("#s-form .alpha-group").is_visible(), "regression shows alpha alone: no tails, no t-test switches")
     choose(page, "s-element-a", "Humerus")
@@ -262,6 +275,22 @@ def run(page):
     check(headers[-3:] == ["R²", "p", "Result"] and same(row, want[1:3] + want[4:11]) and row[0] == "Humerus",
           f"single regression shows what the API returns: R²={row[-3]} p={row[-2]}")
     check(page.locator("#s-plot .scatterlayer .trace").count() == 5, "regression plot has points, line, band and specimen")
+    # a long bone's fields scroll in place; a field out of view is brought into view when it is tabbed to
+    box = page.locator("#s-values-b").locator("xpath=ancestor::div[contains(@class, 'measure-scroll')]")
+    sizes = box.evaluate("e => [e.clientHeight, e.scrollHeight]")
+    last = page.locator("#s-fem_17-B")
+    last.focus()
+    seen = last.evaluate("e => { const r = e.getBoundingClientRect(), b = e.closest('.measure-scroll').getBoundingClientRect(); return r.top >= b.top && r.bottom <= b.bottom; }")
+    # scrolled to the end, a code's tooltip is still just above that code
+    code = page.locator('label[for="s-fem_16-B"] span')
+    code.hover()
+    tip = page.locator(".floating-tip")
+    expect(tip).to_be_visible()
+    gap = code.bounding_box()["y"] - (tip.bounding_box()["y"] + tip.bounding_box()["height"])
+    check("Fem_16" in tip.inner_text() and 0 <= gap <= 12, f"a tooltip in the scrolled list sits just above its code: {gap:.0f} px above")
+    page.mouse.move(900, 600)
+    check(sizes[0] <= 446 and sizes[1] > sizes[0] and seen and last.input_value() == "32.5",
+          f"the femur's 17 fields scroll within the form ({sizes[0]} of {sizes[1]} px shown) and keep their values")
     check(page.locator("#s-plot .annotation-text").all_text_contents() == ["Comparison"], "the gold point on the regression plot is labelled Comparison")
     page.screenshot(path=SCREENS / "3-single-regression.png", full_page=True)
 
@@ -391,7 +420,7 @@ def run(page):
     check(page.locator("#m-histogram .bars path").count() > 5, "p-value histogram is drawn")
     check(page.locator("#m-histogram .annotation-text").all_text_contents() == ["α = 0.1"], "the dashed line is labelled with the alpha used")
     check("Reference" not in page.locator(f"{pane} thead th").all_text_contents(), "no reference column on screen")
-    cell = page.locator(f"{pane} tbody tr").first.locator("td[data-tooltip]")
+    cell = page.locator(f"{pane} tbody tr").first.locator("td[data-tooltip]:not(.measures)")
     used = cell.get_attribute("data-tooltip")
     check(used == kept[0][12] and sum(int(part.rsplit(" ", 1)[1]) for part in used.split(", ")) == int(cell.inner_text()),
           f"each row's sample size says which reference groups it came from: {used}")
@@ -413,7 +442,7 @@ def run(page):
     expect(page.locator(f"{pane} .table-count")).to_have_text(f"Showing 1 to 10 of {len(kept)} entries")
     numeric = page.locator(f"{pane} thead th.num").all_text_contents()
     aligned = page.locator(f"{pane} tbody tr").first.locator("td.num").first.evaluate("cell => getComputedStyle(cell).textAlign")
-    check(numeric == ["n", "Mean", "SD", "p"] and aligned == "right", f"the number columns are set to the right: {numeric}")
+    check(numeric == ["Measurements", "n", "Mean", "SD", "p"] and aligned == "right", f"the number columns are set to the right: {numeric}")
     check(page.locator(f"{pane} .table-search").get_attribute("placeholder") == "Search", "the search box says what it is")
     page.locator(f"{pane} th", has_text="p").last.click()
     page.locator(f"{pane} th", has_text="p").last.click()
@@ -509,6 +538,11 @@ def run(page):
     choose(page, "m-pair", "Humerus-Ulna")
     check(sides_offered(page, "m-art-side") == ["Left", "Right"], "sides offered are those both bones have in the file")
     pick(page, "m-art-side", "Left")
+    # the pair's measurements are stated, not chosen: plain text with the name on hover, nothing to remove
+    given = page.locator("#m-art .code")
+    check(page.locator("#m-art").inner_text().split() == ["Hum_06", "\u2194", "Uln_11"] and "(mm)" in given.first.get_attribute("data-tooltip")
+          and page.locator("#m-art .remove, #m-art .ts-wrapper").count() == 0,
+          f"an articulating pair's measurements are shown as text, joined, with no × and no list to open: {page.locator('#m-art').inner_text()}")
     process(page, "m")
     status, _ = api_batch({**common, "analysis": "articulation", "settings": SETTINGS, "element_a": "humerus", "element_b": "ulna",
                            "side": "Left", "measurements_a": ["hum_06"], "measurements_b": ["uln_11"], "csv": example})

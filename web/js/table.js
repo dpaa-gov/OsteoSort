@@ -1,7 +1,7 @@
 // A result table backed by the server: paging, search and sorting are done
 // there, so a batch of any size stays quick in the browser.
 
-import { getJSON, showError, NUMERIC_COLUMNS } from "./common.js";
+import { getJSON, showError, NUMERIC_COLUMNS, summariseMeasurements } from "./common.js";
 
 const PAGE_SIZES = [10, 25, 50];
 
@@ -85,6 +85,7 @@ export class ResultTable {
                 const td = tr.insertCell();
                 td.textContent = cell ?? "";
                 if (NUMERIC_COLUMNS.has(page.columns[index])) td.className = "num";
+                if (page.columns[index] === "Measurements") summariseMeasurements(td);
                 if (index === sample && hidden >= 0 && row[hidden]) td.dataset.tooltip = row[hidden];
             });
         }
