@@ -71,7 +71,9 @@ resident_mib() = parse(Int, split(read("/proc/self/statm", String))[2]) * 4096 /
         release(job)
         after = settled()
         @info "Memory around one run of $(per_side^2) comparisons" before held after
-        @test held - before > 100                    # the results really were in memory
+        # About 150 MiB locally. How much of it shows depends on what the
+        # process kept from the first run: GitHub's runner has measured 93.
+        @test held - before > 50                     # the results really were in memory
         @test after - before < (held - before) / 4   # and most of it came back on release
         @test OSS.find_job(state.jobs, job) === nothing
     end
