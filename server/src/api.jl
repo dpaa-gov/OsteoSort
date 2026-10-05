@@ -74,7 +74,8 @@ function selected_groups(snapshot::ReferenceSnapshot, labels)
     isempty(labels) && bad_request("Select at least one reference group")
     by_label = Dict(group.label => group for group in snapshot.groups)
     all(label -> haskey(by_label, label), labels) || throw(RequestError(409, REFERENCE_CHANGED))
-    return [by_label[label] for label in labels]
+    # a group named twice is one group: its individuals are not counted twice
+    return [by_label[label] for label in unique(labels)]
 end
 
 # --- Tables as JSON and CSV ---

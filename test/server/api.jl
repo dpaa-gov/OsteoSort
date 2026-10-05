@@ -31,6 +31,10 @@ end
             response = post("/api/single", merge(common, (analysis = "pairmatch", settings = settings, element = "humerus", left = left, right = right)))
             @test response.status == 200
             body = JSON3.read(response.body)
+            # a reference group named twice counts once
+            twice = post("/api/single", merge(common, (references = vcat(references, references), analysis = "pairmatch",
+                settings = settings, element = "humerus", left = left, right = right)))
+            @test JSON3.read(twice.body).results.rows == body.results.rows
             direct = OSJ.ttest(OSJ.prepare_single_pair_match(groups, "humerus", left, right), 0.1, osj_settings)
             @test collect(body.results.columns) ==
                   ["Accession 1", "Element 1", "Side 1", "Accession 2", "Element 2", "Side 2", "Measurements", "n", "Mean", "SD", "p", "Result", "Reference"]

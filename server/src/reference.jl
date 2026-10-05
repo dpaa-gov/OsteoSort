@@ -52,7 +52,10 @@ function measurement_list(conn)
 end
 
 function load_reference(config::Config)
-    conn = LibPQ.Connection(conninfo(config))
+    # LibPQ connects without blocking, where libpq ignores the connect_timeout
+    # in the connection string; this is the one that applies. An ARDS that
+    # does not answer fails the load in 10 seconds, not the system's two minutes.
+    conn = LibPQ.Connection(conninfo(config); connect_timeout = 10)
     try
         return load_reference(conn)
     finally
