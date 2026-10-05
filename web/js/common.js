@@ -50,6 +50,104 @@ export const progress = {
     },
 };
 
+// --- Page zoom on wide screens ---
+
+// A screen wider than 1920px shows the page larger, by three quarters of the
+// width it has beyond 1920: 1.25 times at 2560, 1.75 at 3840. (A screen the
+// system already scales, such as 4K at 200%, reports its scaled width and is
+// left alone.)
+const DESIGN_WIDTH = 1920;
+const ZOOM_SHARE = 0.75;
+const zoomFor = () => 1 + ZOOM_SHARE * Math.max(0, window.innerWidth / DESIGN_WIDTH - 1);
+export function fitToScreen() {
+    const apply = () => {
+        document.body.style.zoom = zoomFor() === 1 ? "" : String(zoomFor());
+    };
+    window.addEventListener("resize", apply);
+    apply();
+}
+
+// --- Hover labels ---
+
+// Plots show their own hover labels, not Plotly's: one look, in the app's
+// tooltip style, at any size. Plotly's would also name the wrong point on a
+// zoomed page (fitToScreen), as it places the pointer without allowing for the
+// zoom; these do. A label names the point nearest the pointer, or the bar under
+// it; fitted lines and intervals have none. Where the points are is worked out
+// from Plotly's axes, so nothing is measured on screen.
+const plotTip = document.createElement("div");
+plotTip.className = "plot-tip";
+plotTip.hidden = true;
+document.body.append(plotTip);
+document.addEventListener("scroll", () => { plotTip.hidden = true; }, true);
+
+const NEAR = 20; // how close to a point the pointer must be, in page pixels
+const hoverNumber = (value) => String(Math.round(value * 1e4) / 1e4);
+
+// What is under the pointer at (mx, my), in the plot's own pixels: the text
+// for the label and where it points, or null
+function hoveredAt(gd, mx, my) {
+    const fl = gd._fullLayout, xa = fl.xaxis, ya = fl.yaxis;
+    const px = (x) => xa._offset + xa.d2p(x), py = (y) => ya._offset + ya.d2p(y);
+    // the titles the plot was given; Plotly fills in a placeholder where there is none
+    const xTitle = gd.layout.xaxis?.title?.text, yTitle = gd.layout.yaxis?.title?.text;
+    let best = null;
+    for (const trace of gd.calcdata) {
+        const full = trace[0].trace;
+        if (full.visible !== true) continue;
+        if (full.type === "bar" || full.type === "histogram") {
+            for (const bin of trace) {
+                const lower = bin.ph0 ?? bin.p - full.width / 2, upper = bin.ph1 ?? bin.p + full.width / 2;
+                const base = bin.b || 0, top = base + bin.s;
+                if (!bin.s || mx < px(lower) || mx > px(upper) || my < py(top) || my > py(base)) continue;
+                const range = full.type === "histogram" ? `${hoverNumber(lower)} – ${hoverNumber(upper)}` : hoverNumber(bin.p);
+                return { x: px(bin.p), y: py(top), text: `${full.name}\n${xTitle || "Range"}: ${range}\nCount: ${bin.s}` };
+            }
+            continue;
+        }
+        if (!full.mode?.includes("markers")) continue; // a fitted line or an interval
+        full.x.forEach((x, i) => {
+            const y = full.y[i];
+            const distance = Math.hypot(px(x) - mx, py(y) - my);
+            if (distance <= NEAR && (!best || distance < best.distance)) {
+                best = { distance, x: px(x), y: py(y), text: `${full.name}\n${xTitle || "x"}: ${hoverNumber(x)}\n${yTitle || "y"}: ${hoverNumber(y)}` };
+            }
+        });
+    }
+    return best;
+}
+
+function showHover(gd, event) {
+    const zoom = zoomFor();
+    if (!gd._fullLayout) {
+        plotTip.hidden = true;
+        return;
+    }
+    const r = gd.getBoundingClientRect();
+    const hit = hoveredAt(gd, (event.clientX - r.left) / zoom, (event.clientY - r.top) / zoom);
+    plotTip.hidden = !hit;
+    if (!hit) return;
+    plotTip.textContent = hit.text;
+    // beside the point, on the side with room for it
+    const left = r.left / zoom + hit.x, top = r.top / zoom + hit.y - plotTip.offsetHeight / 2;
+    const onLeft = hit.x + 12 + plotTip.offsetWidth > gd._fullLayout.width;
+    plotTip.style.left = `${onLeft ? left - 12 - plotTip.offsetWidth : left + 12}px`;
+    plotTip.style.top = `${top}px`;
+}
+
+// Gives a plot these hover labels; once is enough for a plot that is redrawn
+export function plotHover(id) {
+    const gd = $(id);
+    if (gd.dataset.plotHover) return;
+    gd.dataset.plotHover = "on";
+    let frame = 0, last = null;
+    gd.addEventListener("mousemove", (event) => {
+        last = event;
+        frame ||= requestAnimationFrame(() => { frame = 0; showHover(gd, last); });
+    });
+    gd.addEventListener("mouseleave", () => { plotTip.hidden = true; });
+}
+
 // --- Tooltips inside things that scroll ---
 
 // A tooltip drawn inside a scrolling list is cut off at the list's edge. For
@@ -66,7 +164,11 @@ document.addEventListener("mouseover", (event) => {
     floatingTip.hidden = !target;
     if (!target) return;
     floatingTip.textContent = target.dataset.tooltip;
-    const at = target.getBoundingClientRect();
+    // Where the hovered thing is comes in screen pixels; the tooltip is placed
+    // in the page's own, which differ by the page's zoom (fitToScreen)
+    const zoom = zoomFor();
+    const r = target.getBoundingClientRect();
+    const at = { left: r.left / zoom, right: r.right / zoom, top: r.top / zoom, height: r.height / zoom };
     const beside = target.matches(".option");
     floatingTip.style.left = `${beside ? at.right + 8 : at.left}px`;
     floatingTip.style.top = `${beside ? at.top + (at.height - floatingTip.offsetHeight) / 2 : at.top - floatingTip.offsetHeight - 6}px`;
@@ -356,7 +458,12 @@ export const PLOT_CONFIG = {
 // to undo a zoom, so dragging on the plot or along an axis does nothing.
 export const PLOT_LAYOUT = {
     dragmode: false,
-    template: { layout: { xaxis: { fixedrange: true }, yaxis: { fixedrange: true } } },
+    hovermode: false, // the app's own hover labels instead (plotHover)
+    // Every tick label is shown ("allow"): Plotly hides those it measures as
+    // spilling past the plot, and on a zoomed page it measures them too large
+    // and hides the last on each axis.
+    template: { layout: { xaxis: { fixedrange: true, ticklabeloverflow: "allow" },
+                          yaxis: { fixedrange: true, ticklabeloverflow: "allow" } } },
     plot_bgcolor: "#ffffff",
     paper_bgcolor: "#ffffff",
     modebar: { color: "rgba(68, 68, 68, 0.35)", activecolor: "#d4a843", bgcolor: "rgba(255, 255, 255, 0)" },

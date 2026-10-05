@@ -4,7 +4,6 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>OsteoSort</title>
-    <link rel="icon" href="img/osteosort.png">
     <link rel="stylesheet" href="vendor/bootstrap-flatly.min.css">
     <link rel="stylesheet" href="vendor/tom-select.bootstrap5.min.css">
     <link rel="stylesheet" href="css/osteosort.css">
@@ -131,8 +130,10 @@
                         <div id="s-results" hidden>
                             <div class="panel">
                                 <div class="main-section-label">Summary</div>
-                                <div class="stat-tiles in-a-row" id="s-summary"></div>
-                                <div id="s-plot" class="plot-single" data-filename="osteosort-comparison"></div>
+                                <div class="summary-row">
+                                    <div class="stat-tiles in-a-row" id="s-summary"></div>
+                                    <div id="s-plot" class="plot-single" data-filename="osteosort-comparison"></div>
+                                </div>
                             </div>
                             <div class="panel">
                                 <div class="main-section-label">Results</div>
@@ -232,12 +233,13 @@
                         <div id="m-results" hidden>
                             <div class="panel">
                                 <div class="main-section-label">Summary</div>
-                                <div class="row">
-                                    <div class="col-md-4">
+                                <div class="summary-row">
+                                    <div class="summary-side">
                                         <div class="stat-tiles" id="m-summary"></div>
                                         <div class="stat-run" id="m-run"></div>
                                     </div>
-                                    <div class="col-md-8"><div id="m-histogram" class="plot-histogram" data-filename="osteosort-p-values"></div></div>
+                                    <!-- the histogram fills this box, which is as tall as the tiles beside it -->
+                                    <div class="plot-box"><div id="m-histogram" class="plot-histogram" data-filename="osteosort-p-values"></div></div>
                                 </div>
                             </div>
                             <div class="panel">

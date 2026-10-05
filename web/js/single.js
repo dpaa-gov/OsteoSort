@@ -2,7 +2,7 @@
 
 import {
     $, postJSON, capFirst, showError, progress, makeSelect, makeChoice, boneName, setChoices, valueOf, valuesOf,
-    initSettings, fillTable, summariseMeasurements, copyRows, markRun, PLOT_CONFIG, PLOT_LAYOUT, COLORS, markLabel, statTile, settingsTile,
+    initSettings, fillTable, summariseMeasurements, copyRows, markRun, PLOT_CONFIG, PLOT_LAYOUT, COLORS, markLabel, statTile, settingsTile, plotHover,
 } from "./common.js";
 
 export function initSingle(reference) {
@@ -163,7 +163,8 @@ export function initSingle(reference) {
         });
         lastTable = [copied.map((i) => columns[i]), ...result.results.rows.map((row) => copied.map((i) => row[i]))];
         const plot = result.plot;
-        const paper = { ...PLOT_LAYOUT, showlegend: false };
+        // margins with room only for the axis labels, so the plot lines up with the tiles beside it
+        const paper = { ...PLOT_LAYOUT, showlegend: false, margin: { t: 12, r: 12, b: 50, l: 64 } };
         // The gold mark is the comparison being made. Its label goes on the side
         // away from the nearer edge of the plot.
         const leftOf = (value, others) => value - Math.min(value, ...others) > Math.max(value, ...others) - value;
@@ -171,6 +172,7 @@ export function initSingle(reference) {
             // no line or band when the reference sample is too small to fit one
             const line = (y, name, color, dash = "dash") =>
                 ({ x: plot.band.x, y, name, type: "scatter", mode: "lines", line: { color, dash } });
+            plotHover("s-plot");
             Plotly.react("s-plot", [
                 { x: plot.ref_x, y: plot.ref_y, name: "Reference", type: "scatter", mode: "markers", marker: { color: "grey", size: 6 } },
                 ...(plot.band ? [
@@ -183,6 +185,7 @@ export function initSingle(reference) {
             ], { ...paper, xaxis: { title: { text: capFirst(plot.x_label) } }, yaxis: { title: { text: capFirst(plot.y_label) } },
                 annotations: [markLabel(plot.specimen_x, "Comparison", leftOf(plot.specimen_x, plot.ref_x), plot.specimen_y)] }, PLOT_CONFIG);
         } else {
+            plotHover("s-plot");
             Plotly.react("s-plot", [
                 { x: plot.reference, name: "Reference", type: "histogram",
                   marker: { color: COLORS.reference, line: { color: "grey", width: 1 } } },

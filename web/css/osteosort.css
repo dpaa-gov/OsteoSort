@@ -839,14 +839,86 @@ textarea {
   margin: 8px 0 0;
 }
 
+/* The plots keep one shape, 21:9, within a range of heights, rather than
+   stretching into a strip on a wide screen; Single's and Multiple's alike */
 .plot-single {
   width: 100%;
-  height: 450px;
+  aspect-ratio: 21 / 9;
+  min-height: 300px;
+  max-height: 480px;
 }
 
 .plot-histogram {
   width: 100%;
   height: 250px;
+}
+
+/* On a very wide screen the results stop widening, so the plots and tables
+   keep their proportions. The sidebar stays at the left edge and the results
+   beside it; what is left over is empty space on the right. */
+.app-results {
+  max-width: 1400px;
+}
+
+/* On a wide screen the summary tiles stand in a column on the left of the
+   plot, one width in both tabs so the plots line up, and stretch to the
+   plot's height: Single's four one above another, Multiple's six two to a
+   row with the run time under them. Narrower, the tiles sit above. */
+@media (min-width: 1200px) {
+  .summary-row {
+    display: flex;
+    gap: 16px;
+    align-items: stretch;
+  }
+
+  .summary-row > .stat-tiles.in-a-row,
+  .summary-row > .summary-side {
+    flex: 0 0 340px;
+  }
+
+  /* the tiles end level with the plot's x-axis: the space below it, for the
+     axis numbers and title, is the plot's bottom margin (single.js) */
+  .summary-row > .stat-tiles.in-a-row {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 0;
+    padding-bottom: 50px;
+  }
+
+  .summary-row > .summary-side {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .summary-row > .summary-side > .stat-tiles {
+    flex: 1 1 auto;
+    grid-auto-rows: 1fr;
+  }
+
+  .summary-row .stat-tile {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .summary-row > .stat-tiles.in-a-row .stat-tile {
+    flex: 1 1 0;
+  }
+
+  .summary-row > .plot-single,
+  .summary-row > .plot-box {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  /* the histogram takes the same shape as Single's plot */
+  .summary-row > .plot-box > .plot-histogram {
+    height: auto;
+    aspect-ratio: 21 / 9;
+    min-height: 300px;
+    max-height: 480px;
+  }
 }
 
 /* Tables */
@@ -1000,9 +1072,10 @@ textarea {
   max-width: 280px;
 }
 
-/* Results tabset: gold active tab, gold text on inactive */
+/* Results tabset: gold active tab; the others in the muted slate of the tile
+   labels, darker on hover over a hint of gold */
 .results-tabs .nav-link {
-  color: var(--os-gold);
+  color: #586f80;
   border-color: transparent;
   min-width: 10.5rem; /* the three tabs are one width, that of the longest label */
 }
@@ -1011,7 +1084,7 @@ textarea {
 .results-tabs .nav-link:focus {
   background-color: var(--os-gold-tint);
   border-color: transparent;
-  color: var(--os-gold);
+  color: #2a4051;
 }
 
 .results-tabs .nav-link.active,
@@ -1044,4 +1117,21 @@ textarea {
 .error-dialog p {
   font-size: 16px;
   margin: 4px 0 22px;
+}
+
+/* A plot's hover label (common.js): the floating tooltip's look, with a
+   trace name and two lines of values */
+.plot-tip {
+  position: fixed;
+  z-index: 2000;
+  background-color: #f5e6c0;
+  color: var(--os-navy);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: pre;
+  line-height: 1.5;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
 }

@@ -1,8 +1,10 @@
 // Entry point: load what the dropdowns are built from, then start both tabs.
 
-import { $, getJSON, Reference, progress } from "./common.js";
+import { $, getJSON, Reference, progress, fitToScreen } from "./common.js";
 import { initSingle } from "./single.js";
 import { initMultiple } from "./multiple.js";
+
+fitToScreen();
 
 // Reading the reference data from ARDS can take a few seconds. If it does, say
 // so; when it is quick, nothing is shown. The forms stay hidden until their

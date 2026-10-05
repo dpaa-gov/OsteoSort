@@ -5,7 +5,7 @@
 FROM debian:bookworm-slim AS bundle
 
 # Bump with each release
-ARG OSTEOSORT_VERSION=v2.0.0-alpha.7
+ARG OSTEOSORT_VERSION=v2.0.0-alpha.8
 # Or a local path, to try a bundle built on this machine
 ARG BUNDLE=https://github.com/dpaa-gov/OsteoSort/releases/download/${OSTEOSORT_VERSION}/osteosort-linux-x86_64.tar.gz
 

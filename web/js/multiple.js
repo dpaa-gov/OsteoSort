@@ -2,7 +2,7 @@
 
 import {
     $, getJSON, postJSON, capFirst, showError, progress, makeSelect, makeChoice, boneName, setChoices, valueOf, valuesOf,
-    initSettings, fillTable, markRun, PLOT_CONFIG, PLOT_LAYOUT, COLORS, markLabel, statTile, settingsTile,
+    initSettings, fillTable, markRun, PLOT_CONFIG, PLOT_LAYOUT, COLORS, markLabel, statTile, settingsTile, plotHover,
 } from "./common.js";
 import { ResultTable } from "./table.js";
 
@@ -277,7 +277,8 @@ export function initMultiple(reference) {
         const h = status.histogram;
         const centres = h.excluded.map((_, i) => (i + 0.5) * h.bin_width);
         const bars = (y, name, color) => ({ x: centres, y, name, type: "bar", width: h.bin_width, marker: { color }, opacity: 0.8 });
-        Plotly.react("m-histogram", [
+        plotHover("m-histogram");
+            Plotly.react("m-histogram", [
             bars(h.excluded, "Excluded", COLORS.excluded),
             bars(h.cannot_exclude, "Cannot Exclude", COLORS.reference),
         ], {
@@ -290,6 +291,7 @@ export function initMultiple(reference) {
             legend: { orientation: "h", x: 0.5, xanchor: "center", y: 1.1, traceorder: "normal" },
             margin: { t: 30, b: 40, l: 50, r: 10 },
             ...PLOT_LAYOUT,
+           
         }, PLOT_CONFIG);
 
         tables = TABLES.map((name) => new ResultTable($(`m-pane-${name}`), job, name));
