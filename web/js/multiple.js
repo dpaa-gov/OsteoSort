@@ -304,7 +304,8 @@ export function initMultiple(reference) {
         if (missingMeasurements(body)) return showError("The measurement data is missing");
         progress.show();
         try {
-            const { job } = await postJSON("api/multiple", body);
+            // the run names the one it replaces, so the server makes room for it without counting that one
+            const { job } = await postJSON("api/multiple", { ...body, replaces: currentJob ?? undefined });
             release(currentJob); // the previous run's results are replaced by this one
             currentJob = job;
             $("m-results").hidden = true; // they are gone from the server, whether or not this run succeeds

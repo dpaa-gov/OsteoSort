@@ -234,6 +234,9 @@ function multiple_handler(state::AppState, req::HTTP.Request)
     csv = text_field(body, :csv)
     sizeof(csv) <= MAX_FILE_BYTES || throw(RequestError(413, TOO_LARGE))
     fields = multiple_fields(body, analysis)
+    # The page's previous run, whose results this one replaces
+    replaces = get(body, :replaces, nothing)
+    replaces === nothing || replaces isa AbstractString || bad_request("replaces must be text")
     job = start_job!(state.jobs) do job
         started = time()
         upload = try
@@ -243,7 +246,11 @@ function multiple_handler(state::AppState, req::HTTP.Request)
         end
         @atomic job.stage = "sorting"
         data = prepare_multiple(fields, analysis, groups, upload)
-        data === nothing || check_size(length(data.sorta) * length(data.sortb), state.jobs.max_rows)
+        comparisons = data === nothing ? 0 : length(data.sorta) * length(data.sortb)
+        check_size(comparisons, state.jobs.max_rows)
+        # the results this run replaces are forgotten first, so they do not count as in use against it
+        replaces === nothing || release_job!(state.jobs, String(replaces))
+        make_room!(state.jobs, comparisons)
         @atomic job.stage = "comparing"
         result = analyse(data, analysis, alpha, settings)
         return job_output(analysis, result, alpha, time() - started)

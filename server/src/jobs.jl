@@ -72,24 +72,75 @@ function tidy()
     return
 end
 
-# Drops finished jobs not used for an hour, beyond the newest 50, or, oldest
-# first, over the row cap. The newest job is always kept.
-function prune!(store::JobStore)
-    finished = [job for job in values(store.jobs) if (@atomic job.status) != "running"]
-    sort!(finished; by = job -> (@atomic job.finished))
-    cutoff = now(UTC) - JOB_TTL
-    excess = length(finished) - MAX_FINISHED_JOBS
+# Results asked for within this long are in use: they are never dropped to
+# make room for another run.
+const IN_USE = Minute(15)
+in_use(job::Job, at) = (@atomic job.used) > at - IN_USE
+
+finished_jobs(store::JobStore) = [job for job in values(store.jobs) if (@atomic job.status) != "running"]
+
+function drop!(store::JobStore, job::Job)
+    delete!(store.jobs, job.id)
+    tidy()
+    return
+end
+
+# Drops finished jobs not used for an hour. Should what is held be over the
+# limits all the same (room is made before a run, in `make_room!`, from what
+# it is expected to produce), the least recently used go, but never one in use.
+function prune!(store::JobStore; at = now(UTC))
+    finished = sort!(finished_jobs(store); by = job -> (@atomic job.used))
     held = sum(result_rows, finished; init = 0)
-    for (i, job) in enumerate(finished)
-        over = held > store.max_rows && i < length(finished)
-        if i <= excess || (@atomic job.used) < cutoff || over
-            held -= result_rows(job)
-            delete!(store.jobs, job.id)
-            tidy()
-        end
+    count = length(finished)
+    for job in finished
+        expired = (@atomic job.used) < at - JOB_TTL
+        over = (held > store.max_rows || count > MAX_FINISHED_JOBS) && !in_use(job, at)
+        expired || over || continue
+        held -= result_rows(job)
+        count -= 1
+        drop!(store, job)
     end
     return
 end
+
+# Makes room for a run about to produce `rows` result rows, before it is
+# computed. Results nobody has asked for in 15 minutes are dropped, the least
+# recently used first, until the run fits. Results in use are left alone: if
+# they leave no room, the run is refused, and told how long until enough of
+# them will have gone unused. One batch computes at a time, so the room found
+# here is still there when the run finishes.
+function make_room!(store::JobStore, rows::Integer; at = now(UTC))
+    lock(store.lock) do
+        prune!(store; at)
+        finished = sort!(finished_jobs(store); by = job -> (@atomic job.used))
+        held = sum(result_rows, finished; init = 0)
+        count = length(finished)
+        fits() = held + rows <= store.max_rows && count < MAX_FINISHED_JOBS
+        for job in finished
+            (fits() || in_use(job, at)) && break
+            held -= result_rows(job)
+            count -= 1
+            drop!(store, job)
+        end
+        fits() && return
+        # everything left is in use; the wait is until the last of those that must go has gone unused
+        minutes = Dates.value(IN_USE)
+        for job in finished
+            haskey(store.jobs, job.id) || continue
+            held -= result_rows(job)
+            count -= 1
+            if fits()
+                minutes = max(1, ceil(Int, Dates.value((@atomic job.used) + IN_USE - at) / 60_000))
+                break
+            end
+        end
+        throw(RequestError(503, no_room(minutes)))
+    end
+    return
+end
+
+no_room(minutes) = "The server is holding results that other analyses are still using, and has no room for this run. " *
+    "Try again in about $minutes minute$(minutes == 1 ? "" : "s")."
 
 sweep!(store::JobStore) = lock(() -> prune!(store), store.lock)
 

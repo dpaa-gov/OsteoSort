@@ -151,29 +151,63 @@ end
             @test occursin("accession, side and element", failed.error)
         end
 
-        @testset "results held in memory are capped" begin
+        @testset "room for a run is made from results nobody is using" begin
             # a store that may hold 1,000 result rows; each of these batches has 400
             store = OSS.JobStore(max_rows = 1000)
             direct = OSJ.ttest(OSJ.prepare_pair_match(groups, OSS.read_upload(read(joinpath(OSS.REPO_ROOT, "web", "files", "example_data.csv"), String)),
                 "humerus", OSJ.available_measurements(groups, "humerus")), 0.1, osj_settings)
             output = OSS.job_output("pairmatch", direct, 0.1, 0.0)
             @test sum(length(first(t)) for t in values(output.tables)) == 400
-            ids = String[]
-            for _ in 1:5
+            function run()
                 job = OSS.start_job!(_ -> output, store)
-                push!(ids, job.id)
                 while (@atomic job.status) == "running"
                     sleep(0.01)
                 end
-                sleep(1.1)   # finish times are compared, and they are kept to the millisecond
+                return job
             end
-            held = [id for id in ids if OSS.find_job(store, id) !== nothing]
-            @test held == ids[4:5]                                   # the two newest fit; older ones were dropped
-            # one batch bigger than the whole cap is still kept, alone
-            small = OSS.JobStore(max_rows = 100)
-            a = OSS.start_job!(_ -> output, small); sleep(1.1)
-            b = OSS.start_job!(_ -> output, small); sleep(0.5)
-            @test OSS.find_job(small, a.id) === nothing && OSS.find_job(small, b.id) !== nothing
+            last_used(job, minutes) = @atomic job.used = OSS.now(OSS.UTC) - OSS.Minute(minutes)
+            held(job) = OSS.find_job(store, job.id) !== nothing
+            refusal(rows) = try OSS.make_room!(store, rows) catch e; e end
+
+            # two sets of results, both asked for within 15 minutes: a third run has no room, and neither is dropped
+            a, b = run(), run()
+            last_used(a, 14); last_used(b, 5)
+            refused = refusal(400)
+            @test refused isa OSS.RequestError && refused.status == 503
+            @test refused.message == OSS.no_room(1)             # a's 15 minutes are up in one more
+            @test occursin("Try again in about 1 minute.", refused.message)
+            @test held(a) && held(b)
+            # a run small enough to fit beside them is let in
+            @test OSS.make_room!(store, 200) === nothing && held(a) && held(b)
+            # once a has gone unused for 15 minutes it makes way; b, still in use, stays
+            last_used(a, 16)
+            @test OSS.make_room!(store, 400) === nothing
+            @test !held(a) && held(b)
+            # of two sets nobody is using, the one unused longer goes, and no more than are needed
+            c = run()
+            last_used(b, 40); last_used(c, 20)
+            OSS.make_room!(store, 400)
+            @test !held(b) && held(c)
+            # a run that needs both of two sets in use gone waits for the later of them
+            d = run()
+            last_used(c, 10); last_used(d, 3)
+            @test refusal(900).message == OSS.no_room(12)
+            @test held(c) && held(d)
+            # after a run, results in use are kept even over the limit; those unused for an hour go
+            e = run()                                           # 1,200 rows held of 1,000
+            @test held(c) && held(d) && held(e)
+            last_used(c, 61)
+            OSS.sweep!(store)
+            @test !held(c) && held(d) && held(e)
+
+            # through the API: a run that names the one it replaces has it forgotten
+            batch = merge(common, (analysis = "pairmatch", settings = settings, element = "humerus", measurements = ["hum_01"], csv = case_csv))
+            first_run = JSON.parse(post("/api/multiple", batch).body).job
+            @test wait_for(first_run).status == "done"
+            second_run = JSON.parse(post("/api/multiple", merge(batch, (replaces = first_run,))).body).job
+            @test wait_for(second_run).status == "done"
+            @test HTTP.get(API * "/api/jobs/$first_run"; status_exception = false).status == 404
+            @test post("/api/multiple", merge(batch, (replaces = 7,))).status == 400
         end
 
         @testset "a run released while it waits is not computed" begin
