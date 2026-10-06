@@ -204,12 +204,30 @@ function limited(handle)
     end
 end
 
+# --- Connections ---
+
+# The most connections held at once; more wait their turn. Each costs about
+# 33 KB, so this bounds what any number of them can take.
+const MAX_CONNECTIONS = 1000
+# A connection that has sent nothing for this long is closed, so that ones
+# left open and silent do not keep the places. HTTP.jl counts the time from
+# the last data received, including while an answer is being worked out, so
+# this must stay above the longest any answer takes: Atlas allows 30 seconds.
+# It looks every one to two times this long, so a silent connection goes
+# within one to three minutes.
+const IDLE_SECONDS = 60
+
+# Listens with the limits above. HTTP.jl's own log messages are turned off:
+# it would otherwise write a warning for every idle connection it closes.
+listen(handle, host, port; max_connections = MAX_CONNECTIONS, idle_seconds = IDLE_SECONDS) =
+    HTTP.serve!(limited(handle), host, port; stream = true, max_connections, readtimeout = idle_seconds, verbose = -1)
+
 # Starts listening straight away; the first reference load runs in the
 # background so the health check answers while the database is slow or down.
 function serve(config::Config; host = "0.0.0.0", port = config.port, sweep = SWEEP_SECONDS)
     state = AppState(config)
     errormonitor(Threads.@spawn ensure_fresh!(state))
-    server = HTTP.serve!(limited(handler(state)), host, port; stream = true)
+    server = listen(handler(state), host, port)
     # results nobody has used for an hour are dropped even when no other run comes along
     errormonitor(Threads.@spawn while isopen(server)
         sleep(sweep)

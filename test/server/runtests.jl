@@ -80,6 +80,40 @@ end
     end
 end
 
+# Connections that are opened and left silent must not keep others out: only
+# so many are held at once, and one that sends nothing is closed.
+@testset "connections are limited, and silent ones closed" begin
+    config = OSS.Config("", 5432, "", "", "", 3838, 30, joinpath(OSS.REPO_ROOT, "web"), joinpath(pkgdir(OSS), "config"), "test")
+    state = OSS.AppState(config)
+    @atomic state.last_attempt = OSS.now(OSS.UTC) # so nothing tries to reach ARDS
+    @test OSS.MAX_CONNECTIONS == 1000 && OSS.IDLE_SECONDS == 60 # above the 30 seconds Atlas allows an answer
+    # a server that holds two connections and closes one silent for a second
+    server = OSS.listen(OSS.handler(state), "127.0.0.1", 8773; max_connections = 2, idle_seconds = 1)
+    health = "GET /healthz HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n"
+    function answer_to(socket; seconds = 15)
+        answer = @async String(read(socket))
+        return timedwait(() -> istaskdone(answer), seconds) == :ok ? fetch(answer) : nothing
+    end
+    ask() = (socket = HTTP.Sockets.connect("127.0.0.1", 8773); write(socket, health); answer_to(socket))
+    try
+        @test startswith(ask(), "HTTP/1.1 200")
+        # two connections that send nothing take both places
+        silent = [HTTP.Sockets.connect("127.0.0.1", 8773) for _ in 1:2]
+        sleep(0.3)
+        # a request arriving now has to wait, and is answered once a silent one has been closed
+        waited = @elapsed answer = ask()
+        @test answer !== nothing && startswith(answer, "HTTP/1.1 200")
+        @test 0.5 < waited < 10
+        # the silent ones were told so and closed
+        closed = [answer_to(socket; seconds = 10) for socket in silent]
+        @test all(text -> text !== nothing && startswith(text, "HTTP/1.1 408"), closed)
+        # and the server carries on
+        @test startswith(ask(), "HTTP/1.1 200")
+    finally
+        close(server)
+    end
+end
+
 # A number of millions of digits takes the parser minutes, during which the
 # server answers nothing: it is refused before it is parsed.
 @testset "a number too long to be one is refused unread" begin
