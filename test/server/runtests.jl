@@ -28,6 +28,35 @@ end
     @test OSS.bone_order(["talus", "capitate"], bone_of, fill(missing, 7)) == ["capitate", "talus"]
 end
 
+# A number of millions of digits takes the parser minutes, during which the
+# server answers nothing: it is refused before it is parsed.
+@testset "a number too long to be one is refused unread" begin
+    bytes(text) = Vector{UInt8}(text)
+    long(text) = OSS.long_number(bytes(text))
+    @test !long("{\"alpha\": 0.1, \"n\": 306, \"x\": 0.30000000000000004, \"e\": 1.5e-7}")
+    @test !long("{\"a\": " * "9"^40 * "}") && long("{\"a\": " * "9"^41 * "}")
+    @test long("{\"a\": 0." * "9"^41 * "}") && long("{\"a\": 1e" * "9"^41 * "}") && long("[" * "1"^41 * "]")
+    @test !long("{\"a\": 1e400, \"b\": 123456789012345678901234567890}")     # short to read; refused later for their size
+    # digits inside a string are text: a case file's accession numbers, whatever their length
+    @test !long("{\"csv\": \"accession,side\\n" * "7"^500 * ",Left\"}")
+    @test !long("{\"csv\": \"a \\\"quoted\\\" " * "7"^100 * "\", \"n\": 5}")
+    @test long("{\"csv\": \"a \\\"quoted\\\" " * "7"^100 * "\", \"n\": " * "5"^41 * "}")
+    @test !long("{\"csv\": \"ends with a backslash \\\\\", \"n\": 12}") && long("{\"csv\": \"x\\\\\", \"n\": " * "1"^41 * "}")
+    # through the request reader: refused in well under a second, where parsing it would take minutes
+    huge = bytes("{\"analysis\": \"pairmatch\", \"alpha\": " * "9"^2_000_000 * "}")
+    seconds = @elapsed refused = try
+        OSS.read_json(HTTP.Request("POST", "/api/single", [], huge))
+    catch e
+        e
+    end
+    @test refused isa OSS.RequestError && refused.status == 400 && refused.message == OSS.NUMBER_TOO_LONG
+    @test seconds < 1
+    decimal = bytes("{\"alpha\": 0." * "9"^2_000_000 * "}")
+    @test (try OSS.read_json(HTTP.Request("POST", "/api/single", [], decimal)) catch e; e end).message == OSS.NUMBER_TOO_LONG
+    # an ordinary request is read as before
+    @test OSS.read_json(HTTP.Request("POST", "/api/single", [], bytes("{\"alpha\": 0.1}"))).alpha == 0.1
+end
+
 # A file small on disk can be a table too large to hold: it is refused before
 # the table is made. 70 KB here would be 540 MB.
 @testset "an upload's table has a size limit" begin

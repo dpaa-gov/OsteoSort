@@ -11,8 +11,41 @@ const REFERENCE_CHANGED = "The reference data has changed. Reload the page and t
 
 bad_request(message) = throw(RequestError(400, message))
 
+# The most digits in a row a number in a request may have. No measurement or
+# setting needs more than 17; a number of millions of digits takes the parser
+# minutes to read, and the server answers nothing else while it does.
+const MAX_NUMBER_DIGITS = 40
+const NUMBER_TOO_LONG = "A number in the request is too long to be read"
+
+# Whether a JSON text has a run of more than `most` digits outside its
+# strings. A case file travels inside a string, where a long run of digits is
+# text (an accession number, say) and costs nothing to read.
+function long_number(text::AbstractVector{UInt8}, most = MAX_NUMBER_DIGITS)
+    in_string = false
+    escaped = false
+    run = 0
+    @inbounds for byte in text
+        if in_string
+            if escaped
+                escaped = false
+            elseif byte == UInt8('\\')
+                escaped = true
+            elseif byte == UInt8('"')
+                in_string = false
+            end
+        elseif UInt8('0') <= byte <= UInt8('9')
+            (run += 1) > most && return true
+        else
+            run = 0
+            byte == UInt8('"') && (in_string = true)
+        end
+    end
+    return false
+end
+
 function read_json(req::HTTP.Request)
     length(req.body) <= MAX_BODY_BYTES || throw(RequestError(413, TOO_LARGE))
+    long_number(req.body) && bad_request(NUMBER_TOO_LONG)
     body = try
         JSON.parse(req.body)
     catch
