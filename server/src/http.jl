@@ -207,8 +207,11 @@ end
 # --- Connections ---
 
 # The most connections held at once; more wait their turn. Each costs about
-# 33 KB, so this bounds what any number of them can take.
-const MAX_CONNECTIONS = 1000
+# 33 KB, so this bounds what any number of them can take, at about 330 MB:
+# what is left of the pod's 2 GiB beside the largest batch (1.5 GB). A lower limit is easier to fill with silent connections,
+# which keeps everyone else out, the health check included, until they are
+# closed: 1,000 was, by 3,000 of them, for up to three minutes.
+const MAX_CONNECTIONS = 10_000
 # A connection that has sent nothing for this long is closed, so that ones
 # left open and silent do not keep the places. HTTP.jl counts the time from
 # the last data received, including while an answer is being worked out, so

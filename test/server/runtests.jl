@@ -86,7 +86,7 @@ end
     config = OSS.Config("", 5432, "", "", "", 3838, 30, joinpath(OSS.REPO_ROOT, "web"), joinpath(pkgdir(OSS), "config"), "test")
     state = OSS.AppState(config)
     @atomic state.last_attempt = OSS.now(OSS.UTC) # so nothing tries to reach ARDS
-    @test OSS.MAX_CONNECTIONS == 1000 && OSS.IDLE_SECONDS == 60 # above the 30 seconds Atlas allows an answer
+    @test OSS.MAX_CONNECTIONS == 10_000 && OSS.IDLE_SECONDS == 60 # above the 30 seconds Atlas allows an answer
     # a server that holds two connections and closes one silent for a second
     server = OSS.listen(OSS.handler(state), "127.0.0.1", 8773; max_connections = 2, idle_seconds = 1)
     health = "GET /healthz HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n"
