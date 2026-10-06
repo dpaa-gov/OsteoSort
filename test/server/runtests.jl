@@ -1,6 +1,6 @@
 using Test
 using HTTP
-using JSON3
+using JSON
 using OsteoSortServer
 using OSJ
 const OSS = OsteoSortServer
@@ -56,7 +56,7 @@ if HAVE_DB
         @test only(OSS.query(conn, "SHOW statement_timeout").statement_timeout) == "15s"
         close(conn)
     end
-    meta = JSON3.read(JSON3.write(OSS.build_meta(snapshot, config)))
+    meta = JSON.parse(JSON.json(OSS.build_meta(snapshot, config)))
 
     # What the page builds its dropdowns from must describe the reference data as loaded
     @testset "page metadata" begin
@@ -101,7 +101,7 @@ if HAVE_DB
             @test page.status == 200 && occursin("<title>OsteoSort</title>", String(page.body))
             response = HTTP.get("http://127.0.0.1:8765/api/meta")
             @test response.status == 200
-            @test JSON3.read(response.body).version == config.version
+            @test JSON.parse(response.body).version == config.version
             # a second page load inside the max age reuses the snapshot
             loaded_at = (@atomic state.snapshot).loaded_at
             HTTP.get("http://127.0.0.1:8765/api/meta")

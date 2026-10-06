@@ -2,7 +2,7 @@ module OsteoSortServer
 
 using Dates
 using HTTP
-using JSON3
+using JSON
 using LibPQ
 using Printf
 using Random

@@ -1,12 +1,12 @@
 name = "OsteoSortServer"
 uuid = "65314acc-07de-4768-819d-154fb2e2c80f"
-authors = ["Jeff Lynch <jjlynch@osteocoder.com>"]
 version = "2.0.0"
+authors = ["Jeff Lynch <jjlynch@osteocoder.com>"]
 
 [deps]
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
-JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
+JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 LibPQ = "194296ae-ab2e-5f79-8cd4-7183a0a5a0d1"
 OSJ = "85bb30df-6cad-432e-80a5-006a23c2150f"
 PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
@@ -19,7 +19,7 @@ OSJ = {path = "../OSJ"}
 
 [compat]
 HTTP = "1"
-JSON3 = "1"
+JSON = "1"
 LibPQ = "1"
 PrecompileTools = "1"
 Tables = "1"

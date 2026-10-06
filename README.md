@@ -16,7 +16,7 @@ Each analysis runs on a single pair typed in by hand, or on a whole case file at
 |---|---|---|
 | OSJ | The method: a Julia package with no web or database code | `OSJ/` |
 | Server | A Julia HTTP server: loads reference data, reads case files, runs OSJ, serves the page | `server/` |
-| Page | Static HTML, CSS and JavaScript on Bootstrap 5; no build step | `web/` |
+| Page | Static HTML, CSS and JavaScript on Bootstrap 5 | `web/` |
 | Reference data | ARDS, a PostgreSQL database, read-only | external |
 
 The server reads the reference groups from ARDS when the page is opened, so a collection, individual or measurement switched off for OsteoSort in ARDS disappears from the app on the next page load.

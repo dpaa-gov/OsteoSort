@@ -14,11 +14,11 @@ bad_request(message) = throw(RequestError(400, message))
 function read_json(req::HTTP.Request)
     length(req.body) <= MAX_BODY_BYTES || throw(RequestError(413, TOO_LARGE))
     body = try
-        JSON3.read(req.body)
+        JSON.parse(req.body)
     catch
         bad_request("The request body is not valid JSON")
     end
-    body isa JSON3.Object || bad_request("The request body must be a JSON object")
+    body isa JSON.Object || bad_request("The request body must be a JSON object")
     return body
 end
 
@@ -36,15 +36,22 @@ function list_field(body, name)
     return String.(value)
 end
 
+# A number from a request as an ordinary one, or NaN for anything else. A
+# number too large or too small for one arrives as a big number that passes
+# a check itself but is infinite or zero once converted, so it is converted
+# before it is checked.
+plain_number(value) = value isa Real ? Float64(value) : NaN
+
 function alpha_field(body)
     value = field(body, :alpha)
-    value isa Real && 0 < value <= 1 || bad_request("alpha must be a number above 0 and at most 1")
-    return Float64(value)
+    alpha = plain_number(value)
+    0 < alpha <= 1 || bad_request("alpha must be a number above 0 and at most 1")
+    return alpha
 end
 
 function settings_field(body)
     settings = field(body, :settings)
-    settings isa JSON3.Object || bad_request("settings must be an object")
+    settings isa JSON.Object || bad_request("settings must be an object")
     flag(name) = (v = get(settings, name, false); v isa Bool ? v : bad_request("settings.$name must be true or false"))
     tails = get(settings, :tails, 2)
     tails in (1, 2) || bad_request("settings.tails must be 1 or 2")
@@ -54,11 +61,12 @@ end
 # Typed-in measurements by code; blank fields are null or left out
 function values_field(body, name)
     value = field(body, name)
-    value isa JSON3.Object || bad_request("$name must be an object of measurement values")
+    value isa JSON.Object || bad_request("$name must be an object of measurement values")
     entries = Dict{String, Any}()
     for (code, number) in pairs(value)
-        number === nothing || number isa Real && isfinite(number) && number > 0 || bad_request("$(uppercasefirst(String(code))) must be a number above 0")
-        entries[lowercase(String(code))] = number
+        amount = number === nothing ? nothing : plain_number(number)
+        amount === nothing || isfinite(amount) && amount > 0 || bad_request("$(uppercasefirst(String(code))) must be a number above 0")
+        entries[lowercase(String(code))] = amount
     end
     return entries
 end
@@ -260,10 +268,16 @@ function job_handler(state::AppState, req::HTTP.Request)
     return json_response(200, (
         id = job.id, status = status, analysis = output.analysis,
         summary = output.summary, histogram = output.histogram,
-        tables = Dict(name => (columns = [display_name(k) for k in keys(table)], total = row_count(table))
-                      for (name, table) in output.tables),
+        tables = table_summaries(output.tables),
     ))
 end
+
+# The result tables' headings and sizes, always in this order. They are kept
+# in a dictionary, whose own order is not fixed and not the same from one
+# JSON package to another.
+const TABLE_ORDER = ("not_excluded", "excluded", "rejected")
+table_summaries(tables) = (; (Symbol(name) => (columns = [display_name(k) for k in keys(tables[name])], total = row_count(tables[name]))
+                              for name in TABLE_ORDER if haskey(tables, name))...)
 
 # The page calls this when a run's results are cleared, replaced by a new run,
 # or the page is closed, so each open page holds at most one set of results.

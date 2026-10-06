@@ -35,16 +35,16 @@ resident_mib() = parse(Int, split(read("/proc/self/statm", String))[2]) * 4096 /
         for side in ("Left", "Right"), i in 1:per_side
             push!(rows, "$(side[1])$i,$side,Humerus," * join((round(40 + (i * (k + 3)) % 23 + 7k; digits = 1) for k in 1:3), ","))
         end
-        body = JSON3.write((analysis = "pairmatch", references = ["Sample group"], alpha = 0.1, csv = join(rows, "\n"),
+        body = JSON.json((analysis = "pairmatch", references = ["Sample group"], alpha = 0.1, csv = join(rows, "\n"),
             element = "humerus", measurements = codes,
             settings = (absolute = false, yeojohnson = false, zeromean = false, tails = 2)))
 
         function run()
             response = respond(HTTP.Request("POST", "/api/multiple", ["Content-Type" => "application/json"], Vector{UInt8}(body)))
-            job = JSON3.read(response.body).job
+            job = JSON.parse(response.body).job
             status = nothing
             for _ in 1:1200
-                status = JSON3.read(respond(HTTP.Request("GET", "/api/jobs/$job")).body)
+                status = JSON.parse(respond(HTTP.Request("GET", "/api/jobs/$job")).body)
                 status.status == "running" || break
                 sleep(0.05)
             end

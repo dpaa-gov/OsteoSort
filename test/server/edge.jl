@@ -13,7 +13,7 @@
 
 @testset "edge cases" begin
     groups = [only(g for g in snapshot.groups if g.label == label)
-              for label in JSON3.read(JSON3.write(OSS.build_meta(snapshot, config))).default_references]
+              for label in JSON.parse(JSON.json(OSS.build_meta(snapshot, config))).default_references]
     text = read(joinpath(DATA, "edge_cases.csv"), String)
     upload = OSS.read_upload(text)
     settings = OSJ.Settings(false, false, false, 2)
@@ -114,12 +114,12 @@
     @testset "through the API" begin
         server, _ = OSS.serve(config; host = "127.0.0.1", port = 8767)
         api = "http://127.0.0.1:8767"
-        submit(body) = JSON3.read(HTTP.post(api * "/api/multiple", ["Content-Type" => "application/json"],
-            JSON3.write(merge((references = [g.label for g in groups], alpha = 0.1, csv = text,
+        submit(body) = JSON.parse(HTTP.post(api * "/api/multiple", ["Content-Type" => "application/json"],
+            JSON.json(merge((references = [g.label for g in groups], alpha = 0.1, csv = text,
                 settings = (absolute = false, yeojohnson = false, zeromean = false, tails = 2)), body))).body).job
         function finished(job)
             for _ in 1:1200
-                status = JSON3.read(HTTP.get("$api/api/jobs/$job").body)
+                status = JSON.parse(HTTP.get("$api/api/jobs/$job").body)
                 status.status == "running" || return status
                 sleep(0.05)
             end
@@ -129,7 +129,7 @@
             status = finished(submit((analysis = "pairmatch", element = "humerus", measurements = ["hum_01", "hum_02", "hum_03", "hum_06"])))
             @test status.status == "done"
             @test (status.summary.comparisons, status.summary.rejected, status.summary.specimens) == (15, 4, 8)
-            page = JSON3.read(HTTP.get("$api/api/jobs/$(status.id)/rows?table=rejected").body)
+            page = JSON.parse(HTTP.get("$api/api/jobs/$(status.id)/rows?table=rejected").body)
             @test collect(page.columns) == ["Accession 1", "Element 1", "Side 1", "Accession 2", "Element 2", "Side 2", "Reason"]
             @test collect(page.rows[1]) == ["H4", "Humerus", "Left", "", "", "", OSJ.UNMEASURED]
             csv = OSS.parse_csv(String(HTTP.get("$api/api/jobs/$(status.id)/download?table=not_excluded").body))
@@ -149,15 +149,15 @@
                 push!(rows, "$(side[1])$i,$side,Humerus,$(290 + 0.11i + wobble),$(55 + 0.03i + wobble / 2),$(i % 9 == 0 ? "" : 40 + 0.02i)")
             end
             started = time()
-            job = JSON3.read(HTTP.post(api * "/api/multiple", ["Content-Type" => "application/json"],
-                JSON3.write((references = [g.label for g in groups], alpha = 0.1, csv = join(rows, "\n"), analysis = "pairmatch",
+            job = JSON.parse(HTTP.post(api * "/api/multiple", ["Content-Type" => "application/json"],
+                JSON.json((references = [g.label for g in groups], alpha = 0.1, csv = join(rows, "\n"), analysis = "pairmatch",
                     element = "humerus", measurements = ["hum_01", "hum_02", "hum_06"],
                     settings = (absolute = false, yeojohnson = true, zeromean = false, tails = 2)))).body).job
             status = finished(job)
             seconds = time() - started
             @test status.status == "done" && status.summary.comparisons == 250_000 && status.summary.specimens == 1000
             total = status.tables.excluded.total
-            last_page = JSON3.read(HTTP.get("$api/api/jobs/$job/rows?table=excluded&offset=$(total - 5)&limit=10&sort=11&dir=desc").body)
+            last_page = JSON.parse(HTTP.get("$api/api/jobs/$job/rows?table=excluded&offset=$(total - 5)&limit=10&sort=11&dir=desc").body)
             @test length(last_page.rows) == 5
             paging = @elapsed HTTP.get("$api/api/jobs/$job/rows?table=excluded&search=L250&sort=11&dir=desc")
             download = HTTP.get("$api/api/jobs/$job/download?table=excluded").body
@@ -207,7 +207,7 @@ end
     println("Combining reference groups: sample sizes add up across ", pooled_pairs, " comparisons")
 
     # all four default groups together equal the sum of the four alone
-    labels = collect(JSON3.read(JSON3.write(OSS.build_meta(snapshot, config))).default_references)
+    labels = collect(JSON.parse(JSON.json(OSS.build_meta(snapshot, config))).default_references)
     together = sample_sizes(labels, "humerus", ["hum_01", "hum_02"])
     @test together.n == sum(sample_sizes([label], "humerus", ["hum_01", "hum_02"]).n for label in labels)
 end
@@ -262,12 +262,12 @@ end
     # a single comparison that cannot be made says why
     server, _ = OSS.serve(config; host = "127.0.0.1", port = 8768)
     try
-        response = HTTP.post("http://127.0.0.1:8768/api/single", ["Content-Type" => "application/json"], JSON3.write((
+        response = HTTP.post("http://127.0.0.1:8768/api/single", ["Content-Type" => "application/json"], JSON.json((
             analysis = "pairmatch", references = ["SI japanese female"], alpha = 0.1, element = "humerus",
             settings = (absolute = false, yeojohnson = false, zeromean = false, tails = 2),
             left = (hum_01 = 300,), right = (hum_01 = 301,))); status_exception = false)
         @test response.status == 422
-        @test JSON3.read(response.body).error == "No comparison could be made. Reference sample too small: 1 (minimum 10)"
+        @test JSON.parse(response.body).error == "No comparison could be made. Reference sample too small: 1 (minimum 10)"
     finally
         close(server)
     end

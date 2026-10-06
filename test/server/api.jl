@@ -3,8 +3,8 @@
 
 const API = "http://127.0.0.1:8766"
 
-post(path, body) = HTTP.post(API * path, ["Content-Type" => "application/json"], JSON3.write(body); status_exception = false)
-get_json(path) = JSON3.read(HTTP.get(API * path; status_exception = false).body)
+post(path, body) = HTTP.post(API * path, ["Content-Type" => "application/json"], JSON.json(body); status_exception = false)
+get_json(path) = JSON.parse(HTTP.get(API * path; status_exception = false).body)
 
 function wait_for(job)
     for _ in 1:600
@@ -30,11 +30,11 @@ end
             right = Dict("hum_01" => 306, "hum_02" => 63, "hum_03" => 42.6, "hum_06" => 48.2)
             response = post("/api/single", merge(common, (analysis = "pairmatch", settings = settings, element = "humerus", left = left, right = right)))
             @test response.status == 200
-            body = JSON3.read(response.body)
+            body = JSON.parse(response.body)
             # a reference group named twice counts once
             twice = post("/api/single", merge(common, (references = vcat(references, references), analysis = "pairmatch",
                 settings = settings, element = "humerus", left = left, right = right)))
-            @test JSON3.read(twice.body).results.rows == body.results.rows
+            @test JSON.parse(twice.body).results.rows == body.results.rows
             direct = OSJ.ttest(OSJ.prepare_single_pair_match(groups, "humerus", left, right), 0.1, osj_settings)
             @test collect(body.results.columns) ==
                   ["Accession 1", "Element 1", "Side 1", "Accession 2", "Element 2", "Side 2", "Measurements", "n", "Mean", "SD", "p", "Result", "Reference"]
@@ -52,7 +52,7 @@ end
             response = post("/api/single", merge(common, (analysis = "regression", element_a = "humerus", element_b = "femur",
                 side_a = "Left", side_b = "Left", values_a = values_a, values_b = values_b)))
             @test response.status == 200
-            body = JSON3.read(response.body)
+            body = JSON.parse(response.body)
             direct = OSJ.regression_test(OSJ.prepare_single_regression(groups, "humerus", "femur", "Left", "Left", values_a, values_b), 0.1)
             row = only(body.results.rows)
             @test collect(body.results.columns)[8:11] == ["n", "R²", "p", "Result"]
@@ -66,7 +66,7 @@ end
             response = post("/api/single", merge(common, (analysis = "articulation", settings = settings, element_a = "humerus",
                 element_b = "ulna", side = "Left", values_a = (hum_06 = 45.5,), values_b = (uln_11 = 28.7,))))
             @test response.status == 200
-            row = only(JSON3.read(response.body).results.rows)
+            row = only(JSON.parse(response.body).results.rows)
             pairs = OSJ.articulation_pairs(groups, OSS.articulation_config(config))
             direct = OSJ.ttest(OSJ.prepare_single_articulation(groups, pairs, "humerus", "ulna", "Left",
                 Dict("hum_06" => 45.5), Dict("uln_11" => 28.7)), 0.1, osj_settings; articulation = true)
@@ -84,11 +84,11 @@ end
             # a typed measurement must be above zero
             for bad in (0, -300)
                 refused = post("/api/single", merge(base, (left = (hum_01 = bad,),)))
-                @test refused.status == 400 && JSON3.read(refused.body).error == "Hum_01 must be a number above 0"
+                @test refused.status == 400 && JSON.parse(refused.body).error == "Hum_01 must be a number above 0"
             end
             # a batch with a field missing is refused when it is asked for, not after it has queued
             incomplete = post("/api/multiple", merge(common, (analysis = "pairmatch", settings = settings, csv = "a,b,c,d\n")))
-            @test incomplete.status == 400 && JSON3.read(incomplete.body).error == "Missing field: element"
+            @test incomplete.status == 400 && JSON.parse(incomplete.body).error == "Missing field: element"
             # a run is refused when it would make more comparisons than may be held
             @test OSS.check_size(2_000_000, 2_000_000)
             too_big = try OSS.check_size(9_000_000, 2_000_000) catch e; e end
@@ -104,7 +104,7 @@ end
             response = post("/api/multiple", merge(common, (analysis = "pairmatch", settings = settings,
                 element = "humerus", measurements = measurements, csv = case_csv)))
             @test response.status == 202
-            job = JSON3.read(response.body).job
+            job = JSON.parse(response.body).job
             status = wait_for(job)
             @test status.status == "done"
             kept = findall(==("Cannot Exclude"), found.result)
@@ -145,7 +145,7 @@ end
             @test HTTP.get(API * "/api/jobs/$job/rows?table=excluded"; status_exception = false).status == 404
             @test HTTP.post(API * "/api/jobs/$job/release").status == 204       # and doing it twice is harmless
 
-            failed = wait_for(JSON3.read(post("/api/multiple", merge(common, (analysis = "pairmatch", settings = settings,
+            failed = wait_for(JSON.parse(post("/api/multiple", merge(common, (analysis = "pairmatch", settings = settings,
                 element = "humerus", measurements = ["hum_01"], csv = "accession,side\n1,left\n"))).body).job)
             @test failed.status == "error"
             @test occursin("accession, side and element", failed.error)
@@ -191,16 +191,16 @@ end
             # an upload over 5 MB is refused
             oversized = post("/api/multiple", merge(common, (analysis = "pairmatch", settings = settings, element = "humerus",
                 measurements = ["hum_01"], csv = "accession,side,element,Hum_01\n" * repeat("H1,Left,Humerus,300\n", 320_000))))
-            @test oversized.status == 413 && occursin("at most 5 MB", JSON3.read(oversized.body).error)
+            @test oversized.status == 413 && occursin("at most 5 MB", JSON.parse(oversized.body).error)
             # the limit is on the file, not on the request carrying it: a file with every cell in
             # quotes is under 5 MB although its request is well over
             quoted = "accession,side,element,Hum_01,Hum_02,Hum_03,Hum_04,Hum_05\n" *
                      repeat("\"H1\",\"Left\",\"Humerus\",\"300\",\"\",\"\",\"\",\"\"\n", 120_000)
             request = merge(common, (analysis = "pairmatch", settings = settings, element = "humerus", measurements = ["hum_01"], csv = quoted))
-            @test sizeof(quoted) < 5 * 1024^2 && sizeof(JSON3.write(request)) > 6 * 1024^2
+            @test sizeof(quoted) < 5 * 1024^2 && sizeof(JSON.json(request)) > 6 * 1024^2
             accepted = post("/api/multiple", request)
             @test accepted.status == 202
-            wait_for(JSON3.read(accepted.body).job)
+            wait_for(JSON.parse(accepted.body).job)
             # twenty runs may compute or wait; the next is told the server is busy, until one finishes
             store = OSS.JobStore()
             output = OSS.JobOutput("pairmatch", Dict{String, NamedTuple}(), (;), (;))
@@ -288,7 +288,7 @@ end
             request = merge(common, (analysis = "pairmatch", settings = merge(settings, (yeojohnson = true,)), element = "femur",
                 measurements = OSJ.available_measurements(groups, "femur"), csv = big_csv))
             started = time()
-            jobs = [JSON3.read(post("/api/multiple", request).body).job for _ in 1:3]
+            jobs = [JSON.parse(post("/api/multiple", request).body).job for _ in 1:3]
             slowest, checks = 0.0, 0
             while any(job -> get_json("/api/jobs/$job").status == "running", jobs)
                 slowest = max(slowest, @elapsed HTTP.get(API * "/healthz"))

@@ -18,7 +18,7 @@ function refresh_reference!(state::AppState)
     @atomic state.last_attempt = now(UTC)
     try
         snapshot = load_reference(state.config)
-        meta_json = JSON3.write(build_meta(snapshot, state.config))
+        meta_json = JSON.json(build_meta(snapshot, state.config))
         @atomic state.snapshot = snapshot
         @atomic state.meta_json = meta_json
         @atomic state.load_error = ""
@@ -61,7 +61,7 @@ end
 
 json_response(status, body::AbstractString) =
     HTTP.Response(status, ["Content-Type" => "application/json; charset=utf-8", "Cache-Control" => "no-store"], body)
-json_response(status, body) = json_response(status, JSON3.write(body))
+json_response(status, body) = json_response(status, JSON.json(body))
 error_response(status, message) = json_response(status, (error = message,))
 
 function meta_handler(state::AppState)
