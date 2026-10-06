@@ -28,6 +28,58 @@ end
     @test OSS.bone_order(["talus", "capitate"], bone_of, fill(missing, 7)) == ["capitate", "talus"]
 end
 
+# No more of a request is read than its route allows: one of a gigabyte or two
+# would otherwise be held in memory before anything could refuse it.
+@testset "a request is read only as far as its limit" begin
+    config = OSS.Config("", 5432, "", "", "", 3838, 30, joinpath(OSS.REPO_ROOT, "web"), joinpath(pkgdir(OSS), "config"), "test")
+    state = OSS.AppState(config)
+    @atomic state.last_attempt = OSS.now(OSS.UTC) # so nothing tries to reach ARDS
+    inner = OSS.handler(state)
+    largest = Ref(0) # the largest body the app itself was handed
+    server = HTTP.serve!(OSS.limited(req -> (largest[] = max(largest[], length(req.body)); inner(req))), "127.0.0.1", 8771; stream = true)
+    url = "http://127.0.0.1:8771"
+    post(path, body) = HTTP.post(url * path, ["Content-Type" => "application/json"], body; status_exception = false, retry = false)
+    message(response) = JSON.parse(response.body).error
+    # a request written by hand, for what the client above will not send; the answer, or nothing if none came in time
+    function raw(text; seconds = 10)
+        socket = HTTP.Sockets.connect("127.0.0.1", 8771)
+        write(socket, text)
+        answer = @async String(read(socket))
+        done = timedwait(() -> istaskdone(answer), seconds) == :ok
+        close(socket)
+        return done ? fetch(answer) : nothing
+    end
+    try
+        @test OSS.body_limit("/api/multiple") == OSS.MAX_BODY_BYTES && OSS.body_limit("/api/single") == OSS.SMALL_BODY_BYTES
+        # small requests reach the app as before
+        small = "{\"analysis\": \"nope\"}"
+        ordinary = post("/api/single", small)
+        @test ordinary.status in (400, 503) && largest[] == sizeof(small)
+        @test HTTP.get(url * "/healthz").status == 200
+        # over a small route's limit: refused, and never handed to the app
+        largest[] = 0
+        over = post("/api/single", "{\"pad\": \"" * "x"^100_000 * "\"}")
+        @test over.status == 413 && message(over) == OSS.REQUEST_TOO_LARGE && largest[] == 0
+        # the upload route takes a case file's worth, and no more
+        fits = post("/api/multiple", "{\"pad\": \"" * "x"^(11 * 1024^2) * "\"}")
+        @test fits.status != 413 && largest[] > 11 * 1024^2
+        largest[] = 0
+        upload = post("/api/multiple", "{\"pad\": \"" * "x"^(13 * 1024^2) * "\"}")
+        @test upload.status == 413 && message(upload) == OSS.TOO_LARGE && largest[] == 0
+        # a request that says it is 2 GB is refused on its word: nothing of it is waited for or read
+        seconds = @elapsed answer = raw("POST /api/multiple HTTP/1.1\r\nHost: x\r\nContent-Length: 2000000000\r\n\r\n{\"csv\": \"")
+        @test answer !== nothing && startswith(answer, "HTTP/1.1 413") && seconds < 5 && largest[] == 0
+        # one that does not say how large it is is cut off once it has gone over
+        chunk = string(16384; base = 16) * "\r\n" * "x"^16384 * "\r\n"
+        answer = raw("POST /api/single HTTP/1.1\r\nHost: x\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n" * chunk^8 * "0\r\n\r\n")
+        @test answer !== nothing && startswith(answer, "HTTP/1.1 413") && largest[] == 0
+        # and the server is still answering afterwards
+        @test HTTP.get(url * "/healthz").status == 200
+    finally
+        close(server)
+    end
+end
+
 # A number of millions of digits takes the parser minutes, during which the
 # server answers nothing: it is refused before it is parsed.
 @testset "a number too long to be one is refused unread" begin

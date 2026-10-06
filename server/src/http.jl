@@ -128,12 +128,88 @@ function handler(state::AppState)
     end
 end
 
+# --- Reading a request, within a size limit ---
+
+# HTTP.jl's own way of handing a handler its request reads the whole body
+# first, whatever its size, so a request of a gigabyte or two would fill the
+# pod's memory before any check could refuse it. Requests are read here
+# instead, and no more of one is kept than its route allows.
+const SMALL_BODY_BYTES = 64 * 1024
+const REQUEST_TOO_LARGE = "The request is too large"
+# How much of a refused request is read and thrown away so that its sender
+# gets the answer; one larger than this is refused and the connection closed.
+const DISCARD_BYTES = 32 * 1024^2
+
+# A case file is uploaded to one route; every other request is small.
+body_limit(target) = startswith(target, "/api/multiple") ? MAX_BODY_BYTES : SMALL_BODY_BYTES
+
+# Reads a request's body up to `limit`. Returns nothing when it is larger:
+# by the size it declares, without reading it, or, where it declares none,
+# as soon as more than the limit has arrived.
+function read_body(stream, limit)
+    declared = tryparse(Int, HTTP.header(stream.message, "Content-Length"))
+    declared !== nothing && declared > limit && return nothing
+    body = UInt8[]
+    while !eof(stream)
+        append!(body, readavailable(stream))
+        length(body) > limit && return nothing
+    end
+    return body
+end
+
+# Reads on, keeping nothing, until the request ends or `most` bytes have
+# gone. Returns whether the whole request has now been read.
+function discard(stream, most)
+    declared = tryparse(Int, HTTP.header(stream.message, "Content-Length"))
+    declared !== nothing && declared > most && return false
+    gone = 0
+    while !eof(stream)
+        gone += length(readavailable(stream))
+        gone > most && return false
+    end
+    return true
+end
+
+# What the server runs for each request: `handle` is given the request once
+# its body has been read within the limit.
+function limited(handle)
+    return function (stream::HTTP.Stream)
+        request::HTTP.Request = stream.message
+        limit = body_limit(request.target)
+        body = read_body(stream, limit)
+        finished = true
+        if body === nothing
+            @warn "Request refused: larger than its limit" target = request.target limit declared = HTTP.header(request, "Content-Length", "not given")
+            response = error_response(413, limit == MAX_BODY_BYTES ? TOO_LARGE : REQUEST_TOO_LARGE)
+            HTTP.setheader(response, "Connection" => "close")
+            finished = discard(stream, DISCARD_BYTES)
+        else
+            request.body = body
+            response = handle(request)
+        end
+        request.response = response
+        response.request = request
+        HTTP.startwrite(stream)
+        write(stream, response.body)
+        if !finished
+            # The rest of the request is not going to be read: the answer is
+            # completed and the connection dropped. HTTP.jl is told the
+            # connection went away, which it takes quietly; leaving it to find
+            # a request half read would be logged as a failure of the handler.
+            HTTP.closewrite(stream)
+            close(stream)
+            throw(Base.IOError("request larger than its limit; connection closed", Base.UV_ECONNABORTED))
+        end
+        return
+    end
+end
+
 # Starts listening straight away; the first reference load runs in the
 # background so the health check answers while the database is slow or down.
 function serve(config::Config; host = "0.0.0.0", port = config.port, sweep = SWEEP_SECONDS)
     state = AppState(config)
     errormonitor(Threads.@spawn ensure_fresh!(state))
-    server = HTTP.serve!(handler(state), host, port)
+    server = HTTP.serve!(limited(handler(state)), host, port; stream = true)
     # results nobody has used for an hour are dropped even when no other run comes along
     errormonitor(Threads.@spawn while isopen(server)
         sleep(sweep)
