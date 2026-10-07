@@ -7,6 +7,24 @@
 # Memory this process holds, as the system counts it against a pod
 resident_mib() = parse(Int, split(read("/proc/self/statm", String))[2]) * 4096 / 1024^2
 
+# These two reach a result table, and are kept apart from the test below so
+# that nothing of theirs is left there holding it: a table is only given back
+# when nothing holds it at all.
+
+# A table's first column, held so as not to count: `.value` is nothing once the table has gone
+@noinline held_weakly(state, job, name) = WeakRef(first((@atomic OSS.find_job(state.jobs, job).output).tables[name]))
+
+# A download given `seconds` to finish, straight from its handler: whether it did, and the lines it wrote
+@noinline function download_within(state, job, name, seconds)
+    request = HTTP.Request("GET", "/api/jobs/$job/download?table=$name")
+    request.context[:params] = Dict("id" => job)
+    body = OSS.download_handler(state, request; seconds).body
+    written = IOBuffer()
+    finished = body.write_to(written)
+    body.finished()
+    return finished, count(==(UInt8('\n')), take!(written))
+end
+
 @testset "memory is given back" begin
     if !Sys.islinux()
         @test_skip "needs /proc"
@@ -176,23 +194,11 @@ resident_mib() = parse(Int, split(read("/proc/self/statm", String))[2]) * 4096 /
             # for here with no time at all, straight from its handler: the
             # headings go and nothing more.
             @test OSS.DOWNLOAD_SECONDS == 600
-            request = HTTP.Request("GET", "/api/jobs/$job/download?table=excluded")
-            request.context[:params] = Dict("id" => job)
-            # in a function, so that the body, which holds the table, is not kept here
-            function out_of_time()
-                body = OSS.download_handler(state, request; seconds = 0).body
-                written = IOBuffer()
-                finished = body.write_to(written)
-                body.finished()
-                return finished, count(==(UInt8('\n')), take!(written))
-            end
-            @test out_of_time() == (false, 1)
+            @test download_within(state, job, "excluded", 0) == (false, 1)
 
             # Results cleared while they are being downloaded are given back
             # then, not when the download would have ended: it stops, short.
-            # taken in a function, so that nothing here is left holding it
-            watch(job) = WeakRef(first((@atomic OSS.find_job(state.jobs, job).output).tables["excluded"]))
-            column = watch(job)
+            column = held_weakly(state, job, "excluded")
             cut = download(() -> release(job))
             @test !cut.complete && 0 < cut.lines < total + 1
             @test OSS.find_job(state.jobs, job) === nothing
