@@ -76,5 +76,133 @@ resident_mib() = parse(Int, split(read("/proc/self/statm", String))[2]) * 4096 /
         @test held - before > 50                     # the results really were in memory
         @test after - before < (held - before) / 4   # and most of it came back on release
         @test OSS.find_job(state.jobs, job) === nothing
+
+        # A download is sent as it is written. Made whole first, each took its
+        # file's size in memory, and twelve of this table at once 890 MiB.
+        server = OSS.listen(respond, "127.0.0.1", 8775)
+        try
+            job, status = run()
+            total = status.tables.excluded.total
+            url = "http://127.0.0.1:8775/api/jobs/$job/download?table=excluded"
+            # reads a download as a browser saving it would, keeping none of it; `after_first` runs once some
+            # has come, and with `pause` it stops reading for that many seconds after every 8 MB
+            # Each request here is made on a connection of its own. The client
+            # would otherwise keep them to use again, and hand out ones the
+            # server has since closed: with no second try, as here, that request fails.
+            fresh() = HTTP.Pool(1)
+            function download(after_first = () -> nothing; from = url, pause = 0)
+                bytes, lines = 0, 0
+                complete = try
+                    HTTP.open("GET", from; retry = false, pool = fresh()) do io
+                        HTTP.startread(io)
+                        while !eof(io)
+                            piece = readavailable(io)
+                            bytes == 0 && after_first()
+                            pause > 0 && bytes ÷ 8_000_000 < (bytes + length(piece)) ÷ 8_000_000 && sleep(pause)
+                            bytes += length(piece)
+                            lines += count(==(UInt8('\n')), piece)
+                        end
+                    end
+                    true
+                catch e
+                    e isa HTTP.Exceptions.StatusError && @warn "Download refused" status = e.status
+                    false
+                end
+                return (; complete, bytes, lines)
+            end
+            one = download() # once first, as above
+            @test one.complete && one.lines == total + 1
+            held = settled()
+            peak = Ref(held)
+            going = Ref(true)
+            watcher = Threads.@spawn while going[]
+                peak[] = max(peak[], resident_mib())
+                sleep(0.02)
+            end
+            downloads = fetch.([@async download() for _ in 1:12])
+            going[] = false
+            wait(watcher)
+            @info "Memory over twelve downloads at once of $(round(Int, downloads[1].bytes / 1e6)) MB each" held peak = peak[]
+            @test all(d -> d.complete && d.lines == total + 1, downloads)
+            # About 170 MiB locally, most of it not yet collected. Loose for
+            # the same reason as above, and well under what it was.
+            @test peak[] - held < 450
+
+            # Only so many downloads run at once, each holding the piece it is
+            # sending: one more is refused, and the page, which asks first, is
+            # told so. Twenty here are begun and then left unread.
+            ask(path) = HTTP.get("http://127.0.0.1:8775" * path; status_exception = false, retry = false, pool = fresh())
+            asking = "/api/jobs/$job/download?table=excluded"
+            @test OSS.MAX_DOWNLOADS == 20 && state.jobs.downloads[] == 0
+            @test ask(asking * "&check=1").status == 204
+            @test ask("/api/jobs/nope/download?table=excluded&check=1").status == 404
+            go = Base.Event()
+            waiting = [@async download(() -> wait(go)) for _ in 1:OSS.MAX_DOWNLOADS]
+            @test timedwait(() -> state.jobs.downloads[] == OSS.MAX_DOWNLOADS, 30) == :ok
+            for refused in (ask(asking), ask(asking * "&check=1"))
+                @test refused.status == 503 && JSON.parse(refused.body).error == OSS.DOWNLOADS_BUSY
+            end
+            @test state.jobs.downloads[] == OSS.MAX_DOWNLOADS # a refusal takes no place
+            # everything else is answered meanwhile
+            @test ask("/healthz").status == 200 && ask("/api/jobs/$job/rows?table=excluded").status == 200
+            notify(go)
+            @test all(d -> d.complete && d.lines == total + 1, fetch.(waiting))
+            # their places come back, and the next download is taken
+            @test timedwait(() -> state.jobs.downloads[] == 0, 10) == :ok
+            @test download().complete
+
+            # A connection that has sent nothing for a while is closed, and a
+            # download sends nothing: one that is being read must not count as
+            # silent, however long it takes. Here silent is a second.
+            patient = OSS.listen(respond, "127.0.0.1", 8776; idle_seconds = 1)
+            try
+                from = replace(url, "8775" => "8776")
+                seconds = @elapsed slow = download(; from, pause = 0.3)
+                @test seconds > 4 && slow.complete && slow.lines == total + 1
+                # One that stops being read is closed, and its place comes
+                # back, though the reader keeps its connection open. HTTP.jl
+                # by itself leaves it: forty seconds on it still had its place.
+                reader = HTTP.Sockets.connect("127.0.0.1", 8776)
+                write(reader, "GET /api/jobs/$job/download?table=excluded HTTP/1.1\r\nHost: x\r\n\r\n")
+                @test startswith(String(readavailable(reader)), "HTTP/1.1 200")
+                @test timedwait(() -> state.jobs.downloads[] == 1, 5) == :ok
+                @test timedwait(() -> state.jobs.downloads[] == 0, 10) == :ok
+                close(reader)
+            finally
+                close(patient)
+            end
+
+            # However it is read, a download has so long and no longer. Asked
+            # for here with no time at all, straight from its handler: the
+            # headings go and nothing more.
+            @test OSS.DOWNLOAD_SECONDS == 600
+            request = HTTP.Request("GET", "/api/jobs/$job/download?table=excluded")
+            request.context[:params] = Dict("id" => job)
+            # in a function, so that the body, which holds the table, is not kept here
+            function out_of_time()
+                body = OSS.download_handler(state, request; seconds = 0).body
+                written = IOBuffer()
+                finished = body.write_to(written)
+                body.finished()
+                return finished, count(==(UInt8('\n')), take!(written))
+            end
+            @test out_of_time() == (false, 1)
+
+            # Results cleared while they are being downloaded are given back
+            # then, not when the download would have ended: it stops, short.
+            # taken in a function, so that nothing here is left holding it
+            watch(job) = WeakRef(first((@atomic OSS.find_job(state.jobs, job).output).tables["excluded"]))
+            column = watch(job)
+            cut = download(() -> release(job))
+            @test !cut.complete && 0 < cut.lines < total + 1
+            @test OSS.find_job(state.jobs, job) === nothing
+            settled()
+            GC.gc()
+            @test column.value === nothing # nothing still holds the table
+            @test timedwait(() -> state.jobs.downloads[] == 0, 10) == :ok # however a download ended, its place came back
+            @test ask("/healthz").status == 200
+        finally
+            close(server)
+        end
     end
 end

@@ -69,7 +69,10 @@ using PrecompileTools: @setup_workload, @compile_workload
             end
             get("/api/jobs/$job/rows?table=not_excluded&limit=10&search=C&sort=1&dir=desc")
             get("/api/jobs/$job/rows?table=rejected")
-            get("/api/jobs/$job/download?table=excluded")
+            get("/api/jobs/$job/download?table=excluded&check=1")
+            download = get("/api/jobs/$job/download?table=excluded").body
+            download.write_to(IOBuffer())
+            download.finished()
             respond(HTTP.Request("POST", "/api/jobs/$job/release"))
         end
     end

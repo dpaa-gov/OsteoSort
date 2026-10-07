@@ -152,14 +152,32 @@ csv_cell(value::AbstractFloat) = isfinite(value) ? rstrip(rstrip(@sprintf("%.4f"
 cell_text(value::AbstractFloat) = csv_cell(value)
 cell_text(value) = string(value)
 
-function table_csv(table::NamedTuple)
+csv_heading(table::NamedTuple) = join((csv_cell(display_name(name)) for name in keys(table)), ",") * "\n"
+
+function csv_rows(table::NamedTuple, rows)
     io = IOBuffer()
-    println(io, join((csv_cell(display_name(name)) for name in keys(table)), ","))
     columns = collect(values(table))
-    for i in 1:row_count(table)
+    for i in rows
         println(io, join((csv_cell(column[i]) for column in columns), ","))
     end
-    return String(take!(io))
+    return take!(io)
+end
+
+# A download is written this many rows at a time, about 1 MB, so that no more
+# of it than that is in memory: whole, a table of 1.5 million rows is 266 MB.
+const CSV_PIECE_ROWS = 5_000
+
+# Writes a table to `io` as CSV, a piece at a time. `wanted` is asked before
+# each piece and the writing stops when it says no. Returns whether the whole
+# table was written.
+function write_csv(io, table::NamedTuple; wanted = () -> true, piece = CSV_PIECE_ROWS)
+    write(io, csv_heading(table))
+    total = row_count(table)
+    for start in 1:piece:total
+        wanted() || return false
+        write(io, off_thread(() -> csv_rows(table, start:min(start + piece - 1, total))))
+    end
+    return true
 end
 
 # --- Case-file template ---
@@ -385,12 +403,36 @@ function table_page(table, query; seconds = SEARCH_SECONDS)
     return merge(table_json(table, page), (total = row_count(table), filtered = length(rows)))
 end
 
-function download_handler(state::AppState, req::HTTP.Request)
+# The longest a download may take. None should need a minute; one read slowly
+# on purpose could otherwise keep its connection for hours.
+const DOWNLOAD_SECONDS = 600
+
+function download_handler(state::AppState, req::HTTP.Request; seconds = DOWNLOAD_SECONDS)
     query = HTTP.queryparams(HTTP.URI(req.target))
     table = require_table(state, req, query)
+    downloads = state.jobs.downloads
+    # The page asks before it starts a download, which the browser saves by
+    # itself: an answer that is an error would be saved as the file.
+    if haskey(query, "check")
+        downloads[] >= MAX_DOWNLOADS && throw(RequestError(503, DOWNLOADS_BUSY))
+        return HTTP.Response(204)
+    end
+    if Threads.atomic_add!(downloads, 1) >= MAX_DOWNLOADS
+        Threads.atomic_sub!(downloads, 1)
+        throw(RequestError(503, DOWNLOADS_BUSY))
+    end
+    # A download reads its table for as long as it is being sent. Results
+    # cleared meanwhile could not be given back until it ended, so it stops.
+    id = HTTP.getparams(req)["id"]
+    deadline = time() + seconds
+    function held()
+        time() < deadline && return find_job(state.jobs, id) !== nothing
+        @warn "Download stopped: it took longer than its limit" target = req.target seconds
+        return false
+    end
     return HTTP.Response(200, [
         "Content-Type" => "text/csv; charset=utf-8",
         "Content-Disposition" => "attachment; filename=\"$(query["table"]).csv\"",
         "Cache-Control" => "no-store",
-    ], off_thread(() -> table_csv(table)))
+    ], StreamedBody(io -> write_csv(io, table; wanted = held), () -> (Threads.atomic_sub!(downloads, 1); nothing)))
 end

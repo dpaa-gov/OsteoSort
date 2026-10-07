@@ -59,6 +59,14 @@ function off_thread(work)
     end
 end
 
+# A response's body where it is to be written out as it is made, not held
+# whole: `write_to(io)` writes it, and returns whether it wrote all of it.
+# `finished()` is called once the response is over, however it ended.
+struct StreamedBody
+    write_to::Function
+    finished::Function
+end
+
 json_response(status, body::AbstractString) =
     HTTP.Response(status, ["Content-Type" => "application/json; charset=utf-8", "Cache-Control" => "no-store"], body)
 json_response(status, body) = json_response(status, JSON.json(body))
@@ -170,9 +178,71 @@ function discard(stream, most)
     return true
 end
 
+# What a body that writes itself is written to. HTTP.jl closes a connection
+# from which nothing has come for IDLE_SECONDS, and during a download nothing
+# does: each piece the client has taken counts here as a sign of life.
+mutable struct Sending <: IO
+    const stream::HTTP.Stream
+    taken::Float64 # when the client last took a piece
+end
+
+function Base.unsafe_write(io::Sending, bytes::Ptr{UInt8}, n::UInt)
+    written = unsafe_write(io.stream, bytes, n)
+    io.taken = time()
+    io.stream.stream.timestamp = io.taken # HTTP.jl's record of when the connection was last heard from
+    return written
+end
+
+# Closes a connection at once. An ordinary close first waits for everything
+# written to it to be taken, which a client that has stopped reading never
+# does: the close, and whatever was waiting on it, would wait for good.
+function drop(stream::HTTP.Stream)
+    socket = stream.stream.io
+    socket isa Base.LibuvStream || return close(stream)
+    Base.iolock_begin()
+    if isopen(socket) && socket.status != Base.StatusClosing
+        ccall(:jl_forceclose_uv, Cvoid, (Ptr{Cvoid},), socket.handle)
+        socket.status = Base.StatusClosing
+    end
+    Base.iolock_end()
+    return
+end
+
+# Sends a body that writes itself. Its headers have gone by now, so one that
+# stops part way cannot be answered with an error: the connection is dropped
+# without the body's end being marked, which a browser reports as a download
+# that did not complete. HTTP.jl is told the connection went away, as below.
+#
+# A client that stops reading is dropped here once it has taken nothing for
+# `idle` seconds. HTTP.jl would not: it closes a silent connection in the
+# ordinary way, which waits behind the piece not taken.
+function write_streamed(stream, response, idle)
+    body::StreamedBody = response.body
+    # the connection keeps its last response until its next request: not what this one was written from
+    response.body = UInt8[]
+    sending = Sending(stream, time())
+    watch = Timer(1; interval = 1) do _
+        time() - sending.taken > idle && drop(stream)
+    end
+    complete = try
+        HTTP.startwrite(stream)
+        body.write_to(sending)
+    catch e
+        e isa Base.IOError && rethrow() # the client went away, or was closed for taking nothing
+        @error "Response failed part way" target = response.request.target exception = (e, catch_backtrace())
+        false
+    finally
+        close(watch)
+        body.finished()
+    end
+    complete && return
+    drop(stream)
+    throw(Base.IOError("response ended part way; connection closed", Base.UV_ECONNABORTED))
+end
+
 # What the server runs for each request: `handle` is given the request once
 # its body has been read within the limit.
-function limited(handle)
+function limited(handle; idle = IDLE_SECONDS)
     return function (stream::HTTP.Stream)
         request::HTTP.Request = stream.message
         limit = body_limit(request.target)
@@ -189,8 +259,12 @@ function limited(handle)
         end
         request.response = response
         response.request = request
-        HTTP.startwrite(stream)
-        write(stream, response.body)
+        if response.body isa StreamedBody
+            write_streamed(stream, response, idle)
+        else
+            HTTP.startwrite(stream)
+            write(stream, response.body)
+        end
         if !finished
             # The rest of the request is not going to be read: the answer is
             # completed and the connection dropped. HTTP.jl is told the
@@ -223,7 +297,7 @@ const IDLE_SECONDS = 60
 # Listens with the limits above. HTTP.jl's own log messages are turned off:
 # it would otherwise write a warning for every idle connection it closes.
 listen(handle, host, port; max_connections = MAX_CONNECTIONS, idle_seconds = IDLE_SECONDS) =
-    HTTP.serve!(limited(handle), host, port; stream = true, max_connections, readtimeout = idle_seconds, verbose = -1)
+    HTTP.serve!(limited(handle; idle = idle_seconds), host, port; stream = true, max_connections, readtimeout = idle_seconds, verbose = -1)
 
 # Starts listening straight away; the first reference load runs in the
 # background so the health check answers while the database is slow or down.

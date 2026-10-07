@@ -160,6 +160,25 @@ end
     @test size(OSS.read_upload(full).values) == (10_000, 1000)
 end
 
+# A download is written a piece at a time, so that no more of it than a piece
+# is in memory. It is the same file whatever the size of the pieces.
+@testset "a download is written in pieces" begin
+    table = (id = ["A1", "B \"2\"", "C,3", "D4", "E5"], n = [1, 2, 3, 4, 5], p = [0.5, 0.12345, 1.0, NaN, 0.00004])
+    whole = sprint(io -> OSS.write_csv(io, table))
+    @test whole == "\"Id\",\"n\",\"p\"\n\"A1\",1,0.5\n\"B \"\"2\"\"\",2,0.1235\n\"C,3\",3,1\n\"D4\",4,NaN\n\"E5\",5,0\n"
+    @test all(piece -> sprint(io -> OSS.write_csv(io, table; piece)) == whole, (1, 2, 5, 7))
+    @test OSS.write_csv(IOBuffer(), table)
+    asked = Ref(0)
+    @test OSS.write_csv(IOBuffer(), table; piece = 2, wanted = () -> (asked[] += 1; true)) && asked[] == 3
+    # it stops when its results are no longer wanted, and says it did not finish
+    io = IOBuffer()
+    asked[] = 0
+    @test !OSS.write_csv(io, table; piece = 2, wanted = () -> (asked[] += 1) < 3)
+    @test String(take!(io)) == join(split(whole, "\n")[1:5], "\n") * "\n"
+    # a table with no rows is its headings
+    @test sprint(io -> OSS.write_csv(io, map(empty, table))) == "\"Id\",\"n\",\"p\"\n"
+end
+
 include("memory.jl")
 
 if HAVE_DB

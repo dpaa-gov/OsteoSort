@@ -27,12 +27,12 @@ export class ResultTable {
                     <ul class="pagination pagination-sm"></ul>
                 </div>
             </div>`;
-        // A link alone would save the server's "expired" message as the file; ask first.
+        // A link alone would save the server's "expired" or "busy" message as the file; ask first.
         container.querySelector("a[download]").addEventListener("click", async (event) => {
             event.preventDefault();
             const link = event.currentTarget.cloneNode(); // a copy, which does not ask again
             try {
-                await getJSON(this.base);
+                await getJSON(`${link.href}&check=1`);
             } catch (error) {
                 return showError(error.message);
             }

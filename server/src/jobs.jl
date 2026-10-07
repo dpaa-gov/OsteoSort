@@ -32,6 +32,7 @@ struct JobStore
     max_rows::Int
     turn::Base.Semaphore # one batch computes at a time
     queued::Threads.Atomic{Int} # batches computing or waiting for their turn
+    downloads::Threads.Atomic{Int} # result tables being downloaded
 end
 
 const JOB_TTL = Hour(1)
@@ -44,9 +45,13 @@ const MAX_RESULT_ROWS = 2_000_000
 # Each waiting batch holds its uploaded file, so only so many may wait
 const MAX_QUEUED_JOBS = 20
 const BUSY = "The server is busy with other analyses. Try again in a minute."
+# Each download holds the piece it is sending, about 1 MB, for as long as its
+# reader takes: without a limit, enough of them left unread would fill the pod.
+const MAX_DOWNLOADS = 20
+const DOWNLOADS_BUSY = "The server is busy with other downloads. Try again in a minute."
 
 JobStore(; max_rows = MAX_RESULT_ROWS) =
-    JobStore(ReentrantLock(), Dict{String, Job}(), max_rows, Base.Semaphore(1), Threads.Atomic{Int}(0))
+    JobStore(ReentrantLock(), Dict{String, Job}(), max_rows, Base.Semaphore(1), Threads.Atomic{Int}(0), Threads.Atomic{Int}(0))
 
 function result_rows(job::Job)
     output = @atomic job.output
