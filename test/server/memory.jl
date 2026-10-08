@@ -210,5 +210,33 @@ end
         finally
             close(server)
         end
+
+        # An upload that has been answered leaves nothing behind it. Each
+        # connection used to keep room for what it had been sent faster than
+        # it was read, 8.5 MB of an upload, until a minute or two after it
+        # had closed: the twenty here left 316 MiB.
+        server = OSS.listen(respond, "127.0.0.1", 8778)
+        try
+            upload = "{\"pad\": \"" * "x"^(11 * 1024^2) * "\"}"
+            function send()
+                socket = HTTP.Sockets.connect("127.0.0.1", 8778)
+                write(socket, "POST /api/multiple HTTP/1.1\r\nHost: x\r\nContent-Length: $(sizeof(upload))\r\n\r\n")
+                write(socket, upload)
+                answer = String(readavailable(socket))
+                close(socket)
+                return answer
+            end
+            # what Julia counts as in use once everything unused has been cleared out
+            in_use() = (settled(); GC.gc(); Base.gc_live_bytes() / 1024^2)
+            @test startswith(send(), "HTTP/1.1 400") # once first, as above; it is read, and is not a case file
+            before = in_use()
+            answers = fetch.([@async send() for _ in 1:20])
+            @test all(startswith("HTTP/1.1 400"), answers)
+            after = in_use()
+            @info "In use around twenty uploads of 11 MB at once" before after
+            @test after - before < 50
+        finally
+            close(server)
+        end
     end
 end

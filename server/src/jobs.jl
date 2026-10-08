@@ -60,19 +60,27 @@ end
 
 # Julia only clears memory out when it needs room for something new, so on an
 # idle server the results just dropped would stay counted against the pod.
-# This gives them back a moment later; requests arriving together share one.
+# This gives them back a moment later; requests arriving together share one,
+# and one asked for while another is at work is done after it.
 const TIDYING = Threads.Atomic{Bool}(false)
+const TIDY_WANTED = Threads.Atomic{Bool}(false)
 function tidy()
     ccall(:jl_generating_output, Cint, ()) == 1 && return   # not while the package is being compiled
-    Threads.atomic_cas!(TIDYING, false, true) && return      # one is already on its way
-    Threads.@spawn try
-        sleep(1)
-        GC.gc()
-        # Julia has now let go of the memory, but the C library keeps what it
-        # was handed for reuse; this passes it back to the system
-        Sys.islinux() && ccall(:malloc_trim, Cint, (Cint,), 0)
-    finally
-        TIDYING[] = false
+    TIDY_WANTED[] = true
+    Threads.atomic_cas!(TIDYING, false, true) && return      # one is already at work, and will see this
+    Threads.@spawn begin
+        try
+            while Threads.atomic_xchg!(TIDY_WANTED, false)
+                sleep(1)
+                GC.gc()
+                # Julia has now let go of the memory, but the C library keeps what it
+                # was handed for reuse; this passes it back to the system
+                Sys.islinux() && ccall(:malloc_trim, Cint, (Cint,), 0)
+            end
+        finally
+            TIDYING[] = false
+        end
+        TIDY_WANTED[] && tidy() # asked for just as this one was leaving
     end
     return
 end

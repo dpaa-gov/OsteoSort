@@ -80,6 +80,92 @@ end
     end
 end
 
+# Uploads are read a few at a time, each being held whole while it is: the
+# rest wait their turn, and are told the server is busy if none comes. A turn
+# cannot be kept by sending slowly, or by stopping.
+@testset "uploads are read a few at a time" begin
+    @test OSS.UPLOADS_AT_ONCE == 4 && OSS.UPLOAD_WAIT_SECONDS == 20 && OSS.UPLOAD_SECONDS == 60
+    # turns by themselves
+    pair = OSS.Turns(2)
+    @test OSS.take_turn!(pair, 0) && OSS.take_turn!(pair, 0) && !OSS.take_turn!(pair, 0) && pair.taken[] == 2
+    waited = @elapsed got = OSS.take_turn!(pair, 0.5)
+    @test !got && 0.4 < waited < 2 && pair.taken[] == 2
+    @async (sleep(0.3); OSS.give_back!(pair))
+    waited = @elapsed got = OSS.take_turn!(pair, 5)
+    @test got && 0.2 < waited < 2 && pair.taken[] == 2 # taken as soon as one is given back
+
+    # A server with two turns, where two seconds is the wait for one, six
+    # the time an upload has, and ten the silence allowed.
+    turns = OSS.Turns(2)
+    seen = Ref(0) # uploads the app itself was handed
+    app(request) = (startswith(request.target, "/api/multiple") && (seen[] += 1); HTTP.Response(200, "ok"))
+    server = HTTP.serve!(OSS.limited(app; turns, wait = 2, seconds = 6), "127.0.0.1", 8777; stream = true, readtimeout = 10, verbose = -1)
+    file = "x"^1000
+    # an upload begun, with `sent` of its 1000 bytes
+    function begin_upload(sent)
+        socket = HTTP.Sockets.connect("127.0.0.1", 8777)
+        write(socket, "POST /api/multiple HTTP/1.1\r\nHost: x\r\nContent-Length: 1000\r\n\r\n" * file[1:sent])
+        return socket
+    end
+    # the answer that comes back, read to its end, or nothing if none came in time
+    function answer_to(socket; seconds = 10)
+        answer = @async begin
+            text = ""
+            try
+                while !endswith(text, "\r\n0\r\n\r\n") && !eof(socket)
+                    text *= String(readavailable(socket))
+                end
+            catch
+            end
+            text
+        end
+        done = timedwait(() -> istaskdone(answer), seconds) == :ok
+        close(socket)
+        return done ? fetch(answer) : nothing
+    end
+    taken(n; within = 10) = timedwait(() -> turns.taken[] == n, within) == :ok
+    try
+        # two uploads half sent have both turns
+        first_half, second_half = begin_upload(500), begin_upload(500)
+        @test taken(2) && seen[] == 0
+        # a third waits its two seconds and is told the server is busy; the app never has it
+        waited = @elapsed refused = answer_to(begin_upload(1000))
+        @test refused !== nothing && startswith(refused, "HTTP/1.1 503") && occursin(OSS.BUSY, refused)
+        @test 1.9 < waited < 4 && seen[] == 0 && turns.taken[] == 2
+        # everything else is answered meanwhile
+        @test HTTP.get("http://127.0.0.1:8777/healthz"; retry = false, pool = HTTP.Pool(1)).status == 200
+        # one waiting is read as soon as a turn comes: here when the first is finished
+        waiting = begin_upload(1000)
+        sleep(0.3)
+        write(first_half, file[501:1000] * "\r\n")
+        @test startswith(something(answer_to(waiting), ""), "HTTP/1.1 200") && seen[] == 2
+        close(first_half)
+        # the second has sent nothing more: it is closed for its silence, and its turn comes back
+        @test taken(0; within = 30)
+        close(second_half)
+        # one that keeps sending, a byte at a time, has its six seconds and no more
+        slow = begin_upload(10)
+        feeding = @async try
+            for _ in 1:40
+                write(slow, "x")
+                sleep(0.25)
+            end
+        catch
+        end
+        @test taken(1; within = 2)
+        @test taken(0; within = 12)
+        answer = answer_to(slow; seconds = 5)
+        @test answer !== nothing && startswith(answer, "HTTP/1.1 408") && occursin(OSS.UPLOAD_TOO_SLOW, answer)
+        wait(feeding)
+        # and uploads are read as before
+        before = seen[]
+        @test startswith(something(answer_to(begin_upload(1000)), ""), "HTTP/1.1 200") && seen[] == before + 1
+        @test turns.taken[] == 0
+    finally
+        close(server)
+    end
+end
+
 # Connections that are opened and left silent must not keep others out: only
 # so many are held at once, and one that sends nothing is closed.
 @testset "connections are limited, and silent ones closed" begin
