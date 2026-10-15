@@ -9,7 +9,12 @@ const MAX_BODY_BYTES = 12 * 1024^2
 const TOO_LARGE = "The file is too large: a case file can be at most 5 MB"
 const REFERENCE_CHANGED = "The reference data has changed. Reload the page and try again."
 
-bad_request(message) = throw(RequestError(400, message))
+bad_request(message::String) = throw(RequestError(400, message))
+
+# A request as it is read: an object of named values, each of which may be
+# anything JSON can hold. Every value is told to be one exact kind of thing
+# before it is used: a trimmed build has to know which.
+const Body = JSON.Object{String, Any}
 
 # The most digits in a row a number in a request may have. No measurement or
 # setting needs more than 17; a number of millions of digits takes the parser
@@ -53,7 +58,7 @@ function request_bytes(req::HTTP.Request)::Vector{UInt8}
     return Vector{UInt8}(copy(body))
 end
 
-function read_json(req::HTTP.Request)
+function read_json(req::HTTP.Request)::Body
     bytes = request_bytes(req)
     length(bytes) <= MAX_BODY_BYTES || throw(RequestError(413, TOO_LARGE))
     long_number(bytes) && bad_request(NUMBER_TOO_LONG)
@@ -62,72 +67,87 @@ function read_json(req::HTTP.Request)
     catch
         bad_request("The request body is not valid JSON")
     end
-    body isa JSON.Object || bad_request("The request body must be a JSON object")
+    body isa Body || bad_request("The request body must be a JSON object")
     return body
 end
 
-field(body, name) = haskey(body, name) ? body[name] : bad_request("Missing field: $name")
+field(body::Body, name::String) = haskey(body, name) ? body[name] : bad_request("Missing field: " * name)
 
-function text_field(body, name)
+function text_field(body::Body, name::String)::String
     value = field(body, name)
-    value isa AbstractString || bad_request("$name must be text")
-    return String(value)
+    value isa String || bad_request(name * " must be text")
+    return value
 end
 
-function list_field(body, name)
+function list_field(body::Body, name::String)::Vector{String}
     value = field(body, name)
-    value isa AbstractVector && all(v -> v isa AbstractString, value) || bad_request("$name must be a list of text values")
-    return String.(value)
+    value isa Vector{Any} || bad_request(name * " must be a list of text values")
+    list = String[]
+    for item in value
+        item isa String || bad_request(name * " must be a list of text values")
+        push!(list, item)
+    end
+    return list
 end
 
-# A number from a request as an ordinary one, or NaN for anything else. A
-# number too large or too small for one arrives as a big number that passes
-# a check itself but is infinite or zero once converted, so it is converted
-# before it is checked.
-plain_number(value) = value isa Real ? Float64(value) : NaN
+# A number from a request as an ordinary one, or NaN for anything else. JSON
+# gives a number as one of these four kinds. One too large or too small to be
+# ordinary arrives as a big number that passes a check itself but is infinite
+# or zero once converted, so it is converted before it is checked. True and
+# false are not numbers here, though Julia counts them as 1 and 0.
+plain_number(value)::Float64 =
+    value isa Float64 ? value :
+    value isa Int64 ? Float64(value) :
+    value isa BigInt ? Float64(value) :
+    value isa BigFloat ? Float64(value) : NaN
 
-function alpha_field(body)
-    value = field(body, :alpha)
-    alpha = plain_number(value)
+function alpha_field(body::Body)::Float64
+    alpha = plain_number(field(body, "alpha"))
     0 < alpha <= 1 || bad_request("alpha must be a number above 0 and at most 1")
     return alpha
 end
 
-function settings_field(body)
-    settings = field(body, :settings)
-    settings isa JSON.Object || bad_request("settings must be an object")
-    flag(name) = (v = get(settings, name, false); v isa Bool ? v : bad_request("settings.$name must be true or false"))
-    tails = get(settings, :tails, 2)
+function setting_flag(settings::Body, name::String)::Bool
+    value = get(settings, name, false)
+    value isa Bool || bad_request("settings." * name * " must be true or false")
+    return value
+end
+
+function settings_field(body::Body)::Settings
+    settings = field(body, "settings")
+    settings isa Body || bad_request("settings must be an object")
+    tails = get(settings, "tails", 2)
+    tails isa Int64 || bad_request("settings.tails must be 1 or 2")
     tails in (1, 2) || bad_request("settings.tails must be 1 or 2")
-    return Settings(flag(:absolute), flag(:yeojohnson), flag(:zeromean), Int(tails))
+    return Settings(setting_flag(settings, "absolute"), setting_flag(settings, "yeojohnson"), setting_flag(settings, "zeromean"), tails)
 end
 
 # Typed-in measurements by code; blank fields are null or left out
-function values_field(body, name)
+function values_field(body::Body, name::String)::Dict{String, Union{Nothing, Float64}}
     value = field(body, name)
-    value isa JSON.Object || bad_request("$name must be an object of measurement values")
-    entries = Dict{String, Any}()
-    for (code, number) in pairs(value)
+    value isa Body || bad_request(name * " must be an object of measurement values")
+    entries = Dict{String, Union{Nothing, Float64}}()
+    for (code, number) in value
         amount = number === nothing ? nothing : plain_number(number)
-        amount === nothing || isfinite(amount) && amount > 0 || bad_request("$(uppercasefirst(String(code))) must be a number above 0")
-        entries[lowercase(String(code))] = amount
+        amount === nothing || isfinite(amount) && amount > 0 || bad_request(uppercasefirst(code) * " must be a number above 0")
+        entries[lowercase(code)] = amount
     end
     return entries
 end
 
-function current_snapshot(state::AppState)
+function current_snapshot(state::AppState)::ReferenceSnapshot
     (@atomic state.snapshot) === nothing && ensure_fresh!(state)
     snapshot = @atomic state.snapshot
     snapshot === nothing && throw(RequestError(503, "Reference data could not be loaded from ARDS"))
     return snapshot
 end
 
-function selected_groups(snapshot::ReferenceSnapshot, labels)
+function selected_groups(snapshot::ReferenceSnapshot, labels::Vector{String})::Vector{ReferenceGroup}
     isempty(labels) && bad_request("Select at least one reference group")
-    by_label = Dict(group.label => group for group in snapshot.groups)
+    by_label = Dict{String, ReferenceGroup}(group.label => group for group in snapshot.groups)
     all(label -> haskey(by_label, label), labels) || throw(RequestError(409, REFERENCE_CHANGED))
     # a group named twice is one group: its individuals are not counted twice
-    return [by_label[label] for label in unique(labels)]
+    return ReferenceGroup[by_label[label] for label in unique(labels)]
 end
 
 # --- Tables as JSON and CSV ---
@@ -211,26 +231,27 @@ end
 
 # --- Single comparisons ---
 
-function prepare_single(state::AppState, body, analysis, groups)
+function prepare_single(state::AppState, body::Body, analysis::String, groups::Vector{ReferenceGroup})
     if analysis == "pairmatch"
-        return prepare_single_pair_match(groups, text_field(body, :element),
-            values_field(body, :left), values_field(body, :right))
+        return prepare_single_pair_match(groups, text_field(body, "element"),
+            values_field(body, "left"), values_field(body, "right"))
     elseif analysis == "articulation"
         pairs = articulation_pairs(groups, state.articulation)
-        return prepare_single_articulation(groups, pairs, text_field(body, :element_a), text_field(body, :element_b),
-            text_field(body, :side), values_field(body, :values_a), values_field(body, :values_b))
+        return prepare_single_articulation(groups, pairs, text_field(body, "element_a"), text_field(body, "element_b"),
+            text_field(body, "side"), values_field(body, "values_a"), values_field(body, "values_b"))
     elseif analysis == "regression"
-        return prepare_single_regression(groups, text_field(body, :element_a), text_field(body, :element_b),
-            text_field(body, :side_a), text_field(body, :side_b),
-            values_field(body, :values_a), values_field(body, :values_b))
+        return prepare_single_regression(groups, text_field(body, "element_a"), text_field(body, "element_b"),
+            text_field(body, "side_a"), text_field(body, "side_b"),
+            values_field(body, "values_a"), values_field(body, "values_b"))
     end
     bad_request("analysis must be pairmatch, articulation or regression")
 end
 
-function analyse(data, analysis, alpha, settings)
+# The settings are nothing for a regression, which has none
+function analyse(data, analysis::String, alpha::Float64, settings::Union{Nothing, Settings})
     result = try
         analysis == "regression" ? regression_test(data, alpha) :
-        ttest(data, alpha, settings; articulation = analysis == "articulation")
+        ttest(data, alpha, settings::Settings; articulation = analysis == "articulation")
     catch e
         complain("Analysis failed: " * analysis * ": " * describe(e))
         throw(RequestError(422, ANALYSIS_FAILED))
@@ -241,8 +262,8 @@ end
 
 function single_handler(state::AppState, req::HTTP.Request)
     body = read_json(req)
-    analysis = text_field(body, :analysis)
-    groups = selected_groups(current_snapshot(state), list_field(body, :references))
+    analysis = text_field(body, "analysis")
+    groups = selected_groups(current_snapshot(state), list_field(body, "references"))
     alpha = alpha_field(body)
     settings = analysis == "regression" ? nothing : settings_field(body)
     data = prepare_single(state, body, analysis, groups)
@@ -258,23 +279,38 @@ end
 
 # What a batch is to be run on. Read from the request before the run is
 # queued, so a waiting run does not hold the request, and a missing field is
-# refused straight away.
-function multiple_fields(body, analysis)
-    measurements(name) = lowercase.(list_field(body, name))
-    analysis == "pairmatch" && return (element = text_field(body, :element), measurements = measurements(:measurements))
-    bones = (element_a = text_field(body, :element_a), element_b = text_field(body, :element_b),
-             measurements_a = measurements(:measurements_a), measurements_b = measurements(:measurements_b))
-    analysis == "articulation" && return merge(bones, (side = text_field(body, :side),))
-    return merge(bones, (side_a = text_field(body, :side_a), side_b = text_field(body, :side_b)))
+# refused straight away. Each analysis has fields of its own.
+const PairMatchFields = @NamedTuple{element::String, measurements::Vector{String}}
+const ArticulationFields = @NamedTuple{element_a::String, element_b::String, measurements_a::Vector{String},
+                                       measurements_b::Vector{String}, side::String}
+const RegressionFields = @NamedTuple{element_a::String, element_b::String, measurements_a::Vector{String},
+                                     measurements_b::Vector{String}, side_a::String, side_b::String}
+
+measurements_field(body::Body, name::String)::Vector{String} = String[lowercase(code) for code in list_field(body, name)]
+
+function multiple_fields(body::Body, analysis::String)::Union{PairMatchFields, ArticulationFields, RegressionFields}
+    analysis == "pairmatch" &&
+        return PairMatchFields((text_field(body, "element"), measurements_field(body, "measurements")))
+    element_a, element_b = text_field(body, "element_a"), text_field(body, "element_b")
+    measurements_a, measurements_b = measurements_field(body, "measurements_a"), measurements_field(body, "measurements_b")
+    analysis == "articulation" &&
+        return ArticulationFields((element_a, element_b, measurements_a, measurements_b, text_field(body, "side")))
+    return RegressionFields((element_a, element_b, measurements_a, measurements_b, text_field(body, "side_a"), text_field(body, "side_b")))
 end
 
-function prepare_multiple(f, analysis, groups, upload::SortTable)
-    if analysis == "pairmatch"
-        return prepare_pair_match(groups, upload, f.element, f.measurements)
-    elseif analysis == "articulation"
-        return prepare_articulation(groups, upload, f.element_a, f.element_b, f.side, f.measurements_a, f.measurements_b)
-    end
-    return prepare_regression(groups, upload, f.element_a, f.element_b, f.side_a, f.side_b, f.measurements_a, f.measurements_b)
+prepare_multiple(f::PairMatchFields, groups::Vector{ReferenceGroup}, upload::SortTable) =
+    prepare_pair_match(groups, upload, f.element, f.measurements)
+prepare_multiple(f::ArticulationFields, groups::Vector{ReferenceGroup}, upload::SortTable) =
+    prepare_articulation(groups, upload, f.element_a, f.element_b, f.side, f.measurements_a, f.measurements_b)
+prepare_multiple(f::RegressionFields, groups::Vector{ReferenceGroup}, upload::SortTable) =
+    prepare_regression(groups, upload, f.element_a, f.element_b, f.side_a, f.side_b, f.measurements_a, f.measurements_b)
+
+# The page's previous run, whose results this one replaces
+function replaces_field(body::Body)::Union{Nothing, String}
+    value = get(body, "replaces", nothing)
+    value === nothing && return nothing
+    value isa String || bad_request("replaces must be text")
+    return value
 end
 
 thousands(n) = replace(string(n), r"(?<=\d)(?=(\d{3})+$)" => ",")
@@ -285,39 +321,51 @@ check_size(comparisons, most) = comparisons <= most || throw(RequestError(422,
     "This run would make $(thousands(comparisons)) comparisons; the most one run can make is $(thousands(most)). " *
     "Analyse fewer specimens at a time."))
 
+# A batch as the request asked for it, held while it waits for its turn
+struct Batch
+    analysis::String
+    groups::Vector{ReferenceGroup}
+    alpha::Float64
+    settings::Union{Nothing, Settings}
+    csv::String
+    fields::Union{PairMatchFields, ArticulationFields, RegressionFields}
+    replaces::Union{Nothing, String}
+end
+
 function multiple_handler(state::AppState, req::HTTP.Request)
     body = read_json(req)
-    analysis = text_field(body, :analysis)
+    analysis = text_field(body, "analysis")
     analysis in ("pairmatch", "articulation", "regression") ||
         bad_request("analysis must be pairmatch, articulation or regression")
-    groups = selected_groups(current_snapshot(state), list_field(body, :references))
+    groups = selected_groups(current_snapshot(state), list_field(body, "references"))
     alpha = alpha_field(body)
     settings = analysis == "regression" ? nothing : settings_field(body)
-    csv = text_field(body, :csv)
+    csv = text_field(body, "csv")
     sizeof(csv) <= MAX_FILE_BYTES || throw(RequestError(413, TOO_LARGE))
-    fields = multiple_fields(body, analysis)
-    # The page's previous run, whose results this one replaces
-    replaces = get(body, :replaces, nothing)
-    replaces === nothing || replaces isa AbstractString || bad_request("replaces must be text")
-    job = start_job!(state.jobs) do job
-        started = time()
-        upload = try
-            read_upload(csv)
-        catch e
-            e isa ArgumentError ? throw(RequestError(400, e.msg)) : rethrow()
-        end
-        @atomic job.stage = "sorting"
-        data = prepare_multiple(fields, analysis, groups, upload)
-        comparisons = data === nothing ? 0 : length(data.sorta) * length(data.sortb)
-        check_size(comparisons, state.jobs.max_rows)
-        # the results this run replaces are forgotten first, so they do not count as in use against it
-        replaces === nothing || release_job!(state.jobs, String(replaces))
-        make_room!(state.jobs, comparisons)
-        @atomic job.stage = "comparing"
-        result = analyse(data, analysis, alpha, settings)
-        return job_output(analysis, result, alpha, time() - started)
-    end
+    batch = Batch(analysis, groups, alpha, settings, csv, multiple_fields(body, analysis), replaces_field(body))
+    job = start_job!(job -> run_batch(state, batch, job), state.jobs)
     return json_response(202, (job = job.id,))
+end
+
+function run_batch(state::AppState, batch::Batch, job::Job)
+    started = time()
+    upload = try
+        read_upload(batch.csv)
+    catch e
+        # what is wrong with the file, in read_upload's words, which are always plain text
+        e isa ArgumentError && (message = e.msg) isa String ? throw(RequestError(400, message)) : rethrow()
+    end
+    @atomic job.stage = "sorting"
+    data = prepare_multiple(batch.fields, batch.groups, upload)
+    comparisons = data === nothing ? 0 : length(data.sorta) * length(data.sortb)
+    check_size(comparisons, state.jobs.max_rows)
+    # the results this run replaces are forgotten first, so they do not count as in use against it
+    replaces = batch.replaces
+    replaces === nothing || release_job!(state.jobs, replaces)
+    make_room!(state.jobs, comparisons)
+    @atomic job.stage = "comparing"
+    result = analyse(data, batch.analysis, batch.alpha, batch.settings)
+    return job_output(batch.analysis, result, batch.alpha, time() - started)
 end
 
 function require_job(state::AppState, id::String)
