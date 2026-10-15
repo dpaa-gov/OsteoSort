@@ -43,11 +43,22 @@ function long_number(text::AbstractVector{UInt8}, most = MAX_NUMBER_DIGITS)
     return false
 end
 
+# A request's bytes, in whichever form HTTP.jl holds them. Those the server
+# read itself are used as they are: a case file copied would be held twice.
+# One sent with no body at all is as good as empty.
+function request_bytes(req::HTTP.Request)::Vector{UInt8}
+    body = req.body
+    body isa HTTP.EmptyBody && return UInt8[]
+    body isa HTTP.BytesBody{Vector{UInt8}} && body.next_index == 1 && return body.data
+    return Vector{UInt8}(copy(body))
+end
+
 function read_json(req::HTTP.Request)
-    length(req.body) <= MAX_BODY_BYTES || throw(RequestError(413, TOO_LARGE))
-    long_number(req.body) && bad_request(NUMBER_TOO_LONG)
+    bytes = request_bytes(req)
+    length(bytes) <= MAX_BODY_BYTES || throw(RequestError(413, TOO_LARGE))
+    long_number(bytes) && bad_request(NUMBER_TOO_LONG)
     body = try
-        JSON.parse(req.body)
+        JSON.parse(bytes)
     catch
         bad_request("The request body is not valid JSON")
     end

@@ -1,6 +1,7 @@
 using Test
 using HTTP
 using JSON
+using Sockets
 using OsteoSortServer
 using OSJ
 const OSS = OsteoSortServer
@@ -36,13 +37,13 @@ end
     @atomic state.last_attempt = OSS.now(OSS.UTC) # so nothing tries to reach ARDS
     inner = OSS.handler(state)
     largest = Ref(0) # the largest body the app itself was handed
-    server = HTTP.serve!(OSS.limited(req -> (largest[] = max(largest[], length(req.body)); inner(req))), "127.0.0.1", 8771; stream = true)
+    server = OSS.listen(req -> (largest[] = max(largest[], length(OSS.request_bytes(req))); inner(req)), "127.0.0.1", 8771)
     url = "http://127.0.0.1:8771"
     post(path, body) = HTTP.post(url * path, ["Content-Type" => "application/json"], body; status_exception = false, retry = false)
     message(response) = JSON.parse(response.body).error
     # a request written by hand, for what the client above will not send; the answer, or nothing if none came in time
     function raw(text; seconds = 10)
-        socket = HTTP.Sockets.connect("127.0.0.1", 8771)
+        socket = Sockets.connect("127.0.0.1", 8771)
         write(socket, text)
         answer = @async String(read(socket))
         done = timedwait(() -> istaskdone(answer), seconds) == :ok
@@ -56,6 +57,9 @@ end
         ordinary = post("/api/single", small)
         @test ordinary.status in (400, 503) && largest[] == sizeof(small)
         @test HTTP.get(url * "/healthz").status == 200
+        # one with no body at all is a bad request, as an empty one is: not a failure of the server
+        nothing_sent = post("/api/single", "")
+        @test nothing_sent.status == 400 && message(nothing_sent) == "The request body is not valid JSON"
         # over a small route's limit: refused, and never handed to the app
         largest[] = 0
         over = post("/api/single", "{\"pad\": \"" * "x"^100_000 * "\"}")
@@ -94,16 +98,17 @@ end
     waited = @elapsed got = OSS.take_turn!(pair, 5)
     @test got && 0.2 < waited < 2 && pair.taken[] == 2 # taken as soon as one is given back
 
-    # A server with two turns, where two seconds is the wait for one, six
-    # the time an upload has, and ten the silence allowed.
+    @test OSS.BODY_SECONDS == OSS.UPLOAD_WAIT_SECONDS + OSS.UPLOAD_SECONDS
+    # A server with two turns, where two seconds is the wait for one and six
+    # the time an upload has once it has its turn: eight from its headers.
     turns = OSS.Turns(2)
     seen = Ref(0) # uploads the app itself was handed
     app(request) = (startswith(request.target, "/api/multiple") && (seen[] += 1); HTTP.Response(200, "ok"))
-    server = HTTP.serve!(OSS.limited(app; turns, wait = 2, seconds = 6), "127.0.0.1", 8777; stream = true, readtimeout = 10, verbose = -1)
+    server = OSS.listen(app, "127.0.0.1", 8777; turns, wait = 2, body_seconds = 8)
     file = "x"^1000
     # an upload begun, with `sent` of its 1000 bytes
     function begin_upload(sent)
-        socket = HTTP.Sockets.connect("127.0.0.1", 8777)
+        socket = Sockets.connect("127.0.0.1", 8777)
         write(socket, "POST /api/multiple HTTP/1.1\r\nHost: x\r\nContent-Length: 1000\r\n\r\n" * file[1:sent])
         return socket
     end
@@ -133,17 +138,18 @@ end
         @test refused !== nothing && startswith(refused, "HTTP/1.1 503") && occursin(OSS.BUSY, refused)
         @test 1.9 < waited < 4 && seen[] == 0 && turns.taken[] == 2
         # everything else is answered meanwhile
-        @test HTTP.get("http://127.0.0.1:8777/healthz"; retry = false, pool = HTTP.Pool(1)).status == 200
+        @test HTTP.get("http://127.0.0.1:8777/healthz"; retry = false, client = HTTP.Client()).status == 200
         # one waiting is read as soon as a turn comes: here when the first is finished
         waiting = begin_upload(1000)
         sleep(0.3)
         write(first_half, file[501:1000] * "\r\n")
         @test startswith(something(answer_to(waiting), ""), "HTTP/1.1 200") && seen[] == 2
         close(first_half)
-        # the second has sent nothing more: it is closed for its silence, and its turn comes back
-        @test taken(0; within = 30)
-        close(second_half)
-        # one that keeps sending, a byte at a time, has its six seconds and no more
+        # the second has sent nothing more: it is told it took too long, and its turn comes back
+        @test taken(0; within = 10)
+        answer = answer_to(second_half)
+        @test answer !== nothing && startswith(answer, "HTTP/1.1 408") && occursin(OSS.UPLOAD_TOO_SLOW, answer)
+        # one that keeps sending, a byte at a time, has its eight seconds and no more
         slow = begin_upload(10)
         feeding = @async try
             for _ in 1:40
@@ -166,35 +172,56 @@ end
     end
 end
 
-# Connections that are opened and left silent must not keep others out: only
-# so many are held at once, and one that sends nothing is closed.
-@testset "connections are limited, and silent ones closed" begin
+# A connection that is too slow at any stage is closed, so that ones opened
+# and left silent hold nothing for long and keep nobody else out. The time an
+# answer takes to work out is not counted against it.
+@testset "slow and silent connections are closed" begin
     config = OSS.Config("", 5432, "", "", "", 3838, 30, joinpath(OSS.REPO_ROOT, "web"), joinpath(pkgdir(OSS), "config"), "test")
     state = OSS.AppState(config)
     @atomic state.last_attempt = OSS.now(OSS.UTC) # so nothing tries to reach ARDS
-    @test OSS.MAX_CONNECTIONS == 10_000 && OSS.IDLE_SECONDS == 60 # above the 30 seconds Atlas allows an answer
-    # a server that holds two connections and closes one silent for a second
-    server = OSS.listen(OSS.handler(state), "127.0.0.1", 8773; max_connections = 2, idle_seconds = 1)
-    health = "GET /healthz HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n"
-    function answer_to(socket; seconds = 15)
-        answer = @async String(read(socket))
-        return timedwait(() -> istaskdone(answer), seconds) == :ok ? fetch(answer) : nothing
+    @test (OSS.HEADER_SECONDS, OSS.BODY_SECONDS, OSS.IDLE_SECONDS, OSS.WRITE_SECONDS) == (10, 80, 60, 60)
+    inner = OSS.handler(state)
+    # a server that allows a second for headers, two for a body and three between requests
+    server = OSS.listen(req -> (req.target == "/healthz?slow" && sleep(4); inner(req)), "127.0.0.1", 8773;
+        header_seconds = 1, body_seconds = 2, idle_seconds = 3, write_seconds = 2)
+    health = "GET /healthz HTTP/1.1\r\nHost: x\r\n\r\n"
+    status_of(answer) = (m = match(r"^HTTP/1\.1 (\d{3})", answer); m === nothing ? nothing : parse(Int, m[1]))
+    # how long a connection lasted once `sent` had been written to it, and the status it was told, if any
+    function lasted(sent)
+        socket = Sockets.connect("127.0.0.1", 8773)
+        isempty(sent) || write(socket, sent)
+        answer = @async try String(read(socket)) catch; "" end
+        seconds = @elapsed closed = timedwait(() -> istaskdone(answer), 20) == :ok
+        close(socket)
+        return closed ? (seconds, status_of(fetch(answer))) : (Inf, nothing)
     end
-    ask() = (socket = HTTP.Sockets.connect("127.0.0.1", 8773); write(socket, health); answer_to(socket))
+    ask() = lasted("GET /healthz HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")
+    within(seconds, low, high) = low <= seconds <= high
     try
-        @test startswith(ask(), "HTTP/1.1 200")
-        # two connections that send nothing take both places
-        silent = [HTTP.Sockets.connect("127.0.0.1", 8773) for _ in 1:2]
-        sleep(0.3)
-        # a request arriving now has to wait, and is answered once a silent one has been closed
-        waited = @elapsed answer = ask()
-        @test answer !== nothing && startswith(answer, "HTTP/1.1 200")
-        @test 0.5 < waited < 10
-        # the silent ones were told so and closed
-        closed = [answer_to(socket; seconds = 10) for socket in silent]
-        @test all(text -> text !== nothing && startswith(text, "HTTP/1.1 408"), closed)
+        # sends nothing at all
+        seconds, status = lasted("")
+        @test within(seconds, 0.8, 4) && status == 408
+        # stops part way through its headers
+        seconds, status = lasted("GET /healthz HTTP/1.1\r\nHost: x\r\n")
+        @test within(seconds, 0.8, 4) && status == 408
+        # stops part way through its body
+        seconds, status = lasted("POST /api/single HTTP/1.1\r\nHost: x\r\nContent-Length: 100\r\n\r\n" * "x"^50)
+        @test within(seconds, 1.8, 6) && status == 408
+        # is answered, and then kept open with nothing more asked
+        seconds, status = lasted(health)
+        @test within(seconds, 2.8, 8) && status == 200
+        # an answer that takes longer to work out than any of these is still given
+        seconds, status = lasted("GET /healthz?slow HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")
+        @test seconds >= 4 && status == 200
+        # many left silent keep nobody out, and are all closed
+        silent = [Sockets.connect("127.0.0.1", 8773) for _ in 1:300]
+        waited = @elapsed (_, status) = ask()
+        @test status == 200 && waited < 2
+        gone = [@async try read(socket); true catch; true end for socket in silent]
+        @test timedwait(() -> all(istaskdone, gone), 15) == :ok
+        foreach(close, silent)
         # and the server carries on
-        @test startswith(ask(), "HTTP/1.1 200")
+        @test ask()[2] == 200
     finally
         close(server)
     end

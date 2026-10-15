@@ -45,8 +45,9 @@ function ensure_fresh!(state::AppState)
     return
 end
 
-# Requests are all handled on one thread. Anything slow runs on a worker
-# thread instead, so the server keeps answering other requests meanwhile.
+# Requests are handled on the interactive thread, which HTTP.jl keeps to
+# itself. Anything slow runs on a worker thread instead, so the server keeps
+# answering other requests meanwhile.
 function off_thread(work)
     task = Threads.@spawn work()
     try
@@ -62,7 +63,7 @@ end
 # A response's body where it is to be written out as it is made, not held
 # whole: `write_to(io)` writes it, and returns whether it wrote all of it.
 # `finished()` is called once the response is over, however it ended.
-struct StreamedBody
+struct StreamedBody <: HTTP.AbstractBody
     write_to::Function
     finished::Function
 end
@@ -139,9 +140,9 @@ end
 # --- Reading a request, within a size limit ---
 
 # HTTP.jl's own way of handing a handler its request reads the whole body
-# first, whatever its size, so a request of a gigabyte or two would fill the
-# pod's memory before any check could refuse it. Requests are read here
-# instead, and no more of one is kept than its route allows.
+# first, with one size limit for every route, and an upload has to wait its
+# turn before it is read. Requests are read here instead, and no more of one
+# is kept than its route allows.
 const SMALL_BODY_BYTES = 64 * 1024
 const REQUEST_TOO_LARGE = "The request is too large"
 # How much of a refused request is read and thrown away so that its sender
@@ -151,34 +152,47 @@ const DISCARD_BYTES = 32 * 1024^2
 # A case file is uploaded to one route; every other request is small.
 body_limit(target) = startswith(target, "/api/multiple") ? MAX_BODY_BYTES : SMALL_BODY_BYTES
 
+# What HTTP.jl raises when a request has not arrived within BODY_SECONDS
+const TOO_SLOW = HTTP.IOPoll.DeadlineExceededError
+
 # Reads a request's body up to `limit`. Returns :large when it is larger:
 # by the size it declares, without reading it, or, where it declares none,
 # as soon as more than the limit has arrived. Returns :slow when it has not
-# all arrived by `deadline`.
-function read_body(stream, limit, deadline = Inf)
-    declared = tryparse(Int, HTTP.header(stream.message, "Content-Length"))
+# all arrived within the time HTTP.jl allows from the end of its headers.
+function read_body(stream, limit)
+    declared = tryparse(Int, HTTP.header(HTTP.startread(stream), "Content-Length"))
     declared !== nothing && declared > limit && return :large
     body = UInt8[]
-    while !eof(stream)
-        append!(body, readavailable(stream))
-        length(body) > limit && return :large
-        time() > deadline && return :slow
+    piece = Vector{UInt8}(undef, 64 * 1024)
+    try
+        while (n = readbytes!(stream, piece)) > 0
+            append!(body, view(piece, 1:n))
+            length(body) > limit && return :large
+        end
+    catch e
+        e isa TOO_SLOW && return :slow
+        rethrow()
     end
     return body
 end
+
+# The request as the app is given it: as it came, with the body read here
+with_body(request, body) =
+    HTTP.Request(request.method, request.target, request.headers, body; context = HTTP.get_request_context(request))
 
 # --- Uploads, a few at a time ---
 
 # Each upload being read is held in memory, up to MAX_BODY_BYTES of it and
 # again as it is read out of the request, and the limit on waiting runs
 # applies only once that is done: sixty arriving together took 740 MiB. So
-# only this many are read at once, which took 170. The rest wait, with no
-# more of them taken in than UNREAD_BYTES.
+# only this many are read at once, which took 170. The rest wait, unread.
 const UPLOADS_AT_ONCE = 4
 # How long an upload waits for its turn before it is told the server is busy
 const UPLOAD_WAIT_SECONDS = 20
-# How long an upload has to arrive once its turn has come. A sender that
-# takes its time would otherwise keep the turn, and four of them every turn.
+# How long an upload has to arrive once its turn has come, at the least. A
+# sender that takes its time would otherwise keep the turn, and four of them
+# every turn. HTTP.jl counts the time from the end of a request's headers, so
+# it allows this and the wait for a turn together: see BODY_SECONDS.
 const UPLOAD_SECONDS = 60
 const UPLOAD_TOO_SLOW = "The file took too long to arrive. Check your connection and try again."
 
@@ -204,158 +218,147 @@ give_back!(turns::Turns) = (Threads.atomic_sub!(turns.taken, 1); nothing)
 # Reads on, keeping nothing, until the request ends or `most` bytes have
 # gone. Returns whether the whole request has now been read.
 function discard(stream, most)
-    declared = tryparse(Int, HTTP.header(stream.message, "Content-Length"))
+    declared = tryparse(Int, HTTP.header(HTTP.startread(stream), "Content-Length"))
     declared !== nothing && declared > most && return false
     gone = 0
-    while !eof(stream)
-        gone += length(readavailable(stream))
-        gone > most && return false
+    piece = Vector{UInt8}(undef, 64 * 1024)
+    try
+        while (n = readbytes!(stream, piece)) > 0
+            (gone += n) > most && return false
+        end
+    catch e
+        e isa TOO_SLOW && return false
+        rethrow()
     end
     return true
 end
 
-# What a body that writes itself is written to. HTTP.jl closes a connection
-# from which nothing has come for IDLE_SECONDS, and during a download nothing
-# does: each piece the client has taken counts here as a sign of life.
+# What a body that writes itself is written to: the response, noting whether
+# writing to it failed, which is the client gone or no longer reading.
 mutable struct Sending <: IO
     const stream::HTTP.Stream
-    taken::Float64 # when the client last took a piece
+    failed::Bool
 end
 
-function Base.unsafe_write(io::Sending, bytes::Ptr{UInt8}, n::UInt)
-    written = unsafe_write(io.stream, bytes, n)
-    io.taken = time()
-    io.stream.stream.timestamp = io.taken # HTTP.jl's record of when the connection was last heard from
-    return written
-end
-
-# Closes a connection at once. An ordinary close first waits for everything
-# written to it to be taken, which a client that has stopped reading never
-# does: the close, and whatever was waiting on it, would wait for good.
-function drop(stream::HTTP.Stream)
-    socket = stream.stream.io
-    socket isa Base.LibuvStream || return close(stream)
-    Base.iolock_begin()
-    if isopen(socket) && socket.status != Base.StatusClosing
-        ccall(:jl_forceclose_uv, Cvoid, (Ptr{Cvoid},), socket.handle)
-        socket.status = Base.StatusClosing
+function sent(write_to_stream, io::Sending)
+    try
+        return write_to_stream(io.stream)
+    catch
+        io.failed = true
+        rethrow()
     end
-    Base.iolock_end()
-    return
 end
+
+Base.write(io::Sending, bytes::Vector{UInt8}) = sent(stream -> write(stream, bytes), io)
+Base.unsafe_write(io::Sending, bytes::Ptr{UInt8}, n::UInt) = sent(stream -> unsafe_write(stream, bytes, n), io)
+
+# Closes a connection at once, with nothing more sent on it. HTTP.jl would
+# end a response that stopped part way as though it were complete.
+drop(stream::HTTP.Stream) = close(stream.tracked.conn)
 
 # Sends a body that writes itself. Its headers have gone by now, so one that
 # stops part way cannot be answered with an error: the connection is dropped
 # without the body's end being marked, which a browser reports as a download
-# that did not complete. HTTP.jl is told the connection went away, as below.
+# that did not complete.
 #
-# A client that stops reading is dropped here once it has taken nothing for
-# `idle` seconds. HTTP.jl would not: it closes a silent connection in the
-# ordinary way, which waits behind the piece not taken.
-function write_streamed(stream, response, idle)
-    body::StreamedBody = response.body
-    # the connection keeps its last response until its next request: not what this one was written from
-    response.body = UInt8[]
-    sending = Sending(stream, time())
-    watch = Timer(1; interval = 1) do _
-        time() - sending.taken > idle && drop(stream)
-    end
+# A client that stops reading is closed by HTTP.jl once a piece has waited
+# WRITE_SECONDS to be taken.
+function write_streamed(stream, body::StreamedBody, target)
+    sending = Sending(stream, false)
     complete = try
         HTTP.startwrite(stream)
         body.write_to(sending)
     catch e
-        e isa Base.IOError && rethrow() # the client went away, or was closed for taking nothing
-        @error "Response failed part way" target = response.request.target exception = (e, catch_backtrace())
+        sending.failed && rethrow() # the client went away, or was closed for taking nothing; HTTP.jl closes it quietly
+        @error "Response failed part way" target exception = (e, catch_backtrace())
         false
     finally
-        close(watch)
         body.finished()
     end
-    complete && return
-    drop(stream)
-    throw(Base.IOError("response ended part way; connection closed", Base.UV_ECONNABORTED))
+    complete || drop(stream)
+    return
+end
+
+# An answer refusing a request, after which its connection is closed
+function refusal(status, message)
+    response = error_response(status, message)
+    HTTP.setheader(response, "Connection" => "close")
+    return response
+end
+
+# Writes an answer that is held whole
+function write_whole(stream, body)
+    body isa HTTP.EmptyBody || write(stream, body)
+    return
 end
 
 # Reads a request within its limits and answers it: `handle` is given the
-# request once its body has been read. Returns the answer, and whether the
-# whole request has been read.
+# request once its body has been read.
 function answer(handle, stream, request)
     limit = body_limit(request.target)
     body = read_body(stream, limit)
-    if body === :large
+    if body === :slow
+        @warn "Request refused: it took too long to arrive" target = request.target
+        return refusal(408, "The request took too long to arrive")
+    elseif body === :large
         @warn "Request refused: larger than its limit" target = request.target limit declared = HTTP.header(request, "Content-Length", "not given")
-        response = error_response(413, limit == MAX_BODY_BYTES ? TOO_LARGE : REQUEST_TOO_LARGE)
-        HTTP.setheader(response, "Connection" => "close")
-        return response, discard(stream, DISCARD_BYTES)
+        discard(stream, DISCARD_BYTES)
+        return refusal(413, limit == MAX_BODY_BYTES ? TOO_LARGE : REQUEST_TOO_LARGE)
     end
-    request.body = body
-    return handle(request), true
+    return handle(with_body(request, body))
 end
 
 # Reads an upload and hands it to `handle`. Returns the answer, or :large or
 # :slow for one that was not read.
-function read_upload_request(handle, stream, request, seconds)
-    body = read_body(stream, MAX_BODY_BYTES, time() + seconds)
+function read_upload_request(handle, stream, request)
+    body = read_body(stream, MAX_BODY_BYTES)
     body isa Symbol && return body
-    request.body = body
-    response = handle(request)
-    request.body = UInt8[] # read and done with
-    return response
+    return handle(with_body(request, body))
 end
 
 # The same for an upload, which is read in its turn. The turn is kept until
 # the run has been queued: until then the file is here whole, and again as
 # it was read out of the request.
-function answer_upload(handle, stream, request, turns, wait, seconds)
+function answer_upload(handle, stream, request, turns, wait)
     if !take_turn!(turns, wait)
         @warn "Upload refused: no turn came" target = request.target waited = wait
-        response = error_response(503, BUSY)
-        HTTP.setheader(response, "Connection" => "close")
-        return response, discard(stream, DISCARD_BYTES)
+        discard(stream, DISCARD_BYTES)
+        return refusal(503, BUSY)
     end
     outcome = try
-        read_upload_request(handle, stream, request, seconds)
+        read_upload_request(handle, stream, request)
     finally
         give_back!(turns)
         # what reading it took is given back a moment later, not left until
         # Julia next needs the room: 150 MiB after sixty of them
         tidy()
     end
-    outcome isa Symbol || return outcome, true
+    outcome isa Symbol || return outcome
     if outcome === :slow
-        @warn "Upload refused: it took too long to arrive" target = request.target seconds
-        response = error_response(408, UPLOAD_TOO_SLOW)
-        HTTP.setheader(response, "Connection" => "close")
-        return response, false # the rest of it is not waited for
+        @warn "Upload refused: it took too long to arrive" target = request.target
+        return refusal(408, UPLOAD_TOO_SLOW) # the rest of it is not waited for
     end
     @warn "Request refused: larger than its limit" target = request.target limit = MAX_BODY_BYTES declared = HTTP.header(request, "Content-Length", "not given")
-    response = error_response(413, TOO_LARGE)
-    HTTP.setheader(response, "Connection" => "close")
-    return response, discard(stream, DISCARD_BYTES)
+    discard(stream, DISCARD_BYTES)
+    return refusal(413, TOO_LARGE)
 end
 
-# What the server runs for each request.
-function limited(handle; idle = IDLE_SECONDS, turns = Turns(), wait = UPLOAD_WAIT_SECONDS, seconds = UPLOAD_SECONDS)
+# What the server runs for each request. A request whose body is not read to
+# its end, as when it is refused, is answered and its connection closed by
+# HTTP.jl: what is left of it is not waited for.
+function limited(handle; turns = Turns(), wait = UPLOAD_WAIT_SECONDS)
     return function (stream::HTTP.Stream)
-        request::HTTP.Request = stream.message
-        response, finished = body_limit(request.target) == MAX_BODY_BYTES ?
-            answer_upload(handle, stream, request, turns, wait, seconds) : answer(handle, stream, request)
-        request.response = response
-        response.request = request
-        if response.body isa StreamedBody
-            write_streamed(stream, response, idle)
-        else
-            HTTP.startwrite(stream)
-            write(stream, response.body)
+        request::HTTP.Request = HTTP.startread(stream)
+        response = body_limit(request.target) == MAX_BODY_BYTES ?
+            answer_upload(handle, stream, request, turns, wait) : answer(handle, stream, request)
+        HTTP.setstatus(stream, response.status)
+        for header in response.headers
+            HTTP.setheader(stream, header)
         end
-        if !finished
-            # The rest of the request is not going to be read: the answer is
-            # completed and the connection dropped. HTTP.jl is told the
-            # connection went away, which it takes quietly; leaving it to find
-            # a request half read would be logged as a failure of the handler.
-            HTTP.closewrite(stream)
-            close(stream)
-            throw(Base.IOError("request refused part read; connection closed", Base.UV_ECONNABORTED))
+        if response.body isa StreamedBody
+            write_streamed(stream, response.body, request.target)
+        else
+            write_whole(stream, response.body)
         end
         return
     end
@@ -363,33 +366,32 @@ end
 
 # --- Connections ---
 
-# The most connections held at once; more wait their turn. Each costs about
-# 33 KB, so this bounds what any number of them can take, at about 330 MB:
-# what is left of the pod's 2 GiB beside the largest batch (1.5 GB). A lower limit is easier to fill with silent connections,
-# which keeps everyone else out, the health check included, until they are
-# closed: 1,000 was, by 3,000 of them, for up to three minutes.
-const MAX_CONNECTIONS = 10_000
-# A connection that has sent nothing for this long is closed, so that ones
-# left open and silent do not keep the places. HTTP.jl counts the time from
-# the last data received, including while an answer is being worked out, so
-# this must stay above the longest any answer takes: Atlas allows 30 seconds.
-# It looks every one to two times this long, so a silent connection goes
-# within one to three minutes.
+# A connection is closed when it is too slow at any stage, so that ones left
+# open and silent hold nothing for long. None of these counts the time an
+# answer takes to work out, for which Atlas allows 30 seconds.
+# How long a request's headers may take to arrive, from a new connection or
+# once the first of them has come on one kept open
+const HEADER_SECONDS = 10
+# How long its body may then take: for an upload, its wait for a turn and
+# then its time to arrive
+const BODY_SECONDS = UPLOAD_WAIT_SECONDS + UPLOAD_SECONDS
+# How long a connection is kept open between requests
 const IDLE_SECONDS = 60
+# How long the client may take over each piece of an answer, about 1 MB of a
+# download. One that stops reading is closed this long after.
+const WRITE_SECONDS = 60
 
-# The most a connection holds of what has been sent to it and not yet read.
-# Julia would take in 10 MB, and keeps room that size once it has: an upload
-# arriving faster than it was read left 8.5 MB behind it, held with its
-# connection for a minute or two after that had closed, until the timer that
-# closes silent connections next looked. Sixty uploads left 500 MiB. A sender
-# with more than this to send waits for it to be read.
-const UNREAD_BYTES = 16 * 1024
-
-# Listens with the limits above. HTTP.jl's own log messages are turned off:
-# it would otherwise write a warning for every idle connection it closes.
-listen(handle, host, port; max_connections = MAX_CONNECTIONS, idle_seconds = IDLE_SECONDS) =
-    HTTP.serve!(limited(handle; idle = idle_seconds), host, port; stream = true, max_connections, readtimeout = idle_seconds, verbose = -1,
-        tcpisvalid = socket -> (socket.throttle = UNREAD_BYTES; true))
+# Nothing here limits how many connections are held at once: HTTP.jl has no
+# setting for it. Each costs about 30 KB until it is closed for its silence,
+# and on Atlas none reaches the pod except through the gateway. HTTP.jl takes
+# in nothing of a request until it is read, so one waiting holds no more.
+#
+# HTTP/2 without encryption is turned off: no browser uses it, and it carries
+# many requests on one connection, which the limits above are not made for.
+listen(handle, host, port; turns = Turns(), wait = UPLOAD_WAIT_SECONDS,
+       header_seconds = HEADER_SECONDS, body_seconds = BODY_SECONDS, idle_seconds = IDLE_SECONDS, write_seconds = WRITE_SECONDS) =
+    HTTP.listen!(limited(handle; turns, wait), host, port; allow_h2c = false, read_header_timeout = header_seconds,
+        read_timeout = body_seconds, idle_timeout = idle_seconds, write_timeout = write_seconds)
 
 # Starts listening straight away; the first reference load runs in the
 # background so the health check answers while the database is slow or down.

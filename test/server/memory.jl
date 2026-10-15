@@ -107,11 +107,11 @@ end
             # Each request here is made on a connection of its own. The client
             # would otherwise keep them to use again, and hand out ones the
             # server has since closed: with no second try, as here, that request fails.
-            fresh() = HTTP.Pool(1)
+            fresh() = HTTP.Client()
             function download(after_first = () -> nothing; from = url, pause = 0)
                 bytes, lines = 0, 0
                 complete = try
-                    HTTP.open("GET", from; retry = false, pool = fresh()) do io
+                    HTTP.open("GET", from; retry = false, client = fresh()) do io
                         HTTP.startread(io)
                         while !eof(io)
                             piece = readavailable(io)
@@ -123,7 +123,7 @@ end
                     end
                     true
                 catch e
-                    e isa HTTP.Exceptions.StatusError && @warn "Download refused" status = e.status
+                    e isa HTTP.StatusError && @warn "Download refused" status = e.status
                     false
                 end
                 return (; complete, bytes, lines)
@@ -149,7 +149,7 @@ end
             # Only so many downloads run at once, each holding the piece it is
             # sending: one more is refused, and the page, which asks first, is
             # told so. Twenty here are begun and then left unread.
-            ask(path) = HTTP.get("http://127.0.0.1:8775" * path; status_exception = false, retry = false, pool = fresh())
+            ask(path) = HTTP.get("http://127.0.0.1:8775" * path; status_exception = false, retry = false, client = fresh())
             asking = "/api/jobs/$job/download?table=excluded"
             @test OSS.MAX_DOWNLOADS == 20 && state.jobs.downloads[] == 0
             @test ask(asking * "&check=1").status == 204
@@ -169,18 +169,17 @@ end
             @test timedwait(() -> state.jobs.downloads[] == 0, 10) == :ok
             @test download().complete
 
-            # A connection that has sent nothing for a while is closed, and a
-            # download sends nothing: one that is being read must not count as
-            # silent, however long it takes. Here silent is a second.
-            patient = OSS.listen(respond, "127.0.0.1", 8776; idle_seconds = 1)
+            # A client that stops taking an answer is closed once a piece has
+            # waited a while: one that is being read, however slowly, must
+            # not be. Here the while is a second.
+            patient = OSS.listen(respond, "127.0.0.1", 8776; write_seconds = 1)
             try
                 from = replace(url, "8775" => "8776")
                 seconds = @elapsed slow = download(; from, pause = 0.3)
                 @test seconds > 4 && slow.complete && slow.lines == total + 1
                 # One that stops being read is closed, and its place comes
-                # back, though the reader keeps its connection open. HTTP.jl
-                # by itself leaves it: forty seconds on it still had its place.
-                reader = HTTP.Sockets.connect("127.0.0.1", 8776)
+                # back, though the reader keeps its connection open.
+                reader = Sockets.connect("127.0.0.1", 8776)
                 write(reader, "GET /api/jobs/$job/download?table=excluded HTTP/1.1\r\nHost: x\r\n\r\n")
                 @test startswith(String(readavailable(reader)), "HTTP/1.1 200")
                 @test timedwait(() -> state.jobs.downloads[] == 1, 5) == :ok
@@ -219,7 +218,7 @@ end
         try
             upload = "{\"pad\": \"" * "x"^(11 * 1024^2) * "\"}"
             function send()
-                socket = HTTP.Sockets.connect("127.0.0.1", 8778)
+                socket = Sockets.connect("127.0.0.1", 8778)
                 write(socket, "POST /api/multiple HTTP/1.1\r\nHost: x\r\nContent-Length: $(sizeof(upload))\r\n\r\n")
                 write(socket, upload)
                 answer = String(readavailable(socket))
