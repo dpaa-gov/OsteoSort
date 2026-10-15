@@ -1,0 +1,44 @@
+# syntax=docker/dockerfile:1
+# Compiles OSJ and the server into a trimmed program: one that holds only
+# the code it can be shown to reach, without Julia's compiler or the rest of
+# its system image. Experimental, as Julia's trimming is; build/Dockerfile is
+# the ordinary build, which main releases.
+#
+#   docker build -f build/Dockerfile.trim --output type=local,dest=dist .
+
+ARG JULIA_VERSION=1.13.1
+FROM julia:${JULIA_VERSION}-bookworm AS build
+
+ENV JULIA_DEPOT_PATH=/opt/julia-depot: \
+    JULIA_PKG_PRECOMPILE_AUTO=0
+
+# the compiled code is linked with gcc
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends build-essential && \
+    rm -rf /var/lib/apt/lists/*
+
+# Built at /app: the server's paths to its config, the page and VERSION are
+# fixed at compile time, and the image puts them there.
+WORKDIR /app
+COPY OSJ OSJ
+COPY server server
+COPY build/trim build/trim
+# The server is compiled from where it lies, in an environment that names it
+# by its path: given the server's own project, JuliaC compiles a copy of it
+# from a temporary folder, and those are then the paths fixed in the program.
+RUN julia --project=/opt/trim -e 'using Pkg; \
+        Pkg.develop([PackageSpec(path = "/app/server"), PackageSpec(path = "/app/OSJ")]); \
+        Pkg.add(name = "JuliaC", version = "0.3")'
+
+# `--trim=safe` refuses to build anything it cannot show to be complete
+RUN julia --startup-file=no --project=/opt/trim -e 'using JuliaC; JuliaC.main(ARGS)' -- \
+        --output-exe osteosort --bundle /out/osteosort --project=/opt/trim --experimental --trim=safe build/trim/entry.jl
+
+# The packages bring whole installations along and only their shared
+# libraries are loaded: LibPQ's holds a complete PostgreSQL (the server, psql,
+# pg_dump), most of what this removes.
+RUN cd /out/osteosort/share/julia/artifacts && \
+    rm -rf */bin */sbin */include */lib/*.a */lib/pkgconfig */lib/postgresql */share/postgresql
+
+FROM scratch
+COPY --from=build /out/osteosort /osteosort

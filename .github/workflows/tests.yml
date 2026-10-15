@@ -26,3 +26,36 @@ jobs:
 
       - name: Server
         run: julia --project=server -e 'using Pkg; Pkg.instantiate(); Pkg.test()'
+
+  # The trimmed build refuses to compile anything it cannot show to be
+  # complete, so compiling it is the test that the code can still be trimmed.
+  # The image is then made and started as a release would, without a database.
+  trim:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Compile the trimmed build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: build/Dockerfile.trim
+          platforms: linux/amd64
+          outputs: type=local,dest=dist
+
+      - name: Start the image
+        run: |
+          tar -czf dist/osteosort-linux-x86_64.tar.gz -C dist osteosort
+          docker build --build-arg BUNDLE=dist/osteosort-linux-x86_64.tar.gz -t osteosort:trim .
+          docker run -d --name osteosort -p 3838:3838 -e DB_NAME=none -e DB_USER=none -e DB_PASS=none osteosort:trim
+          for i in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:3838/healthz && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3838/healthz
+          curl -fsS http://127.0.0.1:3838/ | grep -q "<title>OsteoSort</title>"
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:3838/api/single)" = 400
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3838/api/nope)" = 404
+          docker logs osteosort

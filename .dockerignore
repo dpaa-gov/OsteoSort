@@ -1,5 +1,6 @@
 # Only what the two builds need is sent to Docker; everything else stays out.
 #   build/Dockerfile  compiles OSJ and server
+#   build/Dockerfile.trim  the same, trimmed, from build/trim/entry.jl
 #   Dockerfile        copies server/config, web and VERSION, and, for a local
 #                     build, a bundle from dist/
 *
@@ -7,6 +8,7 @@
 !server
 !web
 !VERSION
+!build/trim
 !dist/*.tar.gz
 OSJ/test
 server/test
