@@ -117,6 +117,9 @@ function prune!(store::JobStore; at = now(UTC))
     return
 end
 
+# Whether a run of `rows` result rows fits beside `held` rows in `count` finished jobs
+fits(store::JobStore, held::Int, count::Int, rows::Integer)::Bool = held + rows <= store.max_rows && count < MAX_FINISHED_JOBS
+
 # Makes room for a run about to produce `rows` result rows, before it is
 # computed. Results nobody has asked for in 15 minutes are dropped, the least
 # recently used first, until the run fits. Results in use are left alone: if
@@ -129,21 +132,20 @@ function make_room!(store::JobStore, rows::Integer; at = now(UTC))
         finished = sort!(finished_jobs(store); by = job -> (@atomic job.used))
         held = sum(result_rows, finished; init = 0)
         count = length(finished)
-        fits() = held + rows <= store.max_rows && count < MAX_FINISHED_JOBS
         for job in finished
-            (fits() || in_use(job, at)) && break
+            (fits(store, held, count, rows) || in_use(job, at)) && break
             held -= result_rows(job)
             count -= 1
             drop!(store, job)
         end
-        fits() && return
+        fits(store, held, count, rows) && return
         # everything left is in use; the wait is until the last of those that must go has gone unused
         minutes = Dates.value(IN_USE)
         for job in finished
             haskey(store.jobs, job.id) || continue
             held -= result_rows(job)
             count -= 1
-            if fits()
+            if fits(store, held, count, rows)
                 minutes = max(1, ceil(Int, Dates.value((@atomic job.used) + IN_USE - at) / 60_000))
                 break
             end
