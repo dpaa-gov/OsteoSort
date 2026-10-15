@@ -299,8 +299,8 @@ if HAVE_DB
     snapshot = OSS.load_reference(config)
 
     # a stalled query fails after 15 seconds instead of holding every page load
-    let conn = OSS.LibPQ.Connection(OSS.conninfo(config))
-        @test only(OSS.query(conn, "SHOW statement_timeout").statement_timeout) == "15s"
+    let conn = OSS.PG.connect(OSS.conninfo(config))
+        @test only(OSS.PG.texts(OSS.PG.query(conn, "SHOW statement_timeout"), "statement_timeout")) == "15s"
         close(conn)
     end
     meta = JSON.parse(JSON.json(OSS.build_meta(snapshot, config)))

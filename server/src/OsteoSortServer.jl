@@ -3,13 +3,12 @@ module OsteoSortServer
 using Dates
 using HTTP
 using JSON
-using LibPQ
 using Printf
 using Random
-using Tables
 using OSJ
 
 include("config.jl")
+include("pg.jl")
 include("reference.jl")
 include("csv.jl")
 include("meta.jl")
