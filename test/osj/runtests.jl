@@ -204,30 +204,30 @@ end
     humerus = ["hum_01", "hum_02", "hum_03"]
 
     result = ttest(prepare_pair_match(groups, upload, "Humerus", humerus), 0.1, settings)
-    @test (result.results.id_1, result.results.id_2) == (["L1", "L1", "L2"], ["R1", "R2", "R1"])
-    @test result.results.measurements == ["hum_01 hum_02 hum_03 ", "hum_02 ", "hum_01 "]
-    @test all(in(("Excluded", "Cannot Exclude")), result.results.result)
-    @test result.rejected.reason == [OSJ.UNMEASURED, OSJ.NOTHING_IN_COMMON]
-    @test (result.rejected.id_1, result.rejected.id_2) == (["L3", "L2"], ["", "R2"])
+    @test (result.results[:id_1], result.results[:id_2]) == (["L1", "L1", "L2"], ["R1", "R2", "R1"])
+    @test result.results[:measurements] == ["hum_01 hum_02 hum_03 ", "hum_02 ", "hum_01 "]
+    @test all(in(("Excluded", "Cannot Exclude")), result.results[:result])
+    @test result.rejected[:reason] == [OSJ.UNMEASURED, OSJ.NOTHING_IN_COMMON]
+    @test (result.rejected[:id_1], result.rejected[:id_2]) == (["L3", "L2"], ["", "R2"])
     @test result.plot === nothing                           # only single comparisons carry plot data
 
     # sample sizes add up across groups, and the breakdown says so
-    alone = [ttest(prepare_pair_match([g], upload, "humerus", humerus), 0.1, settings).results.n for g in groups]
-    @test result.results.n == alone[1] .+ alone[2]
-    @test result.results.reference == ["A $(alone[1][i]), B $(alone[2][i])" for i in 1:3]
+    alone = [ttest(prepare_pair_match([g], upload, "humerus", humerus), 0.1, settings).results[:n] for g in groups]
+    @test result.results[:n] == alone[1] .+ alone[2]
+    @test result.results[:reference] == ["A $(alone[1][i]), B $(alone[2][i])" for i in 1:3]
 
     # fewer than ten reference individuals: the pair is rejected, not tested
     few = [group("F", 6; seed = 3)]
     limited = ttest(prepare_pair_match(few, upload, "humerus", humerus), 0.1, settings)
-    @test isempty(limited.results.result)
-    @test limited.rejected.reason[1] == OSJ.UNMEASURED && limited.rejected.reason[2] == OSJ.NOTHING_IN_COMMON
-    @test all(startswith("Reference sample too small: "), limited.rejected.reason[3:end]) && length(limited.rejected.reason) == 5
-    @test length(ttest(prepare_pair_match(few, upload, "humerus", humerus), 0.1, settings; minimum_reference = 0).results.result) == 3
-    @test isempty(regression_test(prepare_regression(few, upload, "humerus", "femur", "Left", "left", humerus, ["fem_01", "fem_02"]), 0.1).results.result)
+    @test isempty(limited.results[:result])
+    @test limited.rejected[:reason][1] == OSJ.UNMEASURED && limited.rejected[:reason][2] == OSJ.NOTHING_IN_COMMON
+    @test all(startswith("Reference sample too small: "), limited.rejected[:reason][3:end]) && length(limited.rejected[:reason]) == 5
+    @test length(ttest(prepare_pair_match(few, upload, "humerus", humerus), 0.1, settings; minimum_reference = 0).results[:result]) == 3
+    @test isempty(regression_test(prepare_regression(few, upload, "humerus", "femur", "Left", "left", humerus, ["fem_01", "fem_02"]), 0.1).results[:result])
 
     # a group without the bone adds nothing
     empty_group = ReferenceGroup("C", "C", "x", "y", Dict{String, BoneTable}())
-    @test ttest(prepare_pair_match(vcat(groups, empty_group), upload, "humerus", humerus), 0.1, settings).results.n == result.results.n
+    @test ttest(prepare_pair_match(vcat(groups, empty_group), upload, "humerus", humerus), 0.1, settings).results[:n] == result.results[:n]
 
     # nothing to analyse
     @test prepare_pair_match(groups, upload, "tibia", ["tib_01"]) === nothing
@@ -235,9 +235,9 @@ end
     @test prepare_pair_match([empty_group], upload, "humerus", humerus) === nothing
 
     regression = regression_test(prepare_regression(groups, upload, "humerus", "femur", "Left", "left", humerus, ["fem_01", "fem_02"]), 0.1)
-    @test (regression.results.x_id, regression.results.y_id) == (["L1", "L2"], ["F1", "F1"])
-    @test regression.results.measurements == ["hum_01 hum_02 hum_03 fem_01 fem_02 ", "hum_01 fem_01 fem_02 "]
-    @test regression.rejected.x_id == ["L3"]
+    @test (regression.results[:x_id], regression.results[:y_id]) == (["L1", "L2"], ["F1", "F1"])
+    @test regression.results[:measurements] == ["hum_01 hum_02 hum_03 fem_01 fem_02 ", "hum_01 fem_01 fem_02 "]
+    @test regression.rejected[:x_id] == ["L3"]
 
     # articulation with two configured measurement pairs: only the pairs both bones have are listed
     two = SortTable(["A1", "A2", "B1"], ["Left", "Left", "Left"], ["Humerus", "Humerus", "Femur"],
@@ -245,16 +245,16 @@ end
         Union{Missing, Float64}[52.0 64.0 missing missing; 51.0 missing missing missing; missing missing 50.0 62.0])
     joint = ttest(prepare_articulation(groups, two, "humerus", "femur", "Left", ["hum_01", "hum_02"], ["fem_01", "fem_02"]),
         0.1, settings; articulation = true)
-    @test joint.results.id_1 == ["A1", "A2"]
-    @test joint.results.measurements == ["hum_01 hum_02 fem_01 fem_02", "hum_01 fem_01"]
+    @test joint.results[:id_1] == ["A1", "A2"]
+    @test joint.results[:measurements] == ["hum_01 hum_02 fem_01 fem_02", "hum_01 fem_01"]
 
     single = ttest(prepare_single_pair_match(groups, "humerus", Dict("hum_01" => 52.0, "hum_02" => 64.0), Dict("hum_01" => 52.5)), 0.1, settings)
-    @test single.results.measurements == ["hum_01 "] && length(single.plot.reference) == only(single.results.n)
+    @test single.results[:measurements] == ["hum_01 "] && length(single.plot.reference) == only(single.results[:n])
     @test prepare_single_pair_match(groups, "humerus", Dict("hum_01" => 52.0), Dict("hum_02" => 60.0)) === nothing
 
     one = regression_test(prepare_single_regression(groups, "humerus", "femur", "Left", "Left",
         Dict("hum_01" => 52.0, "hum_02" => 64.0), Dict("fem_01" => 50.0, "fem_02" => 62.0)), 0.05)
-    @test length(one.plot.band.x) == only(one.results.n) && issorted(one.plot.band.x)
+    @test length(one.plot.band.x) == only(one.results[:n]) && issorted(one.plot.band.x)
     @test all(one.plot.band.lower .< one.plot.band.fit .< one.plot.band.upper)
     # a reference sample with no variation gives no p-value when the pair matches its mean exactly:
     # that pair is rejected with the reason, not called a potential match
@@ -265,8 +265,8 @@ end
     three = SortTable(["A", "B", "C"], ["Left", "Right", "Right"], fill("Humerus", 3), ["hum_01"],
         Matrix{Union{Missing, Float64}}(reshape([52.0, 52.0, 53.0], :, 1)))
     degenerate = ttest(prepare_pair_match([flat], three, "humerus", ["hum_01"]), 0.1, settings)
-    @test (degenerate.rejected.id_1, degenerate.rejected.id_2, degenerate.rejected.reason) == (["A"], ["B"], [OSJ.NOT_CALCULATED])
-    @test (degenerate.results.id_2, degenerate.results.p, degenerate.results.result) == (["C"], [0.0], ["Excluded"])
+    @test (degenerate.rejected[:id_1], degenerate.rejected[:id_2], degenerate.rejected[:reason]) == (["A"], ["B"], [OSJ.NOT_CALCULATED])
+    @test (degenerate.results[:id_2], degenerate.results[:p], degenerate.results[:result]) == (["C"], [0.0], ["Excluded"])
 
     # the band is drawn from the line the p-value was calculated with
     band = one.plot.band

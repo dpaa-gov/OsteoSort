@@ -98,12 +98,17 @@ function off_thread(::Type{T}, work::F)::T where {T, F}
     return result[]::T
 end
 
-# A response's body where it is to be written out as it is made, not held
-# whole: `write_to(io)` writes it, and returns whether it wrote all of it.
-# `finished()` is called once the response is over, however it ended.
-struct StreamedBody <: HTTP.AbstractBody
-    write_to::Function
-    finished::Function
+# A download's body: a result table, written out as CSV as it is sent, not
+# held whole. It is the one answer written that way. `write_download` writes
+# it and returns whether it wrote all of it; `download_finished` is called
+# once the response is over, however it ended (both in api.jl).
+struct Download <: HTTP.AbstractBody
+    table::ResultTable
+    jobs::JobStore      # its job is looked for here before each piece: cleared results stop it
+    id::String
+    target::String      # the request, for the log
+    deadline::Float64   # when it stops, as `time()` gives it
+    seconds::Int        # the time it was allowed, for the log
 end
 
 json_response(status, body::AbstractString) =
@@ -316,8 +321,8 @@ end
 
 # What a body that writes itself is written to: the response, noting whether
 # writing to it failed, which is the client gone or no longer reading.
-mutable struct Sending <: IO
-    const stream::HTTP.Stream
+mutable struct Sending{S <: HTTP.Stream} <: IO
+    const stream::S
     failed::Bool
 end
 
@@ -344,17 +349,17 @@ drop(stream::HTTP.Stream) = close(stream.tracked.conn)
 #
 # A client that stops reading is closed by HTTP.jl once a piece has waited
 # WRITE_SECONDS to be taken.
-function write_streamed(stream, body::StreamedBody, target)
+function write_streamed(stream, body::Download, target)
     sending = Sending(stream, false)
     complete = try
         HTTP.startwrite(stream)
-        body.write_to(sending)
+        write_download(sending, body)
     catch e
         sending.failed && rethrow() # the client went away, or was closed for taking nothing; HTTP.jl closes it quietly
         complain("Response failed part way: " * target * ": " * describe(e))
         false
     finally
-        body.finished()
+        download_finished(body)
     end
     complete || drop(stream)
     return
@@ -435,7 +440,7 @@ function limited(handle::H; turns::Turns = Turns(), wait::Real = UPLOAD_WAIT_SEC
         end
         # an answer is one of these
         body = response.body
-        if body isa StreamedBody
+        if body isa Download
             write_streamed(stream, body, request.target)
         elseif body isa String || body isa Vector{UInt8}
             write(stream, body)

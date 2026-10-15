@@ -9,11 +9,16 @@ end
 const NO_RESULT = "No comparison could be made with this input and reference data"
 const ANALYSIS_FAILED = "The analysis failed for this input and reference data"
 
+# What a finished run tells the page, beside its tables
+const Summary = @NamedTuple{seconds::Float64, comparisons::Int, specimens::Int, potential_matches::Int, exclusions::Int,
+                            exclusion_percent::Union{Nothing, Float64}, rejected::Int}
+const Histogram = @NamedTuple{bin_width::Float64, cannot_exclude::Vector{Int}, excluded::Vector{Int}, outside::Int, alpha::Float64}
+
 struct JobOutput
     analysis::String
-    tables::Dict{String, NamedTuple}
-    summary::NamedTuple
-    histogram::NamedTuple
+    tables::Dict{String, ResultTable}
+    summary::Summary
+    histogram::Histogram
 end
 
 mutable struct Job
@@ -219,11 +224,11 @@ const HISTOGRAM_BIN = 0.025
 
 # p-value counts per bin over [0, 1] for each outcome. Values above 1 (possible
 # with absolute differences and two tails) fall outside the axis, as before.
-function p_histogram(table, alpha)
+function p_histogram(table::ResultTable, alpha::Float64)::Histogram
     bins = round(Int, 1 / HISTOGRAM_BIN)
     counts = Dict("Cannot Exclude" => zeros(Int, bins), "Excluded" => zeros(Int, bins))
     outside = 0
-    for (p, result) in zip(table.p, table.result)
+    for (p, result) in zip(table[:p]::Vector{Float64}, table[:result]::Vector{String})
         if isnan(p) || p < 0 || p > 1
             outside += 1
         else
@@ -238,36 +243,40 @@ end
 # names, sides and measurement codes start with a capital, as everywhere else
 # in the app ("Humerus", "Left", "Hum_01 Hum_02"). OSJ's own tables keep the
 # lower-case names ARDS uses.
-function for_display(table::NamedTuple)
-    capitals(text) = join(uppercasefirst.(split(text, " "; keepempty = false)), " ")
-    # a column holds few distinct values: each is capitalised once and the rows share it
-    function each(change, column)
-        done = Dict{eltype(column), String}()
-        return String[get!(() -> change(value), done, value) for value in column]
-    end
-    shown(name, column) =
-        name == :measurements ? each(capitals, column) :
-        occursin(r"element|side", String(name)) ? each(uppercasefirst, column) : column
-    return NamedTuple{keys(table)}(Tuple(shown(name, column) for (name, column) in pairs(table)))
+capitals(text::String)::String = join(uppercasefirst.(split(text, " "; keepempty = false)), " ")
+
+# A column holds few distinct values: each is changed once and the rows share it
+function each(change::F, column::Vector{String})::Vector{String} where {F}
+    done = Dict{String, String}()
+    return String[get!(() -> change(value), done, value) for value in column]
 end
 
-function job_output(analysis, result::AnalysisResult, alpha, seconds)
+function shown(name::Symbol, column::Column)::Column
+    name == :measurements && return each(capitals, column::Vector{String})
+    occursin(r"element|side", String(name)) && return each(uppercasefirst, column::Vector{String})
+    return column
+end
+
+for_display(table::ResultTable)::ResultTable =
+    ResultTable(table.names, Column[shown(name, column) for (name, column) in zip(table.names, table.columns)])
+
+function job_output(analysis::String, result::AnalysisResult, alpha::Float64, seconds::Float64)::JobOutput
     table = result.results
-    kept = table.result .== "Cannot Exclude"
+    kept = (table[:result]::Vector{String}) .== "Cannot Exclude"
     comparisons = length(kept)
     matches = count(kept)
-    specimens = length(union(Set(table[1]), Set(table[4])))
-    summary = (
-        seconds = round(seconds; digits = 2),
-        comparisons = comparisons,
-        specimens = specimens,
-        potential_matches = matches,
-        exclusions = comparisons - matches,
-        exclusion_percent = comparisons == 0 ? nothing :
-                            round(100 * round((comparisons - matches) / comparisons; digits = 3); digits = 1),
-        rejected = length(result.rejected[1]),
-    )
-    tables = Dict{String, NamedTuple}(
+    # the first specimen of each pair is in the first column, the second in the fourth
+    specimens = length(union(Set(table.columns[1]::Vector{String}), Set(table.columns[4]::Vector{String})))
+    summary = Summary((
+        round(seconds; digits = 2),
+        comparisons,
+        specimens,
+        matches,
+        comparisons - matches,
+        comparisons == 0 ? nothing : round(100 * round((comparisons - matches) / comparisons; digits = 3); digits = 1),
+        row_count(result.rejected),
+    ))
+    tables = Dict{String, ResultTable}(
         "not_excluded" => for_display(OSJ.select_rows(table, kept)),
         "excluded" => for_display(OSJ.select_rows(table, .!kept)),
         "rejected" => for_display(result.rejected),

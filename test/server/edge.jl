@@ -18,7 +18,7 @@
     upload = OSS.read_upload(text)
     settings = OSJ.Settings(false, false, false, 2)
     pair_match(measurements) = OSJ.ttest(OSJ.prepare_pair_match(groups, upload, "humerus", measurements), 0.1, settings)
-    specimens(table, columns) = [(table[columns[1]][i], table[columns[2]][i], table[columns[3]][i]) for i in eachindex(table.reason)]
+    specimens(table, columns) = [(table[columns[1]][i], table[columns[2]][i], table[columns[3]][i]) for i in eachindex(table[:reason])]
 
     @testset "reading the file" begin
         @test length(upload.accession) == 19                      # the blank line is skipped
@@ -51,35 +51,35 @@
         result = pair_match(["hum_01", "hum_02", "hum_03", "hum_06"])
         rejected = result.rejected
         # 3 measured left x 6 measured right = 18 pairs; 3 of them share no measurement
-        @test length(result.results.result) == 15
-        @test Set(result.results.id_1) == Set(["H1", "H2", "H3"])
-        @test Set(result.results.id_2) == Set(["H5", "H6", "H7", "H11", "H12, a"])
-        @test count(==("H5"), result.results.id_2) == 6           # both specimens numbered H5 are compared
-        @test all(!isempty, result.results.measurements)
+        @test length(result.results[:result]) == 15
+        @test Set(result.results[:id_1]) == Set(["H1", "H2", "H3"])
+        @test Set(result.results[:id_2]) == Set(["H5", "H6", "H7", "H11", "H12, a"])
+        @test count(==("H5"), result.results[:id_2]) == 6           # both specimens numbered H5 are compared
+        @test all(!isempty, result.results[:measurements])
         # rows that match no side or element are simply not part of the analysis
-        @test isempty(intersect(["H8", "H9", "H10"], vcat(result.results.id_1, result.results.id_2, rejected.id_1, rejected.id_2)))
-        @test rejected.reason == vcat(OSJ.UNMEASURED, fill(OSJ.NOTHING_IN_COMMON, 3))
+        @test isempty(intersect(["H8", "H9", "H10"], vcat(result.results[:id_1], result.results[:id_2], rejected[:id_1], rejected[:id_2])))
+        @test rejected[:reason] == vcat(OSJ.UNMEASURED, fill(OSJ.NOTHING_IN_COMMON, 3))
         @test specimens(rejected, (:id_1, :element_1, :side_1))[1] == ("H4", "humerus", "left")
-        @test (rejected.id_2[1], rejected.element_2[1], rejected.side_2[1]) == ("", "", "")
-        @test Set(zip(rejected.id_1[2:end], rejected.id_2[2:end])) == Set([("H2", "H6"), ("H3", "H6"), ("H3", "H11")])
+        @test (rejected[:id_2][1], rejected[:element_2][1], rejected[:side_2][1]) == ("", "", "")
+        @test Set(zip(rejected[:id_1][2:end], rejected[:id_2][2:end])) == Set([("H2", "H6"), ("H3", "H6"), ("H3", "H11")])
     end
 
     @testset "pair-match with one measurement" begin
         result = pair_match(["hum_01"])
-        @test length(result.results.result) == 8                  # H1, H3 x H5, H7, "H12, a", H5
+        @test length(result.results[:result]) == 8                  # H1, H3 x H5, H7, "H12, a", H5
         rejected = result.rejected
-        @test all(==(OSJ.UNMEASURED), rejected.reason)
-        @test rejected.id_1 == ["H2", "H4", "", ""]               # left specimens in the first columns
-        @test rejected.id_2 == ["", "", "H6", "H11"]              # right specimens in the second
+        @test all(==(OSJ.UNMEASURED), rejected[:reason])
+        @test rejected[:id_1] == ["H2", "H4", "", ""]               # left specimens in the first columns
+        @test rejected[:id_2] == ["", "", "H6", "H11"]              # right specimens in the second
     end
 
     @testset "every specimen on one side unmeasured" begin
         result = pair_match(["hum_03"])                           # only three right humeri have it
         @test result !== nothing
-        @test isempty(result.results.result)
-        @test result.rejected.id_1 == ["H1", "H2", "H3", "H4", "", "", ""]
-        @test result.rejected.id_2 == ["", "", "", "", "H6", "H7", "H12, a"]
-        @test all(==(OSJ.UNMEASURED), result.rejected.reason)
+        @test isempty(result.results[:result])
+        @test result.rejected[:id_1] == ["H1", "H2", "H3", "H4", "", "", ""]
+        @test result.rejected[:id_2] == ["", "", "", "", "H6", "H7", "H12, a"]
+        @test all(==(OSJ.UNMEASURED), result.rejected[:reason])
         output = OSS.job_output("pairmatch", result, 0.1, 0.0)
         @test output.summary.comparisons == 0 && output.summary.rejected == 7
         @test output.summary.exclusion_percent === nothing
@@ -101,14 +101,14 @@
     @testset "articulation and regression" begin
         result = OSJ.ttest(OSJ.prepare_articulation(groups, upload, "femur", "os coxa", "Left", ["fem_04"], ["osc_17"]),
             0.1, settings; articulation = true)
-        @test (result.results.id_1, result.results.id_2) == (["F1"], ["O1"])
-        @test result.results.measurements == ["fem_04 osc_17"]
-        @test isempty(result.rejected.reason)
+        @test (result.results[:id_1], result.results[:id_2]) == (["F1"], ["O1"])
+        @test result.results[:measurements] == ["fem_04 osc_17"]
+        @test isempty(result.rejected[:reason])
 
         result = OSJ.regression_test(OSJ.prepare_regression(groups, upload, "humerus", "femur", "LEFT", "left",
             ["hum_01", "hum_02", "hum_06"], ["fem_01", "fem_04"]), 0.1)
-        @test result.results.x_id == ["H1", "H2", "H3"] && all(==("F1"), result.results.y_id)
-        @test result.rejected.x_id == ["H4"] && result.rejected.reason == [OSJ.UNMEASURED]
+        @test result.results[:x_id] == ["H1", "H2", "H3"] && all(==("F1"), result.results[:y_id])
+        @test result.rejected[:x_id] == ["H4"] && result.rejected[:reason] == [OSJ.UNMEASURED]
     end
 
     @testset "through the API" begin
@@ -225,7 +225,7 @@ end
     group = [only(g for g in snapshot.groups if g.label == "Chiba japanese male")]
     result = OSJ.ttest(OSJ.prepare_pair_match(group, upload, "humerus", OSJ.available_measurements(group, "humerus")),
         0.1, OSJ.Settings(false, false, false, 2))
-    @test length(result.results.result) == 400 && 0 < count(==("Excluded"), result.results.result) < 400
+    @test length(result.results[:result]) == 400 && 0 < count(==("Excluded"), result.results[:result]) < 400
 end
 
 # A comparison needs ten reference individuals; below that the pair is rejected with the reason
@@ -238,24 +238,24 @@ end
 
     # two small groups: samples of 4 or 5, so nothing is tested
     small = OSJ.ttest(OSJ.prepare_pair_match(group.(["SI japanese female", "SI japanese male"]), upload, "humerus", humerus), 0.1, settings)
-    @test isempty(small.results.result)
-    @test count(startswith("Reference sample too small: "), small.rejected.reason) == 448
-    @test all(endswith("(minimum 10)"), filter(startswith("Reference"), small.rejected.reason))
+    @test isempty(small.results[:result])
+    @test count(startswith("Reference sample too small: "), small.rejected[:reason]) == 448
+    @test all(endswith("(minimum 10)"), filter(startswith("Reference"), small.rejected[:reason]))
     output = OSS.job_output("pairmatch", small, 0.1, 0.0)
     @test output.summary.comparisons == 0 && output.summary.potential_matches == 0 && output.summary.rejected == 460
 
     # one individual: no p-value was ever possible, and it no longer reads as "Cannot Exclude"
     one = OSJ.ttest(OSJ.prepare_pair_match([group("SI japanese female")], upload, "humerus", humerus), 0.1, settings)
-    @test isempty(one.results.result) && any(==("Reference sample too small: 1 (minimum 10)"), one.rejected.reason)
+    @test isempty(one.results[:result]) && any(==("Reference sample too small: 1 (minimum 10)"), one.rejected[:reason])
 
     # a small group added to a large one: only the combinations with too few individuals are rejected
     mixed = OSJ.ttest(OSJ.prepare_pair_match(group.(["DPAA white male", "SI japanese female"]), upload, "humerus", humerus), 0.1, settings)
-    @test all(>=(10), mixed.results.n) && !any(isnan, mixed.results.p)
+    @test all(>=(10), mixed.results[:n]) && !any(isnan, mixed.results[:p])
 
     # regression no longer stops on a pairing with no reference individuals: those pairs are rejected
     tiny = OSJ.regression_test(OSJ.prepare_regression([group("SI japanese female")], upload, "humerus", "femur", "Left", "Left",
         ["hum_01", "hum_02"], ["fem_01", "fem_02"]), 0.1)
-    @test isempty(tiny.results.result) && all(startswith("Reference sample too small"), tiny.rejected.reason)
+    @test isempty(tiny.results[:result]) && all(startswith("Reference sample too small"), tiny.rejected[:reason])
     @test_throws ArgumentError OSJ.regression_test(OSJ.prepare_regression([group("SI japanese female")], upload, "humerus", "femur",
         "Left", "Left", ["hum_01", "hum_02"], ["fem_01", "fem_02"]), 0.1; minimum_reference = 0)
 
