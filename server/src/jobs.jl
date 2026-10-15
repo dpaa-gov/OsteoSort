@@ -81,6 +81,7 @@ function tidy()
             TIDYING[] = false
         end
         TIDY_WANTED[] && tidy() # asked for just as this one was leaving
+        nothing
     end
     return
 end
@@ -199,7 +200,7 @@ function start_job!(work, store::JobStore)
             if e isa RequestError
                 @atomic job.error = e.message
             else
-                @error "Batch analysis failed" job = job.id exception = (e, catch_backtrace())
+                complain("Batch analysis failed: job " * job.id * ": " * describe(e))
                 @atomic job.error = ANALYSIS_FAILED
             end
             @atomic job.finished = now(UTC)
@@ -207,6 +208,7 @@ function start_job!(work, store::JobStore)
         finally
             Threads.atomic_sub!(store.queued, 1)
         end
+        nothing
     end
     return job
 end

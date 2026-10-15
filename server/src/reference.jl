@@ -115,7 +115,7 @@ function load_reference(conn::PG.Connection)
             # A bone ARDS lists but has no table or column for is left out. Any
             # other failure fails the load, so the previous snapshot is kept.
             e isa PG.Error && (PG.undefined_table(e) || PG.undefined_column(e)) || rethrow()
-            @warn "Could not load reference data" bone exception = e
+            complain("Could not load reference data for " * bone * ": " * describe(e))
             continue
         end
         # Sides are read as they may be, empty or not: only those of rows that
@@ -124,9 +124,9 @@ function load_reference(conn::PG.Connection)
                 sex = PG.strings(result, "sex"), accession = PG.texts(result, "accession"), side = PG.strings(result, "side"))
         members = [Int[] for _ in groups]
         for r in eachindex(rows.accession)
-            key = (rows.collection[r], rows.ancestry[r], rows.sex[r])
-            any(ismissing, key) && continue
-            g = get(group_index, key, 0)
+            collection, ancestry, sex = rows.collection[r], rows.ancestry[r], rows.sex[r]
+            (collection isa String && ancestry isa String && sex isa String) || continue
+            g = get(group_index, (collection::String, ancestry::String, sex::String), 0)
             g == 0 || push!(members[g], r)
         end
         value_columns = [PG.floats(result, code) for code in codes]

@@ -186,7 +186,7 @@ function write_csv(io, table::NamedTuple; wanted = () -> true, piece = CSV_PIECE
     total = row_count(table)
     for start in 1:piece:total
         wanted() || return false
-        write(io, off_thread(() -> csv_rows(table, start:min(start + piece - 1, total))))
+        write(io, off_thread(Vector{UInt8}, () -> csv_rows(table, start:min(start + piece - 1, total))))
     end
     return true
 end
@@ -232,7 +232,7 @@ function analyse(data, analysis, alpha, settings)
         analysis == "regression" ? regression_test(data, alpha) :
         ttest(data, alpha, settings; articulation = analysis == "articulation")
     catch e
-        @error "Analysis failed" analysis exception = (e, catch_backtrace())
+        complain("Analysis failed: " * analysis * ": " * describe(e))
         throw(RequestError(422, ANALYSIS_FAILED))
     end
     result === nothing && throw(RequestError(422, NO_RESULT))
@@ -246,7 +246,7 @@ function single_handler(state::AppState, req::HTTP.Request)
     alpha = alpha_field(body)
     settings = analysis == "regression" ? nothing : settings_field(body)
     data = prepare_single(state, body, analysis, groups)
-    result = off_thread(() -> analyse(data, analysis, alpha, settings))
+    result = off_thread(AnalysisResult, () -> analyse(data, analysis, alpha, settings))
     if row_count(result.results) == 0
         reasons = result.rejected.reason
         throw(RequestError(422, isempty(reasons) ? NO_RESULT : "No comparison could be made. " * last(reasons)))
@@ -320,15 +320,15 @@ function multiple_handler(state::AppState, req::HTTP.Request)
     return json_response(202, (job = job.id,))
 end
 
-function require_job(state::AppState, req::HTTP.Request)
-    job = find_job(state.jobs, HTTP.getparams(req)["id"])
+function require_job(state::AppState, id::String)
+    job = find_job(state.jobs, id)
     job === nothing && throw(RequestError(404, "These results have expired. Run the analysis again."))
     @atomic job.used = now(UTC) # results in use are kept
     return job
 end
 
-function job_handler(state::AppState, req::HTTP.Request)
-    job = require_job(state, req)
+function job_handler(state::AppState, id::String)
+    job = require_job(state, id)
     status = @atomic job.status
     output = @atomic job.output
     status == "error" && return json_response(200, (id = job.id, status = status, error = (@atomic job.error)))
@@ -351,13 +351,13 @@ table_summaries(tables) = (; (Symbol(name) => (columns = [display_name(k) for k 
 # The page calls this when a run's results are cleared, replaced by a new run,
 # or the page is closed, so each open page holds at most one set of results.
 # It is a POST so the browser can send it while a page is closing.
-function release_handler(state::AppState, req::HTTP.Request)
-    release_job!(state.jobs, HTTP.getparams(req)["id"])
+function release_handler(state::AppState, id::String)
+    release_job!(state.jobs, id)
     return HTTP.Response(204)
 end
 
-function require_table(state::AppState, req::HTTP.Request, query)
-    output = @atomic require_job(state, req).output
+function require_table(state::AppState, id::String, query)
+    output = @atomic require_job(state, id).output
     output === nothing && throw(RequestError(409, "The analysis has not finished"))
     table = get(output.tables, get(query, "table", ""), nothing)
     table === nothing && bad_request("table must be not_excluded, excluded or rejected")
@@ -369,10 +369,10 @@ query_int(query, name, default) = something(tryparse(Int, get(query, name, "")),
 const SEARCH_SECONDS = 10
 
 # One page of a result table, with the search box and column sorting applied.
-function rows_handler(state::AppState, req::HTTP.Request)
+function rows_handler(state::AppState, req::HTTP.Request, id::String)
     query = HTTP.queryparams(HTTP.URI(req.target))
-    table = require_table(state, req, query)
-    return json_response(200, off_thread(() -> table_page(table, query)))
+    table = require_table(state, id, query)
+    return json_response(200, off_thread(NamedTuple, () -> table_page(table, query)))
 end
 
 function table_page(table, query; seconds = SEARCH_SECONDS)
@@ -418,9 +418,9 @@ end
 # on purpose could otherwise keep its connection for hours.
 const DOWNLOAD_SECONDS = 600
 
-function download_handler(state::AppState, req::HTTP.Request; seconds = DOWNLOAD_SECONDS)
+function download_handler(state::AppState, req::HTTP.Request, id::String; seconds = DOWNLOAD_SECONDS)
     query = HTTP.queryparams(HTTP.URI(req.target))
-    table = require_table(state, req, query)
+    table = require_table(state, id, query)
     downloads = state.jobs.downloads
     # The page asks before it starts a download, which the browser saves by
     # itself: an answer that is an error would be saved as the file.
@@ -434,11 +434,10 @@ function download_handler(state::AppState, req::HTTP.Request; seconds = DOWNLOAD
     end
     # A download reads its table for as long as it is being sent. Results
     # cleared meanwhile could not be given back until it ended, so it stops.
-    id = HTTP.getparams(req)["id"]
     deadline = time() + seconds
     function held()
         time() < deadline && return find_job(state.jobs, id) !== nothing
-        @warn "Download stopped: it took longer than its limit" target = req.target seconds
+        complain("Download stopped, it took longer than its limit of " * string(seconds) * " seconds: " * req.target)
         return false
     end
     return HTTP.Response(200, [

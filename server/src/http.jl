@@ -1,5 +1,32 @@
 # HTTP server: JSON API under /api, static frontend for everything else.
 
+# What the app says of itself goes out as plain lines: what is going on to
+# standard output, what has gone wrong to standard error. Julia's own log
+# messages are not used, because in a trimmed program they print nothing.
+say(line::String) = (println(Core.stdout, line); nothing)
+complain(line::String) = (println(Core.stderr, line); nothing)
+
+# An error in words, for the log. The kinds this app raises itself are given
+# with what they say; any other is named by its kind, which is as much as a
+# trimmed build can tell of an error it was not told to expect.
+function describe(@nospecialize(e))::String
+    e isa RequestError && return e.message
+    e isa PG.Error && return PG.describe(e)
+    kind = String(nameof(typeof(e)))
+    if e isa ErrorException
+        said = e.msg
+        return said isa String ? said : kind
+    elseif e isa ArgumentError
+        said = e.msg
+        return said isa String ? kind * ": " * said : kind
+    elseif e isa SystemError
+        return kind * ": " * e.prefix # what was being done, such as opening a named file
+    elseif e isa TaskFailedException
+        return "a task failed: " * describe(e.task.exception)
+    end
+    return kind
+end
+
 mutable struct AppState
     const config::Config
     const refresh_lock::ReentrantLock
@@ -22,11 +49,11 @@ function refresh_reference!(state::AppState)
         @atomic state.snapshot = snapshot
         @atomic state.meta_json = meta_json
         @atomic state.load_error = ""
-        @info "Reference data loaded" groups = length(snapshot.groups) bones = length(snapshot.bones)
+        say("Reference data loaded: " * string(length(snapshot.groups)) * " groups, " * string(length(snapshot.bones)) * " bones")
         return true
     catch e
-        @atomic state.load_error = sprint(showerror, e)
-        @error "Reference data load failed" exception = (e, catch_backtrace())
+        @atomic state.load_error = describe(e)
+        complain("Reference data load failed: " * describe(e))
         return false
     end
 end
@@ -40,7 +67,7 @@ recently_attempted(state::AppState) =
 function ensure_fresh!(state::AppState)
     lock(state.refresh_lock) do
         # on a worker thread, so the server keeps answering other requests
-        recently_attempted(state) || fetch(Threads.@spawn refresh_reference!(state))
+        recently_attempted(state) || wait(Threads.@spawn (refresh_reference!(state); nothing))
     end
     return
 end
@@ -48,16 +75,27 @@ end
 # Requests are handled on the interactive thread, which HTTP.jl keeps to
 # itself. Anything slow runs on a worker thread instead, so the server keeps
 # answering other requests meanwhile.
-function off_thread(work)
-    task = Threads.@spawn work()
-    try
-        return fetch(task)
-    catch e
-        # an answer for the user is passed on as it is; anything else is
-        # rethrown whole, so the log shows where on the worker thread it failed
-        e isa TaskFailedException && e.task.exception isa RequestError && throw(e.task.exception)
-        rethrow()
+# `T` is what the work gives back. The task keeps its result to itself and
+# hands back nothing: one that hands a value back is accepted by a trimmed
+# build and then fails when it is run.
+function off_thread(::Type{T}, work::F)::T where {T, F}
+    result = Ref{Union{Nothing, T}}(nothing)
+    refused = Ref{Union{Nothing, RequestError}}(nothing)
+    task = Threads.@spawn begin
+        try
+            result[] = work()
+        catch e
+            # an answer for the user is passed on as it is; anything else fails
+            # the task, so the log shows where on the worker thread it failed
+            e isa RequestError || rethrow()
+            refused[] = e
+        end
+        nothing
     end
+    wait(task)
+    problem = refused[]
+    problem === nothing || throw(problem)
+    return result[]::T
 end
 
 # A response's body where it is to be written out as it is made, not held
@@ -78,7 +116,7 @@ function meta_handler(state::AppState)
     meta_json = @atomic state.meta_json
     if isempty(meta_json)
         load_error = @atomic state.load_error
-        @error "Reference data unavailable" load_error
+        complain("Reference data unavailable: " * load_error)
         return error_response(503, "Reference data could not be loaded from ARDS")
     end
     return json_response(200, meta_json)
@@ -96,7 +134,10 @@ function static_handler(state::AppState, req::HTTP.Request)
     path = HTTP.URIs.unescapeuri(HTTP.URI(req.target).path)
     parts = filter(!isempty, split(path, "/"))
     any(part -> part == ".." || startswith(part, "."), parts) && return error_response(404, "Not found")
-    file = joinpath(state.config.web_dir, parts...)
+    file = state.config.web_dir
+    for part in parts
+        file = joinpath(file, part)
+    end
     isdir(file) && (file = joinpath(file, "index.html"))
     isfile(file) || return error_response(404, "Not found")
     content_type = get(CONTENT_TYPES, lowercase(splitext(file)[2]), "application/octet-stream")
@@ -109,29 +150,46 @@ function static_handler(state::AppState, req::HTTP.Request)
     return HTTP.Response(200, headers, read(file))
 end
 
-function router(state::AppState)
-    r = HTTP.Router(req -> static_handler(state, req))
-    HTTP.register!(r, "GET", "/healthz", _ -> HTTP.Response(200, ["Content-Type" => "text/plain"], "ok"))
-    HTTP.register!(r, "GET", "/api/meta", _ -> meta_handler(state))
-    HTTP.register!(r, "GET", "/api/template.csv", _ -> template_handler(state))
-    HTTP.register!(r, "POST", "/api/single", req -> single_handler(state, req))
-    HTTP.register!(r, "POST", "/api/multiple", req -> multiple_handler(state, req))
-    HTTP.register!(r, "GET", "/api/jobs/{id}", req -> job_handler(state, req))
-    HTTP.register!(r, "GET", "/api/jobs/{id}/rows", req -> rows_handler(state, req))
-    HTTP.register!(r, "GET", "/api/jobs/{id}/download", req -> download_handler(state, req))
-    HTTP.register!(r, "POST", "/api/jobs/{id}/release", req -> release_handler(state, req))
-    HTTP.register!(r, "/api/**", _ -> error_response(404, "Not found"))
-    return r
+# Which part of the app a request is for. The routes are few and fixed, so
+# they are told apart here by name; a table of routes looked up as each
+# request arrives is something a trimmed build cannot follow.
+#
+# A path is taken a part at a time, so a doubled or closing slash makes no
+# difference, and what follows a question mark is not part of it. A job's
+# results are found by the id that follows `/api/jobs/`.
+function route(state::AppState, req::HTTP.Request)::HTTP.Response
+    parts = filter(!isempty, split(first(split(req.target, '?'; limit = 2)), "/"))
+    is(names::String...) = length(parts) == length(names) && all(i -> parts[i] == names[i], eachindex(names))
+    # /api/jobs/{id}, then what follows the id
+    of_job(rest::String...) = length(parts) == 3 + length(rest) && parts[1] == "api" && parts[2] == "jobs" &&
+        all(i -> parts[3 + i] == rest[i], eachindex(rest))
+    if is("healthz")
+        req.method == "GET" || return HTTP.Response(405)
+        return HTTP.Response(200, ["Content-Type" => "text/plain"], "ok")
+    elseif length(parts) > 1 && parts[1] == "api"
+        if req.method == "GET"
+            is("api", "meta") && return meta_handler(state)
+            is("api", "template.csv") && return template_handler(state)
+            of_job() && return job_handler(state, String(parts[3]))
+            of_job("rows") && return rows_handler(state, req, String(parts[3]))
+            of_job("download") && return download_handler(state, req, String(parts[3]))
+        elseif req.method == "POST"
+            is("api", "single") && return single_handler(state, req)
+            is("api", "multiple") && return multiple_handler(state, req)
+            of_job("release") && return release_handler(state, String(parts[3]))
+        end
+        return error_response(404, "Not found")
+    end
+    return static_handler(state, req)
 end
 
 function handler(state::AppState)
-    route = router(state)
     return function (req::HTTP.Request)
         try
-            return route(req)
+            return route(state, req)
         catch e
             e isa RequestError && return error_response(e.status, e.message)
-            @error "Request failed" method = req.method target = req.target exception = (e, catch_backtrace())
+            complain("Request failed: " * String(req.method) * " " * String(req.target) * ": " * describe(e))
             return error_response(500, "Internal server error")
         end
     end
@@ -155,6 +213,29 @@ body_limit(target) = startswith(target, "/api/multiple") ? MAX_BODY_BYTES : SMAL
 # What HTTP.jl raises when a request has not arrived within BODY_SECONDS
 const TOO_SLOW = HTTP.IOPoll.DeadlineExceededError
 
+# Reads the next piece of a request's body into `piece`. Returns how much
+# came: none once it has all been read.
+#
+# HTTP.jl's own `readbytes!(stream, piece)` does this, but a trimmed build
+# cannot take it (HTTP.jl 2.9.0): HTTP.jl keeps the body as a body of any
+# kind and narrows it only part way, which leaves the reading code to be
+# chosen while the program runs. So the kinds an HTTP/1.1 server makes are
+# named here in full, HTTP.jl's internal `_ConnReader` among them. Unlike
+# `readbytes!`, this does not answer `Expect: 100-continue`, which browsers
+# do not send.
+#
+# Whether HTTP.jl has fixed it: put `readbytes!(stream, piece)` back and run
+# the trim checker. If it no longer reports `body_read!`, this can go.
+const BODY_READER = HTTP._ConnReader
+function read_piece!(stream::HTTP.Stream, piece::Vector{UInt8})::Int
+    body = stream.request_body
+    body isa HTTP.EmptyBody && return 0
+    body isa HTTP.FixedLengthBody{BODY_READER} && return HTTP.body_read!(body, piece)
+    body isa HTTP.ChunkedBody{BODY_READER} && return HTTP.body_read!(body, piece)
+    body isa HTTP.EOFBody{BODY_READER} && return HTTP.body_read!(body, piece)
+    throw(ArgumentError("a request body of a kind not read here"))
+end
+
 # Reads a request's body up to `limit`. Returns :large when it is larger:
 # by the size it declares, without reading it, or, where it declares none,
 # as soon as more than the limit has arrived. Returns :slow when it has not
@@ -165,7 +246,7 @@ function read_body(stream, limit)
     body = UInt8[]
     piece = Vector{UInt8}(undef, 64 * 1024)
     try
-        while (n = readbytes!(stream, piece)) > 0
+        while (n = read_piece!(stream, piece)) > 0
             append!(body, view(piece, 1:n))
             length(body) > limit && return :large
         end
@@ -223,7 +304,7 @@ function discard(stream, most)
     gone = 0
     piece = Vector{UInt8}(undef, 64 * 1024)
     try
-        while (n = readbytes!(stream, piece)) > 0
+        while (n = read_piece!(stream, piece)) > 0
             (gone += n) > most && return false
         end
     catch e
@@ -270,7 +351,7 @@ function write_streamed(stream, body::StreamedBody, target)
         body.write_to(sending)
     catch e
         sending.failed && rethrow() # the client went away, or was closed for taking nothing; HTTP.jl closes it quietly
-        @error "Response failed part way" target exception = (e, catch_backtrace())
+        complain("Response failed part way: " * target * ": " * describe(e))
         false
     finally
         body.finished()
@@ -286,31 +367,28 @@ function refusal(status, message)
     return response
 end
 
-# Writes an answer that is held whole
-function write_whole(stream, body)
-    body isa HTTP.EmptyBody || write(stream, body)
-    return
-end
-
 # Reads a request within its limits and answers it: `handle` is given the
 # request once its body has been read.
-function answer(handle, stream, request)
+function answer(handle::H, stream::HTTP.Stream, request::HTTP.Request)::HTTP.Response where {H}
     limit = body_limit(request.target)
     body = read_body(stream, limit)
     if body === :slow
-        @warn "Request refused: it took too long to arrive" target = request.target
+        complain("Request refused, it took too long to arrive: " * request.target)
         return refusal(408, "The request took too long to arrive")
-    elseif body === :large
-        @warn "Request refused: larger than its limit" target = request.target limit declared = HTTP.header(request, "Content-Length", "not given")
+    elseif body isa Symbol
+        too_large(request, limit)
         discard(stream, DISCARD_BYTES)
         return refusal(413, limit == MAX_BODY_BYTES ? TOO_LARGE : REQUEST_TOO_LARGE)
     end
     return handle(with_body(request, body))
 end
 
+too_large(request::HTTP.Request, limit::Int) = complain("Request refused, larger than its limit of " * string(limit) *
+    " bytes: " * request.target * " (declared " * HTTP.header(request, "Content-Length", "not given") * ")")
+
 # Reads an upload and hands it to `handle`. Returns the answer, or :large or
 # :slow for one that was not read.
-function read_upload_request(handle, stream, request)
+function read_upload_request(handle::H, stream::HTTP.Stream, request::HTTP.Request)::Union{Symbol, HTTP.Response} where {H}
     body = read_body(stream, MAX_BODY_BYTES)
     body isa Symbol && return body
     return handle(with_body(request, body))
@@ -319,9 +397,9 @@ end
 # The same for an upload, which is read in its turn. The turn is kept until
 # the run has been queued: until then the file is here whole, and again as
 # it was read out of the request.
-function answer_upload(handle, stream, request, turns, wait)
+function answer_upload(handle::H, stream::HTTP.Stream, request::HTTP.Request, turns::Turns, wait::Real)::HTTP.Response where {H}
     if !take_turn!(turns, wait)
-        @warn "Upload refused: no turn came" target = request.target waited = wait
+        complain("Upload refused, no turn came in " * string(wait) * " seconds: " * request.target)
         discard(stream, DISCARD_BYTES)
         return refusal(503, BUSY)
     end
@@ -335,10 +413,10 @@ function answer_upload(handle, stream, request, turns, wait)
     end
     outcome isa Symbol || return outcome
     if outcome === :slow
-        @warn "Upload refused: it took too long to arrive" target = request.target
+        complain("Upload refused, it took too long to arrive: " * request.target)
         return refusal(408, UPLOAD_TOO_SLOW) # the rest of it is not waited for
     end
-    @warn "Request refused: larger than its limit" target = request.target limit = MAX_BODY_BYTES declared = HTTP.header(request, "Content-Length", "not given")
+    too_large(request, MAX_BODY_BYTES)
     discard(stream, DISCARD_BYTES)
     return refusal(413, TOO_LARGE)
 end
@@ -346,19 +424,23 @@ end
 # What the server runs for each request. A request whose body is not read to
 # its end, as when it is refused, is answered and its connection closed by
 # HTTP.jl: what is left of it is not waited for.
-function limited(handle; turns = Turns(), wait = UPLOAD_WAIT_SECONDS)
+function limited(handle::H; turns::Turns = Turns(), wait::Real = UPLOAD_WAIT_SECONDS) where {H}
     return function (stream::HTTP.Stream)
-        request::HTTP.Request = HTTP.startread(stream)
+        request = HTTP.startread(stream)
         response = body_limit(request.target) == MAX_BODY_BYTES ?
             answer_upload(handle, stream, request, turns, wait) : answer(handle, stream, request)
         HTTP.setstatus(stream, response.status)
         for header in response.headers
             HTTP.setheader(stream, header)
         end
-        if response.body isa StreamedBody
-            write_streamed(stream, response.body, request.target)
-        else
-            write_whole(stream, response.body)
+        # an answer is one of these
+        body = response.body
+        if body isa StreamedBody
+            write_streamed(stream, body, request.target)
+        elseif body isa String || body isa Vector{UInt8}
+            write(stream, body)
+        elseif !(body isa HTTP.EmptyBody)
+            throw(ArgumentError("an answer of a kind not written here"))
         end
         return
     end
@@ -395,16 +477,30 @@ listen(handle, host, port; turns = Turns(), wait = UPLOAD_WAIT_SECONDS,
 
 # Starts listening straight away; the first reference load runs in the
 # background so the health check answers while the database is slow or down.
-function serve(config::Config; host = "0.0.0.0", port = config.port, sweep = SWEEP_SECONDS)
+function serve(config::Config; host::String = "0.0.0.0", port::Int = config.port, sweep::Real = SWEEP_SECONDS)
     state = AppState(config)
-    errormonitor(Threads.@spawn ensure_fresh!(state))
+    Threads.@spawn begin
+        try
+            ensure_fresh!(state)
+        catch e
+            complain("The first load of reference data failed: " * describe(e))
+        end
+        nothing
+    end
     server = listen(handler(state), host, port)
     # results nobody has used for an hour are dropped even when no other run comes along
-    errormonitor(Threads.@spawn while isopen(server)
-        sleep(sweep)
-        sweep!(state.jobs)
-    end)
-    @info "OsteoSort listening" host port version = config.version
+    Threads.@spawn begin
+        try
+            while isopen(server)
+                sleep(sweep)
+                sweep!(state.jobs)
+            end
+        catch e
+            complain("Dropping unused results failed, and is not tried again: " * describe(e))
+        end
+        nothing
+    end
+    say("OsteoSort listening on " * host * ":" * string(port) * ", version " * config.version)
     return server, state
 end
 
@@ -418,7 +514,7 @@ function julia_main()::Cint
     try
         main()
     catch e
-        Base.invokelatest(Base.display_error, e, catch_backtrace())
+        println(Core.stderr, "OsteoSort could not start: ", describe(e))
         return 1
     end
     return 0

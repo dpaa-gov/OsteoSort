@@ -17,8 +17,7 @@ resident_mib() = parse(Int, split(read("/proc/self/statm", String))[2]) * 4096 /
 # A download given `seconds` to finish, straight from its handler: whether it did, and the lines it wrote
 @noinline function download_within(state, job, name, seconds)
     request = HTTP.Request("GET", "/api/jobs/$job/download?table=$name")
-    request.context[:params] = Dict("id" => job)
-    body = OSS.download_handler(state, request; seconds).body
+    body = OSS.download_handler(state, request, job; seconds).body
     written = IOBuffer()
     finished = body.write_to(written)
     body.finished()

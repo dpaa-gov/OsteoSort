@@ -273,12 +273,12 @@ end
         end
 
         @testset "work off the request thread" begin
-            @test OSS.off_thread(() -> 41 + 1) == 42
+            @test OSS.off_thread(Int, () -> 41 + 1) == 42
             # an answer meant for the user comes back as it was thrown
-            refused = try OSS.off_thread(() -> throw(OSS.RequestError(422, "no"))) catch e; e end
+            refused = try OSS.off_thread(Int, () -> throw(OSS.RequestError(422, "no"))) catch e; e end
             @test refused isa OSS.RequestError && refused.message == "no"
             # anything else arrives with the worker thread's own backtrace attached
-            failed = try OSS.off_thread(() -> error("boom")) catch e; e end
+            failed = try OSS.off_thread(Int, () -> error("boom")) catch e; e end
             @test failed isa TaskFailedException && occursin("boom", sprint(showerror, failed))
         end
 
