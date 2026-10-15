@@ -570,8 +570,8 @@ def run(page):
     slow.route("**/api/meta", lambda route: held_back.append(route))   # the answer waits until it is let through
     slow.goto(URL, wait_until="commit")
     expect(slow.locator("#progress-modal")).to_be_visible()
-    check(slow.locator("#progress-text").inner_text() == "Loading reference data..."
-          and slow.locator("#progress-modal .modal-title").inner_text() == "Loading...", "a slow load shows the loading dialog")
+    shown = (slow.locator("#progress-modal .modal-title").inner_text(), slow.locator("#progress-text").inner_text())
+    check(shown == ("Loading...", "Loading reference data..."), f"a slow load shows the loading dialog: {shown}")
     check(not slow.locator("#app-content").is_visible(), "the forms are hidden until the reference data has loaded")
     held_back[0].continue_()
     expect(slow.locator("#progress-modal")).to_be_hidden()
