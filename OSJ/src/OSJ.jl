@@ -5,7 +5,6 @@ module OSJ
 
 using Statistics
 using Rmath
-using Optim
 
 include("yeojohnson.jl")   # the Yeo-Johnson transformation
 include("core.jl")         # the comparisons themselves, on matrices
