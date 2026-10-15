@@ -26,7 +26,7 @@ using PrecompileTools: @setup_workload, @compile_workload
         "C$i,$(isodd(i) ? "left" : "right"),$(("Humerus", "Femur", "Ulna")[(i - 1) ÷ 2 % 3 + 1]),$(45 + i),$(52 + i),$(60 + i),$(47 + i),$(54 + 2i),$(66 + i)"
         for i in 1:24), "\n")
     config = Config("", 5432, "", "", "", 3838, 30, joinpath(REPO_ROOT, "web"),
-        joinpath(pkgdir(@__MODULE__), "config"), "precompile")
+        CONFIG_DIR, "precompile")
     json(body) = Vector{UInt8}(JSON.json(body))
     settings = (absolute = true, yeojohnson = true, zeromean = false, tails = 1)
     common = (references = ["Sample group"], alpha = 0.1)

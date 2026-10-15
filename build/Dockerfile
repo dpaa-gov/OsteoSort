@@ -29,10 +29,17 @@ RUN julia --project=server -e 'using Pkg; Pkg.instantiate()' && \
 # built on. `incremental` adds the app to the system image Julia ships with
 # instead of compiling Julia's own code again first: the bundle comes out the
 # same size and the build takes a third of the time.
+#
+# `--strip-metadata` leaves docstrings and source locations out of the system
+# image, Julia's own included: 86 MB less of it, and about 30 MiB less held by
+# the app when idle. An error still names the app's own file and
+# line, but not a place inside Julia. Nor can the app ask where its package is
+# once it is running, which server/src/config.jl does when it is compiled instead.
 RUN julia -e 'using PackageCompiler; \
     create_app("server", "/out/osteosort"; \
         executables = ["osteosort" => "julia_main"], \
         cpu_target = PackageCompiler.default_app_cpu_target(), \
+        sysimage_build_args = `--strip-metadata`, \
         incremental = true, include_lazy_artifacts = true, force = true)'
 
 # The packages bring whole installations along and only their shared

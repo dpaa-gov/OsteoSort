@@ -1,7 +1,10 @@
 # Runtime configuration. Everything comes from the environment so the same
 # image runs locally and under Atlas, which injects the DB_* variables.
 
+# Where the package lives, found once when it is compiled: a program built
+# without its source information can no longer be asked.
 const REPO_ROOT = dirname(pkgdir(@__MODULE__))
+const CONFIG_DIR = joinpath(pkgdir(@__MODULE__), "config")
 
 struct Config
     db_host::String
@@ -39,7 +42,7 @@ function Config(env = ENV)
         env_int(env, "PORT", 3838),
         env_int(env, "REFERENCE_MAX_AGE_SECONDS", 30),
         get(env, "OSTEOSORT_WEB_DIR", joinpath(REPO_ROOT, "web")),
-        get(env, "OSTEOSORT_CONFIG_DIR", joinpath(pkgdir(@__MODULE__), "config")),
+        get(env, "OSTEOSORT_CONFIG_DIR", CONFIG_DIR),
         read_version(get(env, "OSTEOSORT_VERSION_FILE", joinpath(REPO_ROOT, "VERSION"))),
     )
 end
