@@ -69,26 +69,36 @@ end
 # and one asked for while another is at work is done after it.
 const TIDYING = Threads.Atomic{Bool}(false)
 const TIDY_WANTED = Threads.Atomic{Bool}(false)
-function tidy()
+# How long a tidy waits first, so that requests arriving together share one
+const TIDY_DELAY = 1.0
+
+function tidy(delay::Float64 = TIDY_DELAY)
     ccall(:jl_generating_output, Cint, ()) == 1 && return   # not while the package is being compiled
     TIDY_WANTED[] = true
     Threads.atomic_cas!(TIDYING, false, true) && return      # one is already at work, and will see this
-    Threads.@spawn begin
-        try
-            while Threads.atomic_xchg!(TIDY_WANTED, false)
-                sleep(1)
-                GC.gc()
-                # Julia has now let go of the memory, but the C library keeps what it
-                # was handed for reuse; this passes it back to the system
-                Sys.islinux() && ccall(:malloc_trim, Cint, (Cint,), 0)
-            end
-        finally
-            TIDYING[] = false
-        end
-        TIDY_WANTED[] && tidy() # asked for just as this one was leaving
-        nothing
-    end
+    # The task holds the delay, an argument: a trimmed build cannot start a
+    # task whose function holds nothing (a local set to a constant does not
+    # count; it is folded in). The build accepts it, and the task then fails
+    # with a MethodError before its first line, which here would leave
+    # TIDYING set and nothing ever tidied again.
+    Threads.@spawn tidy_loop(delay)
     return
+end
+
+function tidy_loop(delay::Float64)
+    try
+        while Threads.atomic_xchg!(TIDY_WANTED, false)
+            sleep(delay)
+            GC.gc()
+            # Julia has now let go of the memory, but the C library keeps what it
+            # was handed for reuse; this passes it back to the system
+            Sys.islinux() && ccall(:malloc_trim, Cint, (Cint,), 0)
+        end
+    finally
+        TIDYING[] = false
+    end
+    TIDY_WANTED[] && tidy() # asked for just as this one was leaving
+    return nothing
 end
 
 # Results asked for within this long are in use: they are never dropped to
