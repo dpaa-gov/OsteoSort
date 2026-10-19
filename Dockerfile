@@ -5,9 +5,10 @@
 FROM debian:bookworm-slim AS bundle
 
 # Bump with each release
-ARG OSTEOSORT_VERSION=v2.0.0-alpha.8
-# Or a local path, to try a bundle built on this machine
-ARG BUNDLE=https://github.com/dpaa-gov/OsteoSort/releases/download/${OSTEOSORT_VERSION}/osteosort-linux-x86_64.tar.gz
+ARG OSTEOSORT_VERSION=v2.0.0-alpha.9
+# The trimmed build (build/Dockerfile with TRIM=1). Or a local path, to try a
+# bundle built on this machine
+ARG BUNDLE=https://github.com/dpaa-gov/OsteoSort/releases/download/${OSTEOSORT_VERSION}/osteosort-trim-linux-x86_64.tar.gz
 
 # A URL arrives as the archive; a local archive arrives already unpacked
 ADD ${BUNDLE} /tmp/bundle/
@@ -32,7 +33,8 @@ ENV JULIA_NUM_THREADS=2,1 \
 
 USER osteosort
 EXPOSE 3838
-# Atlas takes the probe path from this line. The image has no curl, so
-# plain Docker reports the container unhealthy; it still runs.
+# Atlas reads the probe path from this line when it first inspects the
+# repository; after that it is a setting on the environment. The image has no
+# curl, so plain Docker reports the container unhealthy; it still runs.
 HEALTHCHECK CMD curl -f http://localhost:3838/healthz
 CMD ["/opt/osteosort/bin/osteosort"]

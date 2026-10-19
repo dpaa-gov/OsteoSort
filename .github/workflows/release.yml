@@ -1,8 +1,10 @@
 name: Release
 
 # Publishing a GitHub Release (e.g. v2.0.0) compiles the Julia side of
-# OsteoSort once and attaches it to that release. The Dockerfile downloads the
-# asset, so Atlas never compiles Julia.
+# OsteoSort in both of its builds and attaches them to that release: the
+# trimmed one, osteosort-trim-linux-x86_64.tar.gz, which the Dockerfile
+# downloads so that Atlas never compiles Julia, and the ordinary one,
+# osteosort-linux-x86_64.tar.gz, to fall back on.
 
 on:
   release:
@@ -34,36 +36,43 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: Compile
+      - name: Compile the trimmed build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: build/Dockerfile
+          build-args: TRIM=1
+          platforms: linux/amd64
+          outputs: type=local,dest=dist/trim
+
+      - name: Compile the ordinary build
         uses: docker/build-push-action@v6
         with:
           context: .
           file: build/Dockerfile
           platforms: linux/amd64
-          outputs: type=local,dest=dist
+          outputs: type=local,dest=dist/julia
 
       - name: Package
         run: |
-          tar -czf dist/osteosort-linux-x86_64.tar.gz -C dist osteosort
-          (cd dist && sha256sum osteosort-linux-x86_64.tar.gz > osteosort-linux-x86_64.tar.gz.sha256)
+          tar -czf dist/osteosort-trim-linux-x86_64.tar.gz -C dist/trim osteosort
+          tar -czf dist/osteosort-linux-x86_64.tar.gz -C dist/julia osteosort
+          cd dist
+          sha256sum osteosort-trim-linux-x86_64.tar.gz > osteosort-trim-linux-x86_64.tar.gz.sha256
+          sha256sum osteosort-linux-x86_64.tar.gz > osteosort-linux-x86_64.tar.gz.sha256
 
-      - name: Smoke test the image Atlas will build
+      - name: Smoke test the images Atlas would build
         run: |
-          docker build --build-arg BUNDLE=dist/osteosort-linux-x86_64.tar.gz -t osteosort:release .
-          docker run -d --name osteosort -p 3838:3838 -e DB_NAME=none -e DB_USER=none -e DB_PASS=none osteosort:release
-          for i in $(seq 1 60); do
-            curl -fsS http://127.0.0.1:3838/healthz && break
-            sleep 1
-          done
-          curl -fsS http://127.0.0.1:3838/healthz
-          curl -fsS http://127.0.0.1:3838/ | grep -q "<title>OsteoSort</title>"
-          docker logs osteosort
+          dev/smoke.sh dist/osteosort-trim-linux-x86_64.tar.gz
+          dev/smoke.sh dist/osteosort-linux-x86_64.tar.gz
 
       - name: Attach to release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "$GITHUB_REF_NAME" \
+            dist/osteosort-trim-linux-x86_64.tar.gz \
+            dist/osteosort-trim-linux-x86_64.tar.gz.sha256 \
             dist/osteosort-linux-x86_64.tar.gz \
             dist/osteosort-linux-x86_64.tar.gz.sha256 \
             --clobber

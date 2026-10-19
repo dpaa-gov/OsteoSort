@@ -10,6 +10,12 @@ on:
   push:
   pull_request:
 
+# A push that supersedes one still being tested stops it: the trimmed build
+# below is a long compile, and only the latest matters.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   julia:
     runs-on: ubuntu-latest
@@ -26,3 +32,30 @@ jobs:
 
       - name: Server
         run: julia --project=server -e 'using Pkg; Pkg.instantiate(); Pkg.test()'
+
+  # The trimmed build refuses to compile anything it cannot show to be
+  # complete, so compiling it is the test that the code can still be trimmed.
+  # The image is then made and started as a release would, without a database.
+  trim:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Compile the trimmed build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: build/Dockerfile
+          build-args: TRIM=1
+          platforms: linux/amd64
+          outputs: type=local,dest=dist
+          # the layers before the app's own code (apt, JuliaC) come from the last run
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Start the image
+        run: |
+          tar -czf dist/osteosort-trim-linux-x86_64.tar.gz -C dist osteosort
+          dev/smoke.sh dist/osteosort-trim-linux-x86_64.tar.gz
