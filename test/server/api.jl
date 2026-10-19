@@ -42,8 +42,8 @@ end
             @test row[1:6] == ["X", "Humerus", "Left", "Y", "Humerus", "Right"]      # capitalised for display
             @test row[7] == "Hum_01 Hum_02 Hum_03 Hum_06"
             found = direct.results
-            @test (row[8], row[9], row[10], row[11], row[12]) == (only(found.n), only(found.mean), only(found.sd), only(found.p), only(found.result))
-            @test row[13] == only(found.reference) && count(',', row[13]) == 3      # all four groups contributed
+            @test (row[8], row[9], row[10], row[11], row[12]) == (only(found[:n]), only(found[:mean]), only(found[:sd]), only(found[:p]), only(found[:result]))
+            @test row[13] == only(found[:reference]) && count(',', row[13]) == 3      # all four groups contributed
             @test collect(body.plot.reference) == direct.plot.reference && body.plot.specimen == direct.plot.specimen
             @test length(body.plot.reference) == row[8]
 
@@ -58,7 +58,7 @@ end
             @test collect(body.results.columns)[8:11] == ["n", "R²", "p", "Result"]
             @test collect(body.results.columns)[1:6] == ["Accession 1", "Element 1", "Side 1", "Accession 2", "Element 2", "Side 2"]
             @test (row[8], row[9], row[10], row[11]) ==
-                  (only(direct.results.n), only(direct.results.r2), only(direct.results.p), only(direct.results.result))
+                  (only(direct.results[:n]), only(direct.results[:r2]), only(direct.results[:p]), only(direct.results[:result]))
             @test row[10] == round(row[10]; digits = 4)                              # four places, like every other p-value
             @test length(body.plot.ref_x) == row[8] == length(body.plot.band.fit)
             @test all(body.plot.band.lower .< body.plot.band.fit .< body.plot.band.upper)
@@ -70,7 +70,7 @@ end
             pairs = OSJ.articulation_pairs(groups, OSS.articulation_config(config))
             direct = OSJ.ttest(OSJ.prepare_single_articulation(groups, pairs, "humerus", "ulna", "Left",
                 Dict("hum_06" => 45.5), Dict("uln_11" => 28.7)), 0.1, osj_settings; articulation = true)
-            @test row[[2, 5, 7]] == ["Humerus", "Ulna", "Hum_06 Uln_11"] && row[11] == only(direct.results.p)
+            @test row[[2, 5, 7]] == ["Humerus", "Ulna", "Hum_06 Uln_11"] && row[11] == only(direct.results[:p])
         end
 
         @testset "request errors" begin
@@ -107,24 +107,24 @@ end
             job = JSON.parse(response.body).job
             status = wait_for(job)
             @test status.status == "done"
-            kept = findall(==("Cannot Exclude"), found.result)
-            excluded = findall(==("Excluded"), found.result)
+            kept = findall(==("Cannot Exclude"), found[:result])
+            excluded = findall(==("Excluded"), found[:result])
             @test !isempty(kept) && !isempty(excluded)
-            @test status.summary.comparisons == length(found.result)
+            @test status.summary.comparisons == length(found[:result])
             @test status.summary.potential_matches == length(kept)
             @test status.summary.exclusions == length(excluded)
-            @test status.summary.rejected == length(direct.rejected.reason)
-            @test status.summary.specimens == length(union(found.id_1, found.id_2))
+            @test status.summary.rejected == length(direct.rejected[:reason])
+            @test status.summary.specimens == length(union(found[:id_1], found[:id_2]))
             @test status.tables.not_excluded.total == length(kept) && status.tables.excluded.total == length(excluded)
-            @test sum(status.histogram.cannot_exclude) + sum(status.histogram.excluded) + status.histogram.outside == length(found.result)
+            @test sum(status.histogram.cannot_exclude) + sum(status.histogram.excluded) + status.histogram.outside == length(found[:result])
             @test sum(status.histogram.excluded) == length(excluded)
 
             page = get_json("/api/jobs/$job/rows?table=excluded&offset=0&limit=25")
             @test length(page.rows) == 25 && page.total == page.filtered == length(excluded)
             first_excluded = excluded[1]
             row = collect(page.rows[1])
-            @test row[[1, 4]] == [found.id_1[first_excluded], found.id_2[first_excluded]]
-            @test row[2:3] == ["Humerus", "Left"] && row[11] == found.p[first_excluded] && row[8] == found.n[first_excluded]
+            @test row[[1, 4]] == [found[:id_1][first_excluded], found[:id_2][first_excluded]]
+            @test row[2:3] == ["Humerus", "Left"] && row[11] == found[:p][first_excluded] && row[8] == found[:n][first_excluded]
             last_page = get_json("/api/jobs/$job/rows?table=excluded&offset=$(page.total - 3)&limit=25")
             @test length(last_page.rows) == 3
             sorted = get_json("/api/jobs/$job/rows?table=excluded&sort=11&dir=desc&limit=1000")
@@ -137,7 +137,7 @@ end
             rows = OSS.parse_csv(csv)
             @test length(rows) == page.total + 1
             @test rows[1][13] == "Reference" && occursin("white male", rows[2][13])   # the download says which groups were used
-            @test parse(Float64, rows[2][11]) == found.p[first_excluded] && !occursin("e-", csv)   # p-values in fixed notation
+            @test parse(Float64, rows[2][11]) == found[:p][first_excluded] && !occursin("e-", csv)   # p-values in fixed notation
 
             # releasing a run frees its results at once
             @test HTTP.post(API * "/api/jobs/$job/release").status == 204
@@ -157,7 +157,7 @@ end
             direct = OSJ.ttest(OSJ.prepare_pair_match(groups, OSS.read_upload(read(joinpath(OSS.REPO_ROOT, "web", "files", "example_data.csv"), String)),
                 "humerus", OSJ.available_measurements(groups, "humerus")), 0.1, osj_settings)
             output = OSS.job_output("pairmatch", direct, 0.1, 0.0)
-            @test sum(length(first(t)) for t in values(output.tables)) == 400
+            @test sum(row_count(t) for t in values(output.tables)) == 400
             function run()
                 job = OSS.start_job!(_ -> output, store)
                 while (@atomic job.status) == "running"
@@ -212,7 +212,7 @@ end
 
         @testset "a run released while it waits is not computed" begin
             store = OSS.JobStore()
-            output = OSS.JobOutput("pairmatch", Dict{String, NamedTuple}(), (;), (;))
+            output = empty_output()
             ran = Threads.Atomic{Bool}(false)
             first = OSS.start_job!(_ -> (sleep(0.5); output), store)
             second = OSS.start_job!(_ -> (ran[] = true; output), store)   # waits for its turn behind the first
@@ -237,7 +237,7 @@ end
             wait_for(JSON.parse(accepted.body).job)
             # twenty runs may compute or wait; the next is told the server is busy, until one finishes
             store = OSS.JobStore()
-            output = OSS.JobOutput("pairmatch", Dict{String, NamedTuple}(), (;), (;))
+            output = empty_output()
             gate = Base.Event()
             jobs = [OSS.start_job!(_ -> (wait(gate); output), store) for _ in 1:OSS.MAX_QUEUED_JOBS]
             refused = try OSS.start_job!(_ -> output, store) catch e; e end
@@ -253,7 +253,7 @@ end
 
         @testset "results in use are kept" begin
             store = OSS.JobStore()
-            output = OSS.JobOutput("pairmatch", Dict{String, NamedTuple}(), (;), (;))
+            output = empty_output()
             finish(job) = while (@atomic job.status) == "running"; sleep(0.01); end
             viewed, idle = OSS.start_job!(_ -> output, store), OSS.start_job!(_ -> output, store)
             finish(viewed); finish(idle)
@@ -273,18 +273,18 @@ end
         end
 
         @testset "work off the request thread" begin
-            @test OSS.off_thread(() -> 41 + 1) == 42
+            @test OSS.off_thread(Int, () -> 41 + 1) == 42
             # an answer meant for the user comes back as it was thrown
-            refused = try OSS.off_thread(() -> throw(OSS.RequestError(422, "no"))) catch e; e end
+            refused = try OSS.off_thread(Int, () -> throw(OSS.RequestError(422, "no"))) catch e; e end
             @test refused isa OSS.RequestError && refused.message == "no"
             # anything else arrives with the worker thread's own backtrace attached
-            failed = try OSS.off_thread(() -> error("boom")) catch e; e end
+            failed = try OSS.off_thread(Int, () -> error("boom")) catch e; e end
             @test failed isa TaskFailedException && occursin("boom", sprint(showerror, failed))
         end
 
         @testset "memory is given back when results are dropped" begin
             store = OSS.JobStore()
-            output = OSS.JobOutput("pairmatch", Dict{String, NamedTuple}(), (;), (;))
+            output = empty_output()
             job = OSS.start_job!(_ -> output, store)
             while (@atomic job.status) == "running"
                 sleep(0.01)
@@ -302,11 +302,11 @@ end
         @testset "search sees what the table shows" begin
             @test OSS.cell_text(1.0e-4) == "0.0001" && OSS.cell_text(0.5) == "0.5" && OSS.cell_text(261) == "261"
             @test OSS.cell_text("Humerus") == "Humerus"
-            table = (accession = ["a", "b"], p = [1.0e-4, 0.25])
+            table = ResultTable((accession = ["a", "b"], p = [1.0e-4, 0.25]))
             @test OSS.table_page(table, Dict("search" => "0.0001")).filtered == 1
             @test OSS.table_page(table, Dict("search" => "e-4")).filtered == 0
             # the reference breakdown is not on screen, so a search does not match it
-            hidden = (accession = ["UT1", "b"], p = [0.5, 0.25], reference = ["UT white male 12", "UT white male 12"])
+            hidden = ResultTable((accession = ["UT1", "b"], p = [0.5, 0.25], reference = ["UT white male 12", "UT white male 12"]))
             @test OSS.table_page(hidden, Dict("search" => "UT")).filtered == 1
             # a search that runs past its time limit is stopped with a message; within it, it answers
             late = try OSS.table_page(table, Dict("search" => "a"); seconds = -1) catch e; e end

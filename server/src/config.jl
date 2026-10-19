@@ -64,7 +64,8 @@ function conninfo(config::Config)
 end
 
 # Single-column or two-column config files with a header row and no quoting.
-function read_config_rows(path)
-    lines = filter(!isempty, strip.(readlines(path)))
-    return [String.(strip.(split(line, ","))) for line in lines[2:end]]
+function read_config_rows(path::String)::Vector{Vector{String}}
+    lines = String[String(strip(line)) for line in split(read(path, String), '\n')]
+    filter!(!isempty, lines)
+    return Vector{String}[String[String(strip(cell)) for cell in split(line, ",")] for line in lines[2:end]]
 end

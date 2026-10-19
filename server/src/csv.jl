@@ -1,6 +1,16 @@
 # Uploaded case data, read into OSJ's SortTable. A small RFC 4180 reader is
 # enough for the template format and keeps a CSV package out of the image.
 
+# The field read so far, added to its row
+finish_field!(row::Vector{String}, field::IOBuffer) = push!(row, String(take!(field)))
+
+# The end of a line: its last field is added, and the row kept if the line had anything on it
+function finish_row!(rows::Vector{Vector{String}}, row::Vector{String}, field::IOBuffer, touched::Bool)
+    finish_field!(row, field)
+    touched && push!(rows, row)
+    return
+end
+
 function parse_csv(text::AbstractString)
     rows = Vector{String}[]
     row = String[]
@@ -8,13 +18,6 @@ function parse_csv(text::AbstractString)
     quoted = false      # inside a quoted field
     started = false     # current field has any content
     touched = false     # current line has any content
-    finish_field() = (started = false; push!(row, String(take!(field))))
-    function finish_row()
-        finish_field()
-        touched && push!(rows, row)
-        row = String[]
-        touched = false
-    end
     chars = collect(startswith(text, '﻿') ? chop(text; head = 1, tail = 0) : text)
     i = 1
     while i <= length(chars)
@@ -36,13 +39,17 @@ function parse_csv(text::AbstractString)
             started = true
             touched = true
         elseif c == ','
-            finish_field()
+            finish_field!(row, field)
+            started = false
             touched = true
-        elseif c == '\n'
-            finish_row()
+        elseif c == '\n' || (c == '\r' && !(i < length(chars) && chars[i + 1] == '\n'))
+            # a line may end with "\n", "\r\n" or, in old Mac files, "\r" alone
+            finish_row!(rows, row, field, touched)
+            row = String[]
+            started = false
+            touched = false
         elseif c == '\r'
-            # a line may end with "\r\n" or, in old Mac files, "\r" alone
-            (i < length(chars) && chars[i + 1] == '\n') || finish_row()
+            # the "\r" of "\r\n": the "\n" ends the line
         else
             write(field, c)
             started = true
@@ -50,7 +57,7 @@ function parse_csv(text::AbstractString)
         end
         i += 1
     end
-    (touched || !isempty(row)) && finish_row()
+    (touched || !isempty(row)) && finish_row!(rows, row, field, touched)
     return rows
 end
 

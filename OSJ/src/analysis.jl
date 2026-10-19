@@ -7,10 +7,18 @@ struct Settings
     tails::Int
 end
 
+# What a single comparison draws. A t-test: the reference distribution and
+# where the pair falls in it. A regression: the reference points, the pair,
+# and the fitted line with its prediction interval where there is one.
+const PairPlot = @NamedTuple{reference::Vector{Float64}, specimen::Float64}
+const Band = @NamedTuple{x::Vector{Float64}, fit::Vector{Float64}, lower::Vector{Float64}, upper::Vector{Float64}}
+const RegressionPlot = @NamedTuple{ref_x::Vector{Float64}, ref_y::Vector{Float64}, specimen_x::Float64, specimen_y::Float64,
+                                   x_label::String, y_label::String, alphalevel::Float64, band::Union{Nothing, Band}}
+
 struct AnalysisResult
-    results::NamedTuple   # one vector per column
-    rejected::NamedTuple  # specimens and pairs that could not be compared, with the reason
-    plot::Any             # single comparisons only
+    results::ResultTable
+    rejected::ResultTable                         # specimens and pairs that could not be compared, with the reason
+    plot::Union{Nothing, PairPlot, RegressionPlot} # single comparisons only
 end
 
 # Decimal places of every p-value. Exclusion is decided on the rounded value,
@@ -18,8 +26,6 @@ end
 const P_DIGITS = 4
 
 classify(p, alpha) = p <= alpha ? "Excluded" : "Cannot Exclude"
-
-select_rows(table::NamedTuple, keep) = map(column -> column[keep], table)
 
 # Which reference groups a comparison drew on, and how many individuals from
 # each: "DPAA white male 43, UT mexican male 1". A reference individual counts
@@ -37,15 +43,15 @@ function reference_breakdown(data::Prepared, useda, usedb)
 end
 
 # The same breakdown for every row, worked out once per distinct pattern
-function reference_breakdowns(data::Prepared, patterns)
-    seen = Dict{Any, String}()
-    return [get!(() -> reference_breakdown(data, pattern...), seen, pattern) for pattern in patterns]
+function reference_breakdowns(data::Prepared, patterns::Vector{P})::Vector{String} where {P}
+    seen = Dict{P, String}()
+    return String[get!(() -> reference_breakdown(data, pattern...), seen, pattern) for pattern in patterns]
 end
 
 # The text of the measurements column. A run has few distinct sets of
 # measurements, so each label is made once and its rows share it.
-function labels(label, patterns)
-    seen = Dict{Any, String}()
+function labels(label::L, patterns::Vector{P})::Vector{String} where {L, P}
+    seen = Dict{P, String}()
     return String[get!(() -> label(pattern), seen, pattern) for pattern in patterns]
 end
 
@@ -62,10 +68,10 @@ function ttest(data::Prepared, alpha, settings::Settings; articulation::Bool = f
                minimum_reference::Integer = MINIMUM_REFERENCE)
     found = compare_pairs(data.sorta.values, data.sortb.values, data.refa.values, data.refb.values;
         tails = settings.tails, absolute = settings.absolute, yeojohnson = settings.yeojohnson, zeromean = settings.zeromean)
-    plot = nothing
+    plot::Union{Nothing, PairPlot} = nothing
     if length(data.sorta) == 1 && length(data.sortb) == 1 && !isempty(only(found.used))
         # for a single comparison: the reference distribution and where the pair falls in it
-        plot = (reference = found.reference[only(found.used)].values, specimen = only(found.value))
+        plot = PairPlot((found.reference[only(found.used)].values, only(found.value)))
     end
 
     a, b = found.a, found.b
@@ -80,7 +86,7 @@ function ttest(data::Prepared, alpha, settings::Settings; articulation::Bool = f
     end
     measurements = labels(label, found.used)
     p = round.(found.p; digits = P_DIGITS)
-    table = (
+    table = ResultTable((
         id_1 = data.sorta.accession[a], element_1 = data.sorta.element[a], side_1 = data.sorta.side[a],
         id_2 = data.sortb.accession[b], element_2 = data.sortb.element[b], side_2 = data.sortb.side[b],
         measurements = measurements,
@@ -88,43 +94,44 @@ function ttest(data::Prepared, alpha, settings::Settings; articulation::Bool = f
         mean = round.(found.mean; digits = 4),
         sd = round.(found.sd; digits = 4),
         p = p,
-        result = classify.(p, alpha),
+        result = String[classify(value, alpha) for value in p],
         reference = reference_breakdowns(data, [(used, used) for used in found.used]),
-    )
+    ))
     return split_rejected(table, data, plot, minimum_reference)
 end
 
 function regression_test(data::Prepared, alpha; minimum_reference::Integer = MINIMUM_REFERENCE)
     found = compare_regression(data.sorta.values, data.sortb.values, data.refa.values, data.refb.values;
         minimum = minimum_reference)
-    plot = nothing
+    plot::Union{Nothing, RegressionPlot} = nothing
     if length(data.sorta) == 1 && length(data.sortb) == 1
         reference = only(values(found.reference))
-        plot = (ref_x = reference.x, ref_y = reference.y, specimen_x = only(found.x), specimen_y = only(found.y),
-                x_label = data.sorta.element[1], y_label = data.sortb.element[1], alphalevel = alpha,
-                band = isnan(reference.slope) ? nothing : prediction_band(reference, alpha))
+        plot = RegressionPlot((reference.x, reference.y, only(found.x), only(found.y),
+                               data.sorta.element[1], data.sortb.element[1], Float64(alpha),
+                               isnan(reference.slope) ? nothing : prediction_band(reference, alpha)))
     end
 
     a, b = found.a, found.b
     namesa, namesb = data.sorta.measurements, data.sortb.measurements
-    measurements = labels(((useda, usedb),) -> join(vcat(namesa[useda], namesb[usedb]) .* " "), zip(found.useda, found.usedb))
+    patterns = collect(zip(found.useda, found.usedb))
+    measurements = labels(((useda, usedb),) -> join(vcat(namesa[useda], namesb[usedb]) .* " "), patterns)
     p = round.(found.p; digits = P_DIGITS)
-    table = (
+    table = ResultTable((
         x_id = data.sorta.accession[a], x_element = data.sorta.element[a], x_side = data.sorta.side[a],
         y_id = data.sortb.accession[b], y_element = data.sortb.element[b], y_side = data.sortb.side[b],
         measurements = measurements,
         n = found.n,
         r2 = round.(found.r2; digits = 4),
         p = p,
-        result = classify.(p, alpha),
-        reference = reference_breakdowns(data, collect(zip(found.useda, found.usedb))),
-    )
+        result = String[classify(value, alpha) for value in p],
+        reference = reference_breakdowns(data, patterns),
+    ))
     return split_rejected(table, data, plot, minimum_reference)
 end
 
 # The fitted line at the reference points with its prediction interval at
 # level 1 - alpha, ordered by x for drawing.
-function prediction_band(reference::ReferenceRegression, alpha)
+function prediction_band(reference::ReferenceRegression, alpha)::Union{Nothing, Band}
     x = reference.x
     n = length(x)
     n > 2 || return nothing
@@ -132,33 +139,39 @@ function prediction_band(reference::ReferenceRegression, alpha)
     sxx = (n - 1) * reference.sd_x^2
     half = qt(1 - alpha / 2, n - 2) .* reference.sigma .* sqrt.(1 .+ 1 / n .+ (x .- reference.mean_x) .^ 2 ./ sxx)
     order = sortperm(x)
-    return (x = x[order], fit = fit[order], lower = (fit .- half)[order], upper = (fit .+ half)[order])
+    return Band((x[order], fit[order], (fit .- half)[order], (fit .+ half)[order]))
 end
 
 # Separates what could not be compared, each with its reason: specimens with
 # none of the selected measurements (one row each, in their own specimen's
 # columns), then pairs that share no measurement, then pairs whose reference
 # sample is below the minimum, then pairs with no p-value.
-function split_rejected(table, data::Prepared, plot, minimum)
-    shared = table.measurements .!= ""
-    small = shared .& (table.n .< minimum)
+#
+# The first six columns of `table` say which two specimens a row compares.
+function split_rejected(table::ResultTable, data::Prepared, plot::Union{Nothing, PairPlot, RegressionPlot}, minimum::Integer)
+    sizes = table[:n]::Vector{Int}   # of the reference samples
+    shared = (table[:measurements]::Vector{String}) .!= ""
+    small = shared .& (sizes .< minimum)
     unshared = .!shared
     # no p-value, as when the reference sample does not vary at all
-    failed = shared .& .!small .& isnan.(table.p)
+    failed = shared .& .!small .& isnan.(table[:p]::Vector{Float64})
     ua, ub = data.unmeasureda, data.unmeasuredb
     na, nb = length(ua), length(ub)
     blank(n) = fill("", n)
-    pairs(k) = vcat(table[k][unshared], table[k][small], table[k][failed])
-    rejected = NamedTuple{(keys(table)[1:6]..., :reason)}((
+    function pairs(k)
+        column = table.columns[k]::Vector{String}
+        return vcat(column[unshared], column[small], column[failed])
+    end
+    rejected = ResultTable(vcat(table.names[1:6], :reason), Column[
         vcat(ua.accession, blank(nb), pairs(1)),
         vcat(ua.element, blank(nb), pairs(2)),
         vcat(ua.side, blank(nb), pairs(3)),
         vcat(blank(na), ub.accession, pairs(4)),
         vcat(blank(na), ub.element, pairs(5)),
         vcat(blank(na), ub.side, pairs(6)),
-        vcat(fill(UNMEASURED, na + nb), fill(NOTHING_IN_COMMON, count(unshared)), too_small.(table.n[small], minimum),
+        vcat(fill(UNMEASURED, na + nb), fill(NOTHING_IN_COMMON, count(unshared)), String[too_small(n, minimum) for n in sizes[small]],
             fill(NOT_CALCULATED, count(failed))),
-    ))
+    ])
     kept = shared .& .!small .& .!failed
     # a single comparison that was not made has no plot either
     return AnalysisResult(select_rows(table, kept), rejected, any(kept) ? plot : nothing)

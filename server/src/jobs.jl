@@ -9,11 +9,16 @@ end
 const NO_RESULT = "No comparison could be made with this input and reference data"
 const ANALYSIS_FAILED = "The analysis failed for this input and reference data"
 
+# What a finished run tells the page, beside its tables
+const Summary = @NamedTuple{seconds::Float64, comparisons::Int, specimens::Int, potential_matches::Int, exclusions::Int,
+                            exclusion_percent::Union{Nothing, Float64}, rejected::Int}
+const Histogram = @NamedTuple{bin_width::Float64, cannot_exclude::Vector{Int}, excluded::Vector{Int}, outside::Int, alpha::Float64}
+
 struct JobOutput
     analysis::String
-    tables::Dict{String, NamedTuple}
-    summary::NamedTuple
-    histogram::NamedTuple
+    tables::Dict{String, ResultTable}
+    summary::Summary
+    histogram::Histogram
 end
 
 mutable struct Job
@@ -64,25 +69,36 @@ end
 # and one asked for while another is at work is done after it.
 const TIDYING = Threads.Atomic{Bool}(false)
 const TIDY_WANTED = Threads.Atomic{Bool}(false)
-function tidy()
+# How long a tidy waits first, so that requests arriving together share one
+const TIDY_DELAY = 1.0
+
+function tidy(delay::Float64 = TIDY_DELAY)
     ccall(:jl_generating_output, Cint, ()) == 1 && return   # not while the package is being compiled
     TIDY_WANTED[] = true
     Threads.atomic_cas!(TIDYING, false, true) && return      # one is already at work, and will see this
-    Threads.@spawn begin
-        try
-            while Threads.atomic_xchg!(TIDY_WANTED, false)
-                sleep(1)
-                GC.gc()
-                # Julia has now let go of the memory, but the C library keeps what it
-                # was handed for reuse; this passes it back to the system
-                Sys.islinux() && ccall(:malloc_trim, Cint, (Cint,), 0)
-            end
-        finally
-            TIDYING[] = false
-        end
-        TIDY_WANTED[] && tidy() # asked for just as this one was leaving
-    end
+    # The task holds the delay, an argument: a trimmed build cannot start a
+    # task whose function holds nothing (a local set to a constant does not
+    # count; it is folded in). The build accepts it, and the task then fails
+    # with a MethodError before its first line, which here would leave
+    # TIDYING set and nothing ever tidied again.
+    Threads.@spawn tidy_loop(delay)
     return
+end
+
+function tidy_loop(delay::Float64)
+    try
+        while Threads.atomic_xchg!(TIDY_WANTED, false)
+            sleep(delay)
+            GC.gc()
+            # Julia has now let go of the memory, but the C library keeps what it
+            # was handed for reuse; this passes it back to the system
+            Sys.islinux() && ccall(:malloc_trim, Cint, (Cint,), 0)
+        end
+    finally
+        TIDYING[] = false
+    end
+    TIDY_WANTED[] && tidy() # asked for just as this one was leaving
+    return nothing
 end
 
 # Results asked for within this long are in use: they are never dropped to
@@ -116,6 +132,9 @@ function prune!(store::JobStore; at = now(UTC))
     return
 end
 
+# Whether a run of `rows` result rows fits beside `held` rows in `count` finished jobs
+fits(store::JobStore, held::Int, count::Int, rows::Integer)::Bool = held + rows <= store.max_rows && count < MAX_FINISHED_JOBS
+
 # Makes room for a run about to produce `rows` result rows, before it is
 # computed. Results nobody has asked for in 15 minutes are dropped, the least
 # recently used first, until the run fits. Results in use are left alone: if
@@ -128,21 +147,20 @@ function make_room!(store::JobStore, rows::Integer; at = now(UTC))
         finished = sort!(finished_jobs(store); by = job -> (@atomic job.used))
         held = sum(result_rows, finished; init = 0)
         count = length(finished)
-        fits() = held + rows <= store.max_rows && count < MAX_FINISHED_JOBS
         for job in finished
-            (fits() || in_use(job, at)) && break
+            (fits(store, held, count, rows) || in_use(job, at)) && break
             held -= result_rows(job)
             count -= 1
             drop!(store, job)
         end
-        fits() && return
+        fits(store, held, count, rows) && return
         # everything left is in use; the wait is until the last of those that must go has gone unused
         minutes = Dates.value(IN_USE)
         for job in finished
             haskey(store.jobs, job.id) || continue
             held -= result_rows(job)
             count -= 1
-            if fits()
+            if fits(store, held, count, rows)
                 minutes = max(1, ceil(Int, Dates.value((@atomic job.used) + IN_USE - at) / 60_000))
                 break
             end
@@ -199,7 +217,7 @@ function start_job!(work, store::JobStore)
             if e isa RequestError
                 @atomic job.error = e.message
             else
-                @error "Batch analysis failed" job = job.id exception = (e, catch_backtrace())
+                complain("Batch analysis failed: job " * job.id * ": " * describe(e))
                 @atomic job.error = ANALYSIS_FAILED
             end
             @atomic job.finished = now(UTC)
@@ -207,6 +225,7 @@ function start_job!(work, store::JobStore)
         finally
             Threads.atomic_sub!(store.queued, 1)
         end
+        nothing
     end
     return job
 end
@@ -215,11 +234,11 @@ const HISTOGRAM_BIN = 0.025
 
 # p-value counts per bin over [0, 1] for each outcome. Values above 1 (possible
 # with absolute differences and two tails) fall outside the axis, as before.
-function p_histogram(table, alpha)
+function p_histogram(table::ResultTable, alpha::Float64)::Histogram
     bins = round(Int, 1 / HISTOGRAM_BIN)
     counts = Dict("Cannot Exclude" => zeros(Int, bins), "Excluded" => zeros(Int, bins))
     outside = 0
-    for (p, result) in zip(table.p, table.result)
+    for (p, result) in zip(table[:p]::Vector{Float64}, table[:result]::Vector{String})
         if isnan(p) || p < 0 || p > 1
             outside += 1
         else
@@ -234,36 +253,40 @@ end
 # names, sides and measurement codes start with a capital, as everywhere else
 # in the app ("Humerus", "Left", "Hum_01 Hum_02"). OSJ's own tables keep the
 # lower-case names ARDS uses.
-function for_display(table::NamedTuple)
-    capitals(text) = join(uppercasefirst.(split(text, " "; keepempty = false)), " ")
-    # a column holds few distinct values: each is capitalised once and the rows share it
-    function each(change, column)
-        done = Dict{eltype(column), String}()
-        return String[get!(() -> change(value), done, value) for value in column]
-    end
-    shown(name, column) =
-        name == :measurements ? each(capitals, column) :
-        occursin(r"element|side", String(name)) ? each(uppercasefirst, column) : column
-    return NamedTuple{keys(table)}(Tuple(shown(name, column) for (name, column) in pairs(table)))
+capitals(text::String)::String = join(uppercasefirst.(split(text, " "; keepempty = false)), " ")
+
+# A column holds few distinct values: each is changed once and the rows share it
+function each(change::F, column::Vector{String})::Vector{String} where {F}
+    done = Dict{String, String}()
+    return String[get!(() -> change(value), done, value) for value in column]
 end
 
-function job_output(analysis, result::AnalysisResult, alpha, seconds)
+function shown(name::Symbol, column::Column)::Column
+    name == :measurements && return each(capitals, column::Vector{String})
+    occursin(r"element|side", String(name)) && return each(uppercasefirst, column::Vector{String})
+    return column
+end
+
+for_display(table::ResultTable)::ResultTable =
+    ResultTable(table.names, Column[shown(name, column) for (name, column) in zip(table.names, table.columns)])
+
+function job_output(analysis::String, result::AnalysisResult, alpha::Float64, seconds::Float64)::JobOutput
     table = result.results
-    kept = table.result .== "Cannot Exclude"
+    kept = (table[:result]::Vector{String}) .== "Cannot Exclude"
     comparisons = length(kept)
     matches = count(kept)
-    specimens = length(union(Set(table[1]), Set(table[4])))
-    summary = (
-        seconds = round(seconds; digits = 2),
-        comparisons = comparisons,
-        specimens = specimens,
-        potential_matches = matches,
-        exclusions = comparisons - matches,
-        exclusion_percent = comparisons == 0 ? nothing :
-                            round(100 * round((comparisons - matches) / comparisons; digits = 3); digits = 1),
-        rejected = length(result.rejected[1]),
-    )
-    tables = Dict{String, NamedTuple}(
+    # the first specimen of each pair is in the first column, the second in the fourth
+    specimens = length(union(Set(table.columns[1]::Vector{String}), Set(table.columns[4]::Vector{String})))
+    summary = Summary((
+        round(seconds; digits = 2),
+        comparisons,
+        specimens,
+        matches,
+        comparisons - matches,
+        comparisons == 0 ? nothing : round(100 * round((comparisons - matches) / comparisons; digits = 3); digits = 1),
+        row_count(result.rejected),
+    ))
+    tables = Dict{String, ResultTable}(
         "not_excluded" => for_display(OSJ.select_rows(table, kept)),
         "excluded" => for_display(OSJ.select_rows(table, .!kept)),
         "rejected" => for_display(result.rejected),

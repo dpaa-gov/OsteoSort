@@ -7,6 +7,10 @@ using OSJ
 const OSS = OsteoSortServer
 
 const DATA = joinpath(@__DIR__, "data")
+
+# A finished run with no results, for tests of how runs are kept and dropped
+empty_output() = OSS.JobOutput("pairmatch", Dict{String, ResultTable}(),
+    OSS.Summary((0.0, 0, 0, 0, 0, nothing, 0)), OSS.Histogram((0.025, Int[], Int[], 0, 0.1)))
 const HAVE_DB = !isempty(get(ENV, "DB_NAME", ""))
 
 @testset "config" begin
@@ -276,7 +280,8 @@ end
 # A download is written a piece at a time, so that no more of it than a piece
 # is in memory. It is the same file whatever the size of the pieces.
 @testset "a download is written in pieces" begin
-    table = (id = ["A1", "B \"2\"", "C,3", "D4", "E5"], n = [1, 2, 3, 4, 5], p = [0.5, 0.12345, 1.0, NaN, 0.00004])
+    columns = (id = ["A1", "B \"2\"", "C,3", "D4", "E5"], n = [1, 2, 3, 4, 5], p = [0.5, 0.12345, 1.0, NaN, 0.00004])
+    table = ResultTable(columns)
     whole = sprint(io -> OSS.write_csv(io, table))
     @test whole == "\"Id\",\"n\",\"p\"\n\"A1\",1,0.5\n\"B \"\"2\"\"\",2,0.1235\n\"C,3\",3,1\n\"D4\",4,NaN\n\"E5\",5,0\n"
     @test all(piece -> sprint(io -> OSS.write_csv(io, table; piece)) == whole, (1, 2, 5, 7))
@@ -289,7 +294,7 @@ end
     @test !OSS.write_csv(io, table; piece = 2, wanted = () -> (asked[] += 1) < 3)
     @test String(take!(io)) == join(split(whole, "\n")[1:5], "\n") * "\n"
     # a table with no rows is its headings
-    @test sprint(io -> OSS.write_csv(io, map(empty, table))) == "\"Id\",\"n\",\"p\"\n"
+    @test sprint(io -> OSS.write_csv(io, ResultTable(map(empty, columns)))) == "\"Id\",\"n\",\"p\"\n"
 end
 
 include("memory.jl")
@@ -299,8 +304,8 @@ if HAVE_DB
     snapshot = OSS.load_reference(config)
 
     # a stalled query fails after 15 seconds instead of holding every page load
-    let conn = OSS.LibPQ.Connection(OSS.conninfo(config))
-        @test only(OSS.query(conn, "SHOW statement_timeout").statement_timeout) == "15s"
+    let conn = OSS.PG.connect(OSS.conninfo(config))
+        @test only(OSS.PG.texts(OSS.PG.query(conn, "SHOW statement_timeout"), "statement_timeout")) == "15s"
         close(conn)
     end
     meta = JSON.parse(JSON.json(OSS.build_meta(snapshot, config)))
@@ -372,7 +377,7 @@ if HAVE_DB
     @testset "unused results expire by themselves" begin
         server, state = OSS.serve(config; host = "127.0.0.1", port = 8769, sweep = 1)
         try
-            output = OSS.JobOutput("pairmatch", Dict{String, NamedTuple}(), (;), (;))
+            output = empty_output()
             job = OSS.start_job!(_ -> output, state.jobs)
             while (@atomic job.status) == "running"
                 sleep(0.01)

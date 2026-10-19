@@ -71,8 +71,8 @@ using PrecompileTools: @setup_workload, @compile_workload
             get("/api/jobs/$job/rows?table=rejected")
             get("/api/jobs/$job/download?table=excluded&check=1")
             download = get("/api/jobs/$job/download?table=excluded").body
-            download.write_to(IOBuffer())
-            download.finished()
+            write_download(IOBuffer(), download)
+            download_finished(download)
             respond(HTTP.Request("POST", "/api/jobs/$job/release"))
         end
     end
