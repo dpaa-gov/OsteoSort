@@ -32,4 +32,7 @@ ENV JULIA_NUM_THREADS=2,1 \
 
 USER osteosort
 EXPOSE 3838
+# Atlas takes the probe path from this line. The image has no curl, so
+# plain Docker reports the container unhealthy; it still runs.
+HEALTHCHECK CMD curl -f http://localhost:3838/healthz
 CMD ["/opt/osteosort/bin/osteosort"]
