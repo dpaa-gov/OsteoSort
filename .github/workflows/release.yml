@@ -1,20 +1,24 @@
 name: Release
 
-# Publishing a GitHub Release (e.g. v2.0.0) compiles the Julia side of
-# OsteoSort in both of its builds and attaches them to that release: the
+# Pushing a version tag (e.g. v2.0.0) runs the tests, then compiles the Julia side of
+# OsteoSort in both of its builds and attaches them to a draft release: the
 # trimmed one, osteosort-trim-linux-x86_64.tar.gz, which the Dockerfile
 # downloads so that Atlas never compiles Julia, and the ordinary one,
 # osteosort-linux-x86_64.tar.gz, to fall back on.
 
 on:
-  release:
-    types: [published]
+  push:
+    tags: ['v*']
 
 permissions:
   contents: write
 
 jobs:
+  tests:
+    uses: ./.github/workflows/tests.yml
+
   bundle:
+    needs: tests
     runs-on: ubuntu-latest
     timeout-minutes: 90
 
@@ -66,13 +70,18 @@ jobs:
           dev/smoke.sh dist/osteosort-trim-linux-x86_64.tar.gz
           dev/smoke.sh dist/osteosort-linux-x86_64.tar.gz
 
-      - name: Attach to release
+      # A draft: the bundles and notes can be checked before anyone sees them.
+      # Publish from the GitHub release page when ready.
+      - name: Create draft GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload "$GITHUB_REF_NAME" \
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "OsteoSort $GITHUB_REF_NAME" \
+            --generate-notes \
+            --draft \
             dist/osteosort-trim-linux-x86_64.tar.gz \
             dist/osteosort-trim-linux-x86_64.tar.gz.sha256 \
             dist/osteosort-linux-x86_64.tar.gz \
-            dist/osteosort-linux-x86_64.tar.gz.sha256 \
-            --clobber
+            dist/osteosort-linux-x86_64.tar.gz.sha256
