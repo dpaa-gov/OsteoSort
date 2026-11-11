@@ -14,7 +14,29 @@ permissions:
   contents: write
 
 jobs:
+  # Publishing the draft release sends this tag's push a second time. There is
+  # nothing left to build then, so that run stops here: the tests and the
+  # bundle are skipped.
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      published: ${{ steps.look.outputs.published }}
+    steps:
+      - name: Look for a published release of this tag
+        id: look
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # this address answers for a published release only, never a draft
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" --silent 2>/dev/null; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
   tests:
+    needs: guard
+    if: needs.guard.outputs.published != 'true'
     uses: ./.github/workflows/tests.yml
 
   bundle:
