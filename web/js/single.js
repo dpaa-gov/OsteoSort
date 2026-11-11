@@ -2,7 +2,7 @@
 
 import {
     $, postJSON, capFirst, showError, progress, makeSelect, makeChoice, boneName, setChoices, valueOf, valuesOf,
-    initSettings, fillTable, summariseMeasurements, copyRows, markRun, PLOT_CONFIG, PLOT_LAYOUT, COLORS, markLabel, statTile, settingsTile, plotHover,
+    initSettings, fillTable, summariseMeasurements, copyRows, markRun, PLOT_CONFIG, PLOT_LAYOUT, COLORS, specimenLabel, statTile, settingsTile, plotHover,
 } from "./common.js";
 
 export function initSingle(reference) {
@@ -183,7 +183,7 @@ export function initSingle(reference) {
                 { x: [plot.specimen_x], y: [plot.specimen_y], name: "Comparison", type: "scatter", mode: "markers",
                   marker: { color: COLORS.gold, size: 10 } },
             ], { ...paper, xaxis: { title: { text: capFirst(plot.x_label) } }, yaxis: { title: { text: capFirst(plot.y_label) } },
-                annotations: [markLabel(plot.specimen_x, "Comparison", leftOf(plot.specimen_x, plot.ref_x), plot.specimen_y)] }, PLOT_CONFIG);
+                annotations: [specimenLabel(plot.specimen_x, "Comparison", leftOf(plot.specimen_x, plot.ref_x), plot.specimen_y)] }, PLOT_CONFIG);
         } else {
             plotHover("s-plot");
             Plotly.react("s-plot", [
@@ -191,7 +191,7 @@ export function initSingle(reference) {
                   marker: { color: COLORS.reference, line: { color: "grey", width: 1 } } },
             ], { ...paper, shapes: [{ type: "line", x0: plot.specimen, x1: plot.specimen, y0: 0, y1: 1, yref: "paper",
                 line: { color: COLORS.gold, dash: "dash", width: 2 } }],
-                annotations: [markLabel(plot.specimen, "Comparison", leftOf(plot.specimen, plot.reference))] }, PLOT_CONFIG);
+                annotations: [specimenLabel(plot.specimen, "Comparison", leftOf(plot.specimen, plot.reference))] }, PLOT_CONFIG);
         }
     }
 

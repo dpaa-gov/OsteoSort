@@ -14,7 +14,7 @@ export class ResultTable {
         this.total = 0;
         container.innerHTML = `
             <div class="table-toolbar">
-                <a class="btn btn-gold btn-sm" href="${this.base}/download?table=${name}" download="${name}.csv"><i class="os-icon icon-download"></i> Download</a>
+                <a class="btn btn-neutral btn-sm" href="${this.base}/download?table=${name}" download="${name}.csv"><i class="os-icon icon-download"></i> Download</a>
                 <input type="search" class="form-control form-control-sm table-search" placeholder="Search" aria-label="Search">
             </div>
             <div class="table-responsive"><table class="table table-striped result-table"><thead><tr></tr></thead><tbody></tbody></table></div>

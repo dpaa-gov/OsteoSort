@@ -432,12 +432,14 @@ $("image-form").addEventListener("submit", (event) => {
     bootstrap.Modal.getOrCreateInstance($("image-modal")).hide();
 });
 
-// The labels written on a plot ("Comparison", the alpha) can be taken off, for
-// a figure that is captioned elsewhere. The choice holds for later plots too,
-// until the button is pressed again.
-let labelsHidden = false;
+// The labels written on a plot. The specimen's ("Comparison") is off to begin
+// with, leaving the plot clear, and the alpha's is on. The toolbar button puts
+// every label on, and pressed again takes every label off, for a figure that
+// is captioned elsewhere. The choice holds for later plots too.
+let labelsHidden = null; // null until the button is first pressed: each label as it starts
+const labelVisible = (startsHidden) => (labelsHidden === null ? !startsHidden : !labelsHidden);
 function toggleLabels() {
-    labelsHidden = !labelsHidden;
+    labelsHidden = labelsHidden === null ? false : !labelsHidden;
     // on every plot drawn, not only the one whose button was pressed, so none is out of step with the choice
     for (const plot of document.querySelectorAll(".js-plotly-plot")) {
         const labels = plot.layout.annotations ?? [];
@@ -452,7 +454,7 @@ export const PLOT_CONFIG = {
     responsive: true,
     // the only two buttons on the toolbar
     modeBarButtons: [[
-        { name: "toggleLabels", title: "Hide or show labels", icon: LABEL_ICON, click: toggleLabels },
+        { name: "toggleLabels", title: "Show or hide labels", icon: LABEL_ICON, click: toggleLabels },
         { name: "saveImage", title: "Save plot as an image", icon: Plotly.Icons.camera, click: askImageSize },
     ]],
 };
@@ -476,8 +478,15 @@ export const COLORS = { reference: "#3d5a73", excluded: "#cc4444", gold: "#d4a84
 // vertical line is labelled at its top, a point (given its y) next to it.
 export const markLabel = (x, text, onLeft = false, y = null) => ({
     x, text, showarrow: false, xanchor: onLeft ? "right" : "left", xshift: onLeft ? -6 : 6,
-    font: { size: 12, color: "#2a4051" }, visible: !labelsHidden,
+    font: { size: 12, color: "#2a4051" }, visible: labelVisible(false),
     ...(y === null ? { y: 1, yref: "paper", yanchor: "top" } : { y, yanchor: "middle", xshift: onLeft ? -10 : 10 }),
+});
+// The specimen's own label: off until asked for, and white on the sidebar's
+// navy with a gold edge, so it reads over the reference points behind it.
+export const specimenLabel = (...mark) => ({
+    ...markLabel(...mark),
+    font: { size: 12, color: "#ffffff" }, bgcolor: "#0c2030", bordercolor: COLORS.gold, borderwidth: 1, borderpad: 3,
+    visible: labelVisible(true),
 });
 
 // --- Stat tiles ---

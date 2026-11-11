@@ -218,7 +218,7 @@ def run(page):
     used = cell.get_attribute("data-tooltip")
     check(used == want[12] and sum(int(part.rsplit(" ", 1)[1]) for part in used.split(", ")) == int(cell.inner_text()),
           f"hovering the sample size shows the reference groups, adding up to n: {used}")
-    check(page.locator("#s-plot .annotation-text").all_text_contents() == ["Comparison"], "the dashed line on the single plot is labelled Comparison")
+    check(page.locator("#s-plot .annotation-text").count() == 0, "the single plot starts without its label")
     measures = page.locator("#s-table td.measures")
     check(measures.inner_text() == "9" and measures.get_attribute("data-tooltip") == want[6].strip()
           and "Hum_09" in copied[1], f"the measurements column gives their number, the codes on hover and in what is copied: {measures.inner_text()}")
@@ -291,19 +291,19 @@ def run(page):
     page.mouse.move(900, 600)
     check(sizes[0] <= 446 and sizes[1] > sizes[0] and seen and last.input_value() == "32.5",
           f"the femur's 17 fields scroll within the form ({sizes[0]} of {sizes[1]} px shown) and keep their values")
-    check(page.locator("#s-plot .annotation-text").all_text_contents() == ["Comparison"], "the gold point on the regression plot is labelled Comparison")
+    check(page.locator("#s-plot .annotation-text").count() == 0, "the regression plot starts without its label")
     page.screenshot(path=SCREENS / "3-single-regression.png", full_page=True)
 
     # The camera asks for a size, starting from the size on screen, and saves at exactly that
     shown = page.locator("#s-plot").bounding_box()
     page.locator("#s-plot").hover()
     check(page.locator("#s-plot .modebar-btn").count() == 2, "the plot's toolbar has two buttons: labels and save")
-    # the labels button takes the label off the plot and puts it back
+    # the labels button puts the label on the plot and takes it off again
     labels = page.locator("#s-plot .annotation-text")
-    page.locator('#s-plot .modebar-btn[data-title="Hide or show labels"]').click()
-    hidden = labels.count()
-    page.locator('#s-plot .modebar-btn[data-title="Hide or show labels"]').click()
-    check(hidden == 0 and labels.all_text_contents() == ["Comparison"], "the labels button hides the plot's label and shows it again")
+    page.locator('#s-plot .modebar-btn[data-title="Show or hide labels"]').click()
+    shown_labels = labels.all_text_contents()
+    page.locator('#s-plot .modebar-btn[data-title="Show or hide labels"]').click()
+    check(shown_labels == ["Comparison"] and labels.count() == 0, "the labels button shows the gold point's label, Comparison, and hides it again")
     ranges = "() => { const l = document.getElementById('s-plot')._fullLayout; return [...l.xaxis.range, ...l.yaxis.range]; }"
     before = page.evaluate(ranges)
     box = page.locator("#s-plot").bounding_box()  # where it is now that hovering has scrolled it into view
@@ -418,6 +418,9 @@ def run(page):
     check(same(first, kept[0][:12]) and first[1:3] == ["Humerus", "Left"] and first[6].startswith("Hum_"),
           f"first result row shows what the API returns, capitalised: {first[1:3] + first[6:7]}")
     check(page.locator("#m-histogram .bars path").count() > 5, "p-value histogram is drawn")
+    # labels may have been switched off on the Single tab; one press puts them all on
+    page.locator("#m-histogram").hover()
+    page.locator('#m-histogram .modebar-btn[data-title="Show or hide labels"]').click()
     check(page.locator("#m-histogram .annotation-text").all_text_contents() == ["α = 0.1"], "the dashed line is labelled with the alpha used")
     check("Reference" not in page.locator(f"{pane} thead th").all_text_contents(), "no reference column on screen")
     cell = page.locator(f"{pane} tbody tr").first.locator("td[data-tooltip]:not(.measures)")

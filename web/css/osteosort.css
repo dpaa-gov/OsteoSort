@@ -426,16 +426,16 @@ textarea {
   appearance: textfield;
 }
 
-/* File input: gold Browse button */
+/* File input: a neutral Browse button, a shade lighter than the field */
 .well input[type="file"]::file-selector-button {
-  background-color: var(--os-gold);
-  color: #000;
+  background-color: #2a4459;
+  color: var(--os-text);
   border: none;
   font-weight: 500;
 }
 
 .well input[type="file"]:hover::file-selector-button {
-  background-color: #c2983a !important;
+  background-color: #34526a !important;
 }
 
 .upload-summary {
@@ -608,8 +608,8 @@ textarea {
 .ts-dropdown .option.active,
 .ts-dropdown .option:hover,
 .ts-dropdown .option.selected {
-  background-color: var(--os-gold);
-  color: var(--os-navy);
+  background-color: var(--os-gold-tint);
+  color: var(--os-gold);
 }
 
 /* Checkboxes, radios, slider */
@@ -665,10 +665,12 @@ textarea {
   color: #ffffff;
 }
 
+/* the chosen part: a gold outline and tint. Solid gold is kept for the one
+   button that runs the analysis. */
 .segmented .btn-check:checked + .btn {
-  background-color: var(--os-gold);
+  background-color: var(--os-gold-tint);
   border-color: var(--os-gold);
-  color: var(--os-navy);
+  color: var(--os-gold);
   font-weight: 500;
 }
 
@@ -689,21 +691,36 @@ textarea {
   margin: 18px 0;
 }
 
-/* Gold buttons */
-/* The quieter of two buttons: Clear beside Analyze. An outline, so the solid
-   one reads as the thing to press. */
-.btn-outline-gold,
-.btn-outline-gold:focus {
-  background-color: transparent;
-  border: 1px solid var(--os-gold);
-  color: var(--os-gold);
+/* Buttons. Solid gold is the one thing to press: Analyze, or a dialog's
+   answer. Everything else is neutral, so the gold one stands out. */
+/* On the white panels: Copy, Download, the example files */
+.btn-neutral,
+.btn-neutral:focus {
+  background-color: #ffffff;
+  border: 1px solid #becfd9;
+  color: #2a4051;
 }
 
-.btn-outline-gold:hover,
-.btn-outline-gold:active {
-  background-color: var(--os-gold-tint) !important;
-  border-color: var(--os-gold) !important;
-  color: var(--os-gold) !important;
+.btn-neutral:hover,
+.btn-neutral:active {
+  background-color: #f4f8fa !important;
+  border-color: #778f9e !important;
+  color: #2a4051 !important;
+}
+
+/* In the dark sidebar: Clear beside Analyze */
+.well .btn-neutral,
+.well .btn-neutral:focus {
+  background-color: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: var(--os-text);
+}
+
+.well .btn-neutral:hover,
+.well .btn-neutral:active {
+  background-color: rgba(255, 255, 255, 0.06) !important;
+  border-color: var(--os-muted) !important;
+  color: #ffffff !important;
 }
 
 .btn-gold,
@@ -1007,11 +1024,11 @@ textarea {
   --bs-pagination-color: #2a4051;
   --bs-pagination-bg: transparent;
   --bs-pagination-border-color: transparent;
-  --bs-pagination-hover-color: var(--os-navy);
-  --bs-pagination-hover-bg: var(--os-gold);
-  --bs-pagination-hover-border-color: var(--os-gold);
-  --bs-pagination-active-color: var(--os-navy);
-  --bs-pagination-active-bg: var(--os-gold);
+  --bs-pagination-hover-color: #2a4051;
+  --bs-pagination-hover-bg: var(--os-gold-tint);
+  --bs-pagination-hover-border-color: transparent;
+  --bs-pagination-active-color: #2a4051;
+  --bs-pagination-active-bg: var(--os-gold-tint);
   --bs-pagination-active-border-color: var(--os-gold);
   --bs-pagination-disabled-bg: transparent;
   --bs-pagination-disabled-border-color: transparent;
@@ -1072,8 +1089,8 @@ textarea {
   max-width: 280px;
 }
 
-/* Results tabset: gold active tab; the others in the muted slate of the tile
-   labels, darker on hover over a hint of gold */
+/* Results tabset: the active tab has a gold tint and a gold line under it;
+   the others are in the muted slate of the tile labels, darker on hover */
 .results-tabs .nav-link {
   color: #586f80;
   border-color: transparent;
@@ -1089,9 +1106,11 @@ textarea {
 
 .results-tabs .nav-link.active,
 .results-tabs .nav-link.active:hover {
-  background-color: var(--os-gold);
-  color: var(--os-navy);
-  border-color: var(--os-gold);
+  background-color: var(--os-gold-tint);
+  color: #2a4051;
+  font-weight: 600;
+  border-color: transparent;
+  box-shadow: inset 0 -3px 0 var(--os-gold);
 }
 
 /* Dialogs */
