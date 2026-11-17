@@ -232,6 +232,60 @@ function write_csv(io::IO, table::ResultTable; wanted::F = () -> true, piece::In
     return true
 end
 
+# --- A plan's tables as one list ---
+
+# The tables of a plan's tests are alike but for what each analysis reports:
+# a t-test its mean and SD, a regression its R². Together they are one list
+# with every such column, each row's test named first, and a cell left empty
+# where its analysis has no such number. The columns are in this order
+# whichever tests there are; one not known here would follow them.
+const COMBINED_ORDER = ("Accession 1", "Element 1", "Side 1", "Accession 2", "Element 2", "Side 2",
+                        "Measurements", "n", "Mean", "SD", "R²", "p", "Result", "Reference", "Reason")
+
+function combined_headings(tables::Vector{ResultTable})::Vector{String}
+    present = String[]
+    for table in tables, name in table.names
+        heading = display_name(name)
+        heading in present || push!(present, heading)
+    end
+    return vcat(String[heading for heading in COMBINED_ORDER if heading in present],
+                String[heading for heading in present if !(heading in COMBINED_ORDER)])
+end
+
+# Rows of one test's table under the list's headings. `places` says which of
+# the table's columns is under each heading, 0 where it has none.
+function combined_rows(test::String, table::ResultTable, places::Vector{Int}, rows::AbstractVector{Int})::Vector{UInt8}
+    io = IOBuffer()
+    named = csv_cell(test)
+    for i in rows
+        print(io, named)
+        for j in places
+            print(io, ",")
+            j == 0 || print(io, csv_cell(table.columns[j], i))
+        end
+        print(io, "\n")
+    end
+    return take!(io)
+end
+
+# Writes the tables to `io` as one CSV, a piece at a time, as `write_csv`
+# writes one. Returns whether all of it was written.
+function write_combined(io::IO, tests::Vector{String}, tables::Vector{ResultTable};
+                        wanted::F = () -> true, piece::Int = CSV_PIECE_ROWS)::Bool where {F}
+    headings = combined_headings(tables)
+    write(io, join((csv_cell(heading) for heading in vcat("Test", headings)), ",") * "\n")
+    for (test, table) in zip(tests, tables)
+        shown = String[display_name(name) for name in table.names]
+        places = Int[something(findfirst(==(heading), shown), 0) for heading in headings]
+        total = row_count(table)
+        for start in 1:piece:total
+            wanted() || return false
+            write(io, off_thread(Vector{UInt8}, () -> combined_rows(test, table, places, start:min(start + piece - 1, total))))
+        end
+    end
+    return true
+end
+
 # --- Case-file template ---
 
 # Column headings for a case file: the three id columns, then every
@@ -373,17 +427,26 @@ function multiple_handler(state::AppState, req::HTTP.Request)
     return json_response(202, (job = job.id,))
 end
 
-function run_batch(state::AppState, batch::Batch, job::Job)
-    started = time()
-    upload = try
-        read_upload(batch.csv)
+# The uploaded file as a table. One that cannot be read is refused with what
+# is wrong with it, in read_upload's words, which are always plain text.
+function read_case(csv::String)::SortTable
+    try
+        return read_upload(csv)
     catch e
-        # what is wrong with the file, in read_upload's words, which are always plain text
         e isa ArgumentError && (message = e.msg) isa String ? throw(RequestError(400, message)) : rethrow()
     end
+end
+
+# How many pairs an analysis is to compare: every specimen of the one kind
+# with every specimen of the other
+pairs_to_compare(data::Union{Nothing, OSJ.Prepared})::Int = data === nothing ? 0 : length(data.sorta) * length(data.sortb)
+
+function run_batch(state::AppState, batch::Batch, job::Job)
+    started = time()
+    upload = read_case(batch.csv)
     @atomic job.stage = "sorting"
     data = prepare_multiple(batch.fields, batch.groups, upload)
-    comparisons = data === nothing ? 0 : length(data.sorta) * length(data.sortb)
+    comparisons = pairs_to_compare(data)
     check_size(comparisons, state.jobs.max_rows)
     # the results this run replaces are forgotten first, so they do not count as in use against it
     replaces = batch.replaces
@@ -392,6 +455,122 @@ function run_batch(state::AppState, batch::Batch, job::Job)
     @atomic job.stage = "comparing"
     result = analyse(data, batch.analysis, batch.alpha, batch.settings)
     return job_output(batch.analysis, result, batch.alpha, time() - started)
+end
+
+# --- Plans: several analyses of one case file in one run ---
+
+# A plan is one upload and one run, whose results are kept and dropped
+# together like any other run's. Its tests are those of /api/multiple, each
+# with the fields that analysis takes there; the reference groups, alpha and
+# settings are given once and hold for all of them.
+
+# The most tests in one plan: every bone pair-matched and every articulation
+# on both sides is about forty.
+const MAX_PLAN_TESTS = 100
+
+const TestFields = Union{PairMatchFields, ArticulationFields, RegressionFields}
+
+analysis_of(::PairMatchFields) = "pairmatch"
+analysis_of(::ArticulationFields) = "articulation"
+analysis_of(::RegressionFields) = "regression"
+
+# A test's name in the names of its downloads, as in
+# "regression-humerus-left-femur-right-excluded.csv". The words come from the
+# request, so only letters and digits are kept, and not many of them.
+slug(text::String)::String = first(strip(replace(lowercase(text), r"[^a-z0-9]+" => "-"), '-'), 30)
+test_name(f::PairMatchFields)::String = "pairmatch-" * slug(f.element)
+test_name(f::ArticulationFields)::String = "articulation-" * slug(f.element_a) * "-" * slug(f.element_b) * "-" * slug(f.side)
+test_name(f::RegressionFields)::String =
+    "regression-" * slug(f.element_a) * "-" * slug(f.side_a) * "-" * slug(f.element_b) * "-" * slug(f.side_b)
+
+# A test as it is named beside its rows when a plan's tables are downloaded as
+# one list. In plain letters, as a spreadsheet may not read any others.
+bone_title(element::String)::String = uppercasefirst(lowercase(String(strip(element))))
+test_title(f::PairMatchFields)::String = "Pair-match: " * bone_title(f.element)
+test_title(f::ArticulationFields)::String =
+    "Articulation: " * bone_title(f.element_a) * "-" * bone_title(f.element_b) * ", " * lowercase(f.side)
+test_title(f::RegressionFields)::String = "Regression: " * bone_title(f.element_a) * " (" * lowercase(f.side_a) * ") to " *
+    bone_title(f.element_b) * " (" * lowercase(f.side_b) * ")"
+
+function tests_field(body::Body)::Vector{TestFields}
+    value = field(body, "tests")
+    value isa Vector{Any} || bad_request("tests must be a list of tests")
+    isempty(value) && bad_request("Choose at least one test to run")
+    length(value) <= MAX_PLAN_TESTS || bad_request("A plan can have at most $MAX_PLAN_TESTS tests")
+    tests = TestFields[]
+    for test in value
+        test isa Body || bad_request("tests must be a list of tests")
+        analysis = text_field(test, "analysis")
+        analysis in ("pairmatch", "articulation", "regression") ||
+            bad_request("analysis must be pairmatch, articulation or regression")
+        push!(tests, multiple_fields(test, analysis))
+    end
+    return tests
+end
+
+check_plan_size(comparisons, most) = comparisons <= most || throw(RequestError(422,
+    "This plan would make $(thousands(comparisons)) comparisons; the most one run can make is $(thousands(most)). " *
+    "Run fewer tests at a time."))
+
+# A plan as the request asked for it, held while it waits for its turn
+struct Plan
+    groups::Vector{ReferenceGroup}
+    alpha::Float64
+    settings::Union{Nothing, Settings} # nothing where every test is a regression, which has none
+    csv::String
+    tests::Vector{TestFields}
+    replaces::Union{Nothing, String}
+end
+
+function plan_handler(state::AppState, req::HTTP.Request)
+    body = read_json(req)
+    groups = selected_groups(current_snapshot(state), list_field(body, "references"))
+    alpha = alpha_field(body)
+    tests = tests_field(body)
+    settings = all(test -> test isa RegressionFields, tests) ? nothing : settings_field(body)
+    csv = text_field(body, "csv")
+    sizeof(csv) <= MAX_FILE_BYTES || throw(RequestError(413, TOO_LARGE))
+    plan = Plan(groups, alpha, settings, csv, tests, replaces_field(body))
+    job = start_job!(job -> run_plan(state, plan, job), state.jobs)
+    return json_response(202, (job = job.id,))
+end
+
+# One test of a plan. A test that has nothing to compare, or fails, does not
+# stop the rest: it is given back with the reason in place of results.
+function run_test(plan::Plan, fields::TestFields, data::Union{Nothing, OSJ.Prepared})::PlanTest
+    analysis = analysis_of(fields)
+    started = time()
+    try
+        result = analyse(data, analysis, plan.alpha, analysis == "regression" ? nothing : plan.settings)
+        return PlanTest(test_name(fields), test_title(fields), "", job_output(analysis, result, plan.alpha, time() - started))
+    catch e
+        e isa RequestError || rethrow()
+        return PlanTest(test_name(fields), test_title(fields), e.message, no_output(analysis, plan.alpha))
+    end
+end
+
+# The file is read once and every test is sorted out of it before any is
+# compared, so a plan too large to hold is refused before the work is done,
+# and room is made for the whole of it, as for a single run.
+function run_plan(state::AppState, plan::Plan, job::Job)::PlanOutput
+    started = time()
+    upload = read_case(plan.csv)
+    @atomic job.stage = "sorting"
+    prepared = Union{Nothing, OSJ.Prepared}[prepare_multiple(fields, plan.groups, upload) for fields in plan.tests]
+    comparisons = sum(pairs_to_compare, prepared; init = 0)
+    check_plan_size(comparisons, state.jobs.max_rows)
+    replaces = plan.replaces
+    replaces === nothing || release_job!(state.jobs, replaces)
+    make_room!(state.jobs, comparisons)
+    @atomic job.steps = length(plan.tests)
+    @atomic job.stage = "comparing"
+    tests = PlanTest[]
+    for (i, fields) in enumerate(plan.tests)
+        @atomic job.step = i
+        push!(tests, run_test(plan, fields, prepared[i]))
+        prepared[i] = nothing # its rows are not needed again
+    end
+    return PlanOutput(tests, round(time() - started; digits = 2))
 end
 
 function require_job(state::AppState, id::String)
@@ -407,7 +586,12 @@ function job_handler(state::AppState, id::String)
     output = @atomic job.output
     status == "error" && return json_response(200, (id = job.id, status = status, error = (@atomic job.error)))
     (status == "running" || output === nothing) &&
-        return json_response(200, (id = job.id, status = "running", stage = (@atomic job.stage)))
+        return json_response(200, (id = job.id, status = "running", stage = (@atomic job.stage),
+                                   step = (@atomic job.step), steps = (@atomic job.steps)))
+    output isa PlanOutput && return json_response(200, (
+        id = job.id, status = status, analysis = "plan", seconds = output.seconds,
+        tests = TestStatus[test_status(test) for test in output.tests],
+    ))
     return json_response(200, (
         id = job.id, status = status, analysis = output.analysis,
         summary = output.summary, histogram = output.histogram,
@@ -432,6 +616,14 @@ function table_summaries(tables::Dict{String, ResultTable})::JSON.Object{String,
     return summaries
 end
 
+# One test of a finished plan, as a single run is told: what it found and the
+# sizes of its tables. `error` is empty unless the test could not be run.
+const TestStatus = @NamedTuple{name::String, analysis::String, error::String, summary::Summary, histogram::Histogram,
+                               tables::JSON.Object{String, TableSummary}}
+
+test_status(test::PlanTest)::TestStatus = (name = test.name, analysis = test.output.analysis, error = test.error,
+    summary = test.output.summary, histogram = test.output.histogram, tables = table_summaries(test.output.tables))
+
 # The page calls this when a run's results are cleared, replaced by a new run,
 # or the page is closed, so each open page holds at most one set of results.
 # It is a POST so the browser can send it while a page is closing.
@@ -442,22 +634,62 @@ end
 
 const Query = Dict{String, String}
 
-function require_table(state::AppState, id::String, query::Query)::ResultTable
-    output = @atomic require_job(state, id).output
-    output === nothing && throw(RequestError(409, "The analysis has not finished"))
-    table = get(output.tables, get(query, "table", ""), nothing)
-    table === nothing && bad_request("table must be not_excluded, excluded or rejected")
-    return table
+query_int(query::Query, name::String, default::Int)::Int = something(tryparse(Int, get(query, name, "")), default)
+
+# The test of a plan a request is about: `test=2` is the second
+function plan_test(output::PlanOutput, query::Query)::PlanTest
+    number = query_int(query, "test", 0)
+    1 <= number <= length(output.tests) || bad_request("test must be the number of one of the plan's tests")
+    return output.tests[number]
 end
 
-query_int(query::Query, name::String, default::Int)::Int = something(tryparse(Int, get(query, name, "")), default)
+# The table a request is about and the name it is downloaded under. A plan's
+# tables are found by test as well, and named after it.
+function finished_output(state::AppState, id::String)::Union{JobOutput, PlanOutput}
+    output = @atomic require_job(state, id).output
+    output === nothing && throw(RequestError(409, "The analysis has not finished"))
+    return output
+end
+
+const NO_SUCH_TABLE = "table must be not_excluded, excluded or rejected"
+
+function require_table(state::AppState, id::String, query::Query)::Tuple{ResultTable, String}
+    output = finished_output(state, id)
+    name = get(query, "table", "")
+    if output isa PlanOutput
+        test = plan_test(output, query)
+        tables, file = test.output.tables, test.name * "-" * name
+    else
+        tables, file = output.tables, name
+    end
+    table = get(tables, name, nothing)
+    table === nothing && bad_request(NO_SUCH_TABLE)
+    return table, file * ".csv"
+end
+
+# What a download is of: one table, or with `test=all` that table of every
+# test of a plan that ran, to be written as a single list. Returns the
+# tables, what each one's test is called (none for a table by itself) and the
+# name of the file.
+function download_tables(state::AppState, id::String, query::Query)::Tuple{Vector{ResultTable}, Vector{String}, String}
+    if get(query, "test", "") != "all"
+        table, file = require_table(state, id, query)
+        return ResultTable[table], String[], file
+    end
+    output = finished_output(state, id)
+    output isa PlanOutput || bad_request("Only a plan has tests to download together")
+    name = get(query, "table", "")
+    name in TABLE_ORDER || bad_request(NO_SUCH_TABLE)
+    ran = PlanTest[test for test in output.tests if haskey(test.output.tables, name)]
+    return ResultTable[test.output.tables[name] for test in ran], String[test.title for test in ran], "plan-" * name * ".csv"
+end
 
 const SEARCH_SECONDS = 10
 
 # One page of a result table, with the search box and column sorting applied.
 function rows_handler(state::AppState, req::HTTP.Request, id::String)
     query = HTTP.queryparams(HTTP.URI(req.target))
-    table = require_table(state, id, query)
+    table, _ = require_table(state, id, query)
     return json_response(200, off_thread(TablePage, () -> table_page(table, query)))
 end
 
@@ -517,7 +749,7 @@ const DOWNLOAD_SECONDS = 600
 
 function download_handler(state::AppState, req::HTTP.Request, id::String; seconds::Int = DOWNLOAD_SECONDS)
     query = HTTP.queryparams(HTTP.URI(req.target))
-    table = require_table(state, id, query)
+    tables, tests, file = download_tables(state, id, query)
     downloads = state.jobs.downloads
     # The page asks before it starts a download, which the browser saves by
     # itself: an answer that is an error would be saved as the file.
@@ -531,9 +763,9 @@ function download_handler(state::AppState, req::HTTP.Request, id::String; second
     end
     return HTTP.Response(200, [
         "Content-Type" => "text/csv; charset=utf-8",
-        "Content-Disposition" => "attachment; filename=\"$(query["table"]).csv\"",
+        "Content-Disposition" => "attachment; filename=\"" * file * "\"",
         "Cache-Control" => "no-store",
-    ], Download(table, state.jobs, id, req.target, time() + seconds, seconds))
+    ], Download(tables, tests, state.jobs, id, req.target, time() + seconds, seconds))
 end
 
 # A download reads its table for as long as it is being sent. Results cleared
@@ -544,6 +776,8 @@ function still_wanted(body::Download)::Bool
     return false
 end
 
-write_download(io::IO, body::Download)::Bool = write_csv(io, body.table; wanted = () -> still_wanted(body))
+write_download(io::IO, body::Download)::Bool =
+    isempty(body.tests) ? write_csv(io, only(body.tables); wanted = () -> still_wanted(body)) :
+    write_combined(io, body.tests, body.tables; wanted = () -> still_wanted(body))
 
 download_finished(body::Download) = (Threads.atomic_sub!(body.jobs.downloads, 1); nothing)

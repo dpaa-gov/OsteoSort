@@ -103,7 +103,8 @@ end
 # it and returns whether it wrote all of it; `download_finished` is called
 # once the response is over, however it ended (both in api.jl).
 struct Download <: HTTP.AbstractBody
-    table::ResultTable
+    tables::Vector{ResultTable} # one; or a plan's, one for each of its tests, written as a single list
+    tests::Vector{String}       # what each of those tests is called in the list; none for a table by itself
     jobs::JobStore      # its job is looked for here before each piece: cleared results stop it
     id::String
     target::String      # the request, for the log
@@ -181,6 +182,7 @@ function route(state::AppState, req::HTTP.Request)::HTTP.Response
         elseif req.method == "POST"
             is("api", "single") && return single_handler(state, req)
             is("api", "multiple") && return multiple_handler(state, req)
+            is("api", "plan") && return plan_handler(state, req)
             of_job("release") && return release_handler(state, String(parts[3]))
         end
         return error_response(404, "Not found")
@@ -212,8 +214,9 @@ const REQUEST_TOO_LARGE = "The request is too large"
 # gets the answer; one larger than this is refused and the connection closed.
 const DISCARD_BYTES = 32 * 1024^2
 
-# A case file is uploaded to one route; every other request is small.
-body_limit(target) = startswith(target, "/api/multiple") ? MAX_BODY_BYTES : SMALL_BODY_BYTES
+# A case file is uploaded to two routes, for one analysis of it or a plan of
+# several; every other request is small.
+body_limit(target) = startswith(target, "/api/multiple") || startswith(target, "/api/plan") ? MAX_BODY_BYTES : SMALL_BODY_BYTES
 
 # What HTTP.jl raises when a request has not arrived within BODY_SECONDS
 const TOO_SLOW = HTTP.IOPoll.DeadlineExceededError

@@ -14,7 +14,7 @@ const ElementMeta = @NamedTuple{element::String, rows::Int, sides::Vector{String
 const GroupMeta = @NamedTuple{label::String, elements::Vector{ElementMeta}}
 const Meta = @NamedTuple{version::String, loaded_at::String, default_references::Vector{String}, groups::Vector{GroupMeta},
     bones::Vector{String}, measurements::Vector{Measurement}, disabled_measurements::Vector{String},
-    regression_bones::Vector{String}, articulation::Vector{@NamedTuple{a::String, b::String}}}
+    regression_bones::Vector{String}, articulation::Vector{@NamedTuple{a::String, b::String}}, max_comparisons::Int}
 
 # A time as Julia writes one, 2026-10-09T18:30:05.250: the thousandths of a
 # second only where there are any, and then all three figures of them
@@ -52,5 +52,7 @@ function build_meta(snapshot::ReferenceSnapshot, config::Config)::Meta
         disabled_measurements = snapshot.disabled,
         regression_bones = regression_config(config),
         articulation = @NamedTuple{a::String, b::String}[(a = a, b = b) for (a, b) in articulation_config(config)],
+        # the most one run may make, so the page can say a plan is too large before it is uploaded
+        max_comparisons = MAX_RESULT_ROWS,
     )
 end

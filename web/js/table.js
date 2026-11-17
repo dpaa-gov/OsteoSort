@@ -5,16 +5,35 @@ import { getJSON, showError, NUMERIC_COLUMNS, summariseMeasurements } from "./co
 
 const PAGE_SIZES = [10, 25, 50];
 
+// For a click on a link that downloads results. A link alone would save the
+// server's "expired" or "busy" message as the file, so the server is asked
+// first and the download started only if it can be had.
+export async function checkedDownload(event) {
+    event.preventDefault();
+    const link = event.currentTarget.cloneNode(); // a copy, which does not ask again
+    try {
+        await getJSON(`${link.href}&check=1`);
+    } catch (error) {
+        return showError(error.message);
+    }
+    link.hidden = true;
+    document.body.append(link);
+    link.click();
+    link.remove();
+}
+
 export class ResultTable {
-    constructor(container, jobId, name) {
+    // `test` is given for a table of a plan, whose tables are found by test as well: 1 is its first
+    constructor(container, jobId, name, test) {
         this.container = container;
         this.base = `api/jobs/${jobId}`;
         this.name = name;
+        this.of = test ? { test } : {};
         this.state = { offset: 0, limit: PAGE_SIZES[0], search: "", sort: 0, dir: "asc" };
         this.total = 0;
         container.innerHTML = `
             <div class="table-toolbar">
-                <a class="btn btn-neutral btn-sm" href="${this.base}/download?table=${name}" download="${name}.csv"><i class="os-icon icon-download"></i> Download</a>
+                <a class="btn btn-neutral btn-sm" href="${this.base}/download?${new URLSearchParams({ ...this.of, table: name })}" download="${name}.csv"><i class="os-icon icon-download"></i> Download</a>
                 <input type="search" class="form-control form-control-sm table-search" placeholder="Search" aria-label="Search">
             </div>
             <div class="table-responsive"><table class="table table-striped result-table"><thead><tr></tr></thead><tbody></tbody></table></div>
@@ -27,20 +46,7 @@ export class ResultTable {
                     <ul class="pagination pagination-sm"></ul>
                 </div>
             </div>`;
-        // A link alone would save the server's "expired" or "busy" message as the file; ask first.
-        container.querySelector("a[download]").addEventListener("click", async (event) => {
-            event.preventDefault();
-            const link = event.currentTarget.cloneNode(); // a copy, which does not ask again
-            try {
-                await getJSON(`${link.href}&check=1`);
-            } catch (error) {
-                return showError(error.message);
-            }
-            link.hidden = true;
-            document.body.append(link);
-            link.click();
-            link.remove();
-        });
+        container.querySelector("a[download]").addEventListener("click", checkedDownload);
         let timer;
         container.querySelector(".page-size").addEventListener("change", (event) => {
             this.state.limit = Number(event.target.value);
@@ -60,7 +66,7 @@ export class ResultTable {
 
     async load() {
         const { offset, limit, search, sort, dir } = this.state;
-        const query = new URLSearchParams({ table: this.name, offset, limit, search, sort, dir });
+        const query = new URLSearchParams({ ...this.of, table: this.name, offset, limit, search, sort, dir });
         const request = (this.request = (this.request ?? 0) + 1);
         let page;
         try {

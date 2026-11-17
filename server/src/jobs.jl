@@ -21,14 +21,32 @@ struct JobOutput
     histogram::Histogram
 end
 
+# One test of a plan. A test that could not be run has `error` saying why, and
+# an output with nothing in it.
+struct PlanTest
+    name::String  # for the names of its downloads: "pairmatch-humerus"
+    title::String # for its rows where the plan's tests are listed together: "Pair-match: Humerus"
+    error::String
+    output::JobOutput
+end
+
+# What a plan produced: several analyses of one case file, in the order they
+# were asked for
+struct PlanOutput
+    tests::Vector{PlanTest}
+    seconds::Float64
+end
+
 mutable struct Job
     const id::String
     @atomic status::String # running, done or error
     @atomic stage::String
+    @atomic step::Int  # the test a plan is on,
+    @atomic steps::Int # of this many; both 0 for a single analysis
     @atomic error::String
     @atomic finished::DateTime
     @atomic used::DateTime # when its results were last asked for
-    @atomic output::Union{Nothing, JobOutput}
+    @atomic output::Union{Nothing, JobOutput, PlanOutput}
 end
 
 struct JobStore
@@ -58,9 +76,14 @@ const DOWNLOADS_BUSY = "The server is busy with other downloads. Try again in a 
 JobStore(; max_rows = MAX_RESULT_ROWS) =
     JobStore(ReentrantLock(), Dict{String, Job}(), max_rows, Base.Semaphore(1), Threads.Atomic{Int}(0), Threads.Atomic{Int}(0))
 
-function result_rows(job::Job)
+result_rows(output::JobOutput)::Int = sum(row_count, values(output.tables); init = 0)
+result_rows(output::PlanOutput)::Int = sum(test -> result_rows(test.output), output.tests; init = 0)
+
+function result_rows(job::Job)::Int
     output = @atomic job.output
-    return output === nothing ? 0 : sum(row_count, values(output.tables); init = 0)
+    output === nothing && return 0
+    output isa PlanOutput && return result_rows(output)
+    return result_rows(output)
 end
 
 # Julia only clears memory out when it needs room for something new, so on an
@@ -177,7 +200,7 @@ sweep!(store::JobStore) = lock(() -> prune!(store), store.lock)
 
 # The id is the only key to a job's results, so it must be unguessable.
 function create_job!(store::JobStore)
-    job = Job(bytes2hex(rand(Random.RandomDevice(), UInt8, 16)), "running", "queued", "", DateTime(0), now(UTC), nothing)
+    job = Job(bytes2hex(rand(Random.RandomDevice(), UInt8, 16)), "running", "queued", 0, 0, "", DateTime(0), now(UTC), nothing)
     lock(store.lock) do
         prune!(store)
         store.jobs[job.id] = job
@@ -194,7 +217,7 @@ function release_job!(store::JobStore, id)
     return
 end
 
-# Runs `work(job)` on a worker thread; it returns the JobOutput. Batches take
+# Runs `work(job)` on a worker thread; it returns the run's output. Batches take
 # turns, which leaves the other worker thread free for single comparisons,
 # table searches and reference reloads.
 function start_job!(work, store::JobStore)
@@ -293,3 +316,7 @@ function job_output(analysis::String, result::AnalysisResult, alpha::Float64, se
     )
     return JobOutput(analysis, tables, summary, p_histogram(table, alpha))
 end
+
+# What a test that could not be run leaves in its place: no tables, and nothing counted
+no_output(analysis::String, alpha::Float64)::JobOutput = JobOutput(analysis, Dict{String, ResultTable}(),
+    Summary((0.0, 0, 0, 0, 0, nothing, 0)), Histogram((HISTOGRAM_BIN, Int[], Int[], 0, alpha)))

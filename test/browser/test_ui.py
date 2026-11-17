@@ -8,6 +8,7 @@ URL defaults to http://127.0.0.1:3838/. What the page shows is compared with
 what the API returns for the same input; the API itself is tested in
 test/server. Screenshots are written to test/browser/screens.
 """
+import csv
 import json
 import pathlib
 import re
@@ -57,6 +58,18 @@ def api_batch(body):
             rows += api(f"api/jobs/{job}/rows?table={name}&offset={len(rows)}&limit=1000")["rows"]
         tables[name] = rows
     return status, tables
+
+
+def api_plan(body):
+    """Run a plan through the API; returns its status once it is done."""
+    job = api("api/plan", body)["job"]
+    while True:
+        status = api(f"api/jobs/{job}")
+        if status["status"] != "running":
+            break
+        time.sleep(0.05)
+    assert status["status"] == "done", status
+    return status
 
 
 def held(job):
@@ -557,6 +570,192 @@ def run(page):
     expect(page.get_by_role("tab", name="Rejected", exact=True)).not_to_have_class(re.compile("active"))
     page.mouse.move(800, 20)
     page.screenshot(path=SCREENS / "5-multiple-articulation.png", full_page=True)
+
+    # --- Multiple: an analysis plan, several tests of the file as one run ---
+    page.locator("#m-clear").click()
+    check(page.locator("#m-plan-open").is_hidden(), "the plan is offered once a file is loaded, not before")
+    page.set_input_files("#m-file", DATA / "classic_case_data.csv")
+    expect(page.locator("#m-plan-open")).to_be_visible()
+    # what the sidebar offers for the same bones is what the plan's tests are run on
+    in_file = choices(page, "m-element")
+    pick(page, "m-analysis", "Regression")
+    choose(page, "m-element-a", "Humerus")
+    choose(page, "m-element-b", "Femur")
+    humerus, femur = chosen(page, "m-measurements-a"), chosen(page, "m-measurements-b")
+    pick(page, "m-analysis", "Pair-match")
+
+    def plan_rows(kind):
+        return page.locator(f"[data-plan={kind}] .plan-row")
+
+    def plan_row(kind, name):
+        return plan_rows(kind).filter(has=page.locator("xpath=.//label[normalize-space()='%s']" % name))
+
+    def plan_tab(kind):
+        """Bring one kind of test to the front; returns how many of its tests the tab says are ticked."""
+        page.locator(f"[data-plan-tab={kind}]").click()
+        expect(page.locator(f"[data-plan={kind}]")).to_be_visible()
+        return page.locator(f"[data-plan-tab={kind}] .plan-tab-count").inner_text()
+
+    # the plan is run with the sidebar's alpha and settings, and says which
+    page.locator("#m-form .settings-toggle").click()
+    page.locator("label[for=m-alpha-005]").click()
+    page.locator("#m-plan-open").click()
+    expect(page.locator("#plan-modal")).to_be_visible()
+    check(page.locator("#p-settings").inner_text() == "2 tails \u00b7 \u03b1 0.05" and page.locator("#plan-modal .alpha-group, #plan-modal .tails-group, #plan-modal .ttest-settings").count() == 0
+          and page.locator("#p-reference").inner_text() == ", ".join(references),
+          "the plan shows the reference groups and settings the sidebar has set, and has none of its own")
+    check(plan_rows("pairmatch").locator(".plan-name").all_text_contents() == [bone.capitalize() for bone in in_file],
+          "the plan lists a pair-match for every bone the file and the reference data share")
+    listed = plan_rows("articulation").locator(".plan-name").all_text_contents()
+    check("Femur \u2194 Os coxa, left" in listed and "Femur \u2194 Os coxa, right" in listed and len(listed) % 2 == 0,
+          f"and each articulating pair on each side: {len(listed)}")
+    check(page.locator(".plan-row input:checked").count() == 0 and plan_rows("regression").count() == 0
+          and page.locator("#plan-run").is_disabled() and page.locator("#plan-total").inner_text() == "0 tests \u00b7 0 pairs to compare",
+          "nothing is ticked to begin with, and there is nothing to run")
+    check(page.locator(".plan-tab.active").inner_text() == "Pair-match" and page.locator("[data-plan=articulation]").is_hidden()
+          and page.locator("#plan-builder").is_hidden(), "the kinds of test are tabs, the pair-matches in front")
+    row = plan_row("pairmatch", "Humerus")
+    check([row.locator(".plan-count").inner_text(), row.locator(".plan-pairs").inner_text(), row.locator(".plan-measures").inner_text().strip()]
+          == ["20 \u00d7 23", "460", f"All {len(humerus)}"], "a test says how many specimens and pairs it would compare, on how many measurements")
+    row.locator("input").check()
+    row.locator(".plan-measures").click()
+    check(row.locator(".plan-chip").all_text_contents() == [code.capitalize() for code in humerus]
+          and "(mm)" in row.locator(".plan-chip").first.get_attribute("data-tooltip"), "its measurements open to be chosen from, named in full on hover")
+    row.locator(".plan-chip", has_text="Hum_03").click()
+    expect(row.locator(".plan-measures")).to_have_text(f"{len(humerus) - 1} of {len(humerus)}")
+    check(row.locator(".plan-chip", has_text="Hum_03").get_attribute("aria-pressed") == "false", "a measurement can be taken out of one test")
+    plan_tab("articulation")
+    check(page.locator("[data-plan=pairmatch]").is_hidden() and page.locator(".plan-columns").is_visible(),
+          "another tab takes the place of the first, under the same headings")
+    plan_row("articulation", "Humerus \u2194 Ulna, left").locator("input").check()
+    plan_tab("regression")
+    check(page.locator("#plan-builder").is_visible() and page.locator("[data-plan=regression] .plan-empty").inner_text() == "None added",
+          "regressions are put together on their own tab")
+    choose(page, "p-element-a", "Humerus")
+    choose(page, "p-element-b", "Femur")
+    pick(page, "p-side-a", "Left")
+    pick(page, "p-side-b", "Right")
+    page.locator("#p-add").click()
+    added = plan_rows("regression")
+    check(added.locator(".plan-name").all_text_contents() == ["Humerus (left) \u2192 Femur (right)"] and added.locator("input").is_checked(),
+          "a regression is added to the plan, ticked")
+    page.locator("#p-add").click()
+    check(plan_rows("regression").count() == 1, "the same regression is not added twice")
+    expect(page.locator("#plan-total")).to_have_text("3 tests \u00b7 1,280 pairs to compare")
+    check([page.locator(f"[data-plan-tab={kind}] .plan-tab-count").inner_text() for kind in ("pairmatch", "articulation", "regression")] == ["1", "1", "1"],
+          "each tab says how many of its tests are ticked")
+    # only what is ticked, to look over before it is run
+    page.locator("#plan-ticked-only").check()
+    plan_tab("pairmatch")
+    check(plan_rows("pairmatch").locator(".plan-name").all_text_contents() == ["Humerus"], "Ticked only leaves just the tests that are to be run")
+    plan_row("pairmatch", "Humerus").locator("input").click()   # unticked, it is gone from the list at once
+    expect(plan_rows("pairmatch")).to_have_count(0)
+    check(page.locator("[data-plan=pairmatch] .plan-empty").inner_text() == "Nothing ticked here" and plan_tab("pairmatch") == "", "and says so where there are none")
+    page.locator("#plan-ticked-only").uncheck()
+    plan_row("pairmatch", "Humerus").locator("input").check()
+    expect(page.locator("#plan-total")).to_have_text("3 tests \u00b7 1,280 pairs to compare")
+    page.screenshot(path=SCREENS / "11-plan.png")
+
+    runs = page.locator("#m-results").get_attribute("data-run") or "0"
+    page.locator("#plan-run").click()
+    expect(page.locator("#m-results")).not_to_have_attribute("data-run", runs, timeout=30000)
+    expect(page.locator("#progress-modal")).to_be_hidden()
+    expect(page.locator("#plan-modal")).to_be_hidden()
+    plan_job = last_job()
+    expected = api_plan({**common, "alpha": 0.05, "settings": SETTINGS, "csv": classic, "tests": [
+        {"analysis": "pairmatch", "element": "humerus", "measurements": [code for code in humerus if code != "hum_03"]},
+        {"analysis": "articulation", "element_a": "humerus", "element_b": "ulna", "side": "Left",
+         "measurements_a": ["hum_06"], "measurements_b": ["uln_11"]},
+        {"analysis": "regression", "element_a": "humerus", "element_b": "femur", "side_a": "Left", "side_b": "Right",
+         "measurements_a": humerus, "measurements_b": femur}]})
+    titles = ["Pair-match: Humerus", "Articulation: Humerus \u2194 Ulna, left", "Regression: Humerus (left) \u2192 Femur (right)"]
+    wanted = [[title] + [f"{test['summary'][key]:,}" for key in ("comparisons", "potential_matches", "exclusions", "rejected")]
+              for title, test in zip(titles, expected["tests"])]
+    check(table_rows(page, "#m-plan-table") == wanted and all(test["summary"]["comparisons"] > 0 for test in expected["tests"]),
+          f"the plan's results list each test with what the API returns: {[row[1] for row in wanted]} comparisons")
+    numbers = summary_numbers(page)
+    check(page.locator("#m-test-name").inner_text() == titles[0] and numbers["Comparisons"] == str(expected["tests"][0]["summary"]["comparisons"])
+          and numbers["Settings"] == "\u03b1 0.05 (2 tails)" and page.locator("#m-plan-table tr.picked").count() == 1,
+          "the first test is shown below the list, with the alpha the plan was run with")
+    check(page.locator("#m-plan-run").inner_text().startswith("3 of 3 tests completed in "), "and the plan says how many of its tests ran")
+    runs = page.locator("#m-results").get_attribute("data-run")
+    page.locator("#m-plan-table tbody tr").nth(2).click()
+    expect(page.locator("#m-results")).not_to_have_attribute("data-run", runs)
+    numbers = summary_numbers(page)
+    kept = api(f"api/jobs/{expected['id']}/rows?test=3&table=not_excluded&limit=10")
+    expect(page.locator("#m-pane-not_excluded .table-count")).to_have_text(f"Showing 1 to 10 of {kept['total']} entries")
+    first = table_rows(page, "#m-pane-not_excluded")[0]
+    check(page.locator("#m-test-name").inner_text() == titles[2] and numbers["Comparisons"] == str(expected["tests"][2]["summary"]["comparisons"])
+          and numbers["Settings"] == "\u03b1 0.05" and "R\u00b2" in page.locator("#m-pane-not_excluded thead th").all_text_contents()
+          and same(first, kept["rows"][0][:11]) and first[1:6] == ["Humerus", "Left", first[3], "Femur", "Right"],
+          f"picking another test shows its own summary and tables: {first[:6]}")
+    with page.expect_download() as download:
+        page.locator("#m-pane-not_excluded .btn", has_text="Download").click()
+    check(download.value.suggested_filename == "regression-humerus-left-femur-right-not_excluded.csv"
+          and len(pathlib.Path(download.value.path()).read_text().strip().splitlines()) == kept["total"] + 1,
+          "a test's table downloads under the test's name")
+    # every test's rows of one kind download together, as one list
+    tops = [page.locator(f"#m-{part}-panel").bounding_box()["y"] for part in ("summary", "plan", "tables")]
+    check(tops == sorted(tops), "the list of tests sits between the summary of the one picked and its tables")
+    totals = {name: sum(test["tables"][name]["total"] for test in expected["tests"]) for name in ("not_excluded", "excluded", "rejected")}
+    labels = page.locator("#m-plan-downloads a").all_inner_texts()
+    check([" ".join(label.split()) for label in labels] == [f"Not excluded {totals['not_excluded']:,}", f"Excluded {totals['excluded']:,}", f"Rejected {totals['rejected']:,}"],
+          f"Download all offers each kind of table, with how many rows the tests have between them: {totals}")
+    with page.expect_download() as download:
+        page.locator("#m-plan-downloads a", has_text="Excluded").last.click()
+    together = list(csv.reader(pathlib.Path(download.value.path()).read_text().strip().splitlines()))
+    heading, named = together[0], [row[0] for row in together[1:]]
+    check(download.value.suggested_filename == "plan-excluded.csv" and len(together) == totals["excluded"] + 1
+          and heading[0] == "Test" and [name for name in heading if name in ("Mean", "SD", "R\u00b2")] == ["Mean", "SD", "R\u00b2"]
+          and list(dict.fromkeys(named)) == ["Pair-match: Humerus", "Articulation: Humerus-Ulna, left", "Regression: Humerus (left) to Femur (right)"],
+          f"the excluded rows of all three tests come as one file, each row naming its test: {len(together) - 1} rows")
+    none_rejected = page.locator("#m-plan-downloads a[data-table=rejected]")
+    check(totals["rejected"] > 0 or "disabled" in none_rejected.get_attribute("class"), "a kind with no rows in any test is not offered")
+    urllib.request.urlopen(urllib.request.Request(URL + f"api/jobs/{expected['id']}/release", b"", method="POST"))
+    page.screenshot(path=SCREENS / "12-plan-results.png", full_page=True)
+
+    # the plan is kept while the file is, and starts again with another
+    page.locator("#m-plan-open").click()
+    expect(page.locator("#plan-modal")).to_be_visible()
+    check(page.locator(".plan-row input:checked").count() == 3
+          and plan_row("pairmatch", "Humerus").locator(".plan-measures").inner_text().strip() == f"{len(humerus) - 1} of {len(humerus)}",
+          "opened again, the plan is as it was left")
+    page.locator("#plan-modal .btn", has_text="Cancel").click()
+    expect(page.locator("#plan-modal")).to_be_hidden()
+    page.set_input_files("#m-file", DATA / "edge_cases.csv")
+    expect(page.locator("#m-upload-summary")).to_contain_text("humerous")
+    page.locator("#m-plan-open").click()
+    expect(page.locator("#plan-modal")).to_be_visible()
+    check(page.locator(".plan-row input:checked").count() == 0 and plan_rows("regression").count() == 0
+          and not page.locator("#plan-ticked-only").is_checked(), "another file starts a new plan")
+    plan_tab("pairmatch")
+    # tests the file cannot support are folded away under one line, each with its reason
+    fold = page.locator("[data-plan=pairmatch] .plan-fold")
+    runnable = plan_rows("pairmatch").locator(".plan-name").all_text_contents()
+    check(runnable == ["Humerus", "Femur"] and fold.inner_text() == "Not available (3)",
+          f"a tab lists the tests the file supports, and counts the rest: {runnable}, {fold.inner_text()}")
+    fold.click()
+    radius = plan_row("pairmatch", "RadiusNo left radius in the file")
+    check(plan_rows("pairmatch").count() == 5 and radius.locator("input").is_disabled() and radius.locator(".plan-pairs").inner_text() == "\u2013",
+          "opened, they are listed with why, and cannot be ticked")
+    page.locator("[data-plan-tick=all]").click()
+    check(plan_rows("pairmatch").locator("input:checked").count() == 2 and plan_tab("pairmatch") == "2", "All ticks every test on the tab that can be run")
+    # a test taken down to nothing by hand stays where it is, to be put right
+    femur_row = plan_row("pairmatch", "Femur")
+    femur_row.locator(".plan-measures").click()
+    for chip in femur_row.locator(".plan-chip").all():
+        chip.click()
+    emptied = plan_rows("pairmatch").nth(1)
+    check(emptied.locator(".plan-reason").inner_text() == "No measurements selected" and emptied.locator(".plan-chip").count() == 2
+          and fold.inner_text() == "Not available (3)" and plan_tab("pairmatch") == "1",
+          "a test with every measurement taken out says so, and is not folded away with the others")
+    page.locator("[data-plan-tick=none]").click()
+    check(page.locator(".plan-row input:checked").count() == 0 and page.locator("#plan-run").is_disabled(), "and None clears them")
+    page.locator("#plan-modal .btn-close").click()
+    expect(page.locator("#plan-modal")).to_be_hidden()
+    check(held(plan_job) and page.locator("#m-plan-panel").is_visible(), "closing the plan without running it leaves the last results as they were")
+    page.locator("label[for=m-alpha-01]").click()
+    page.locator("#m-form .settings-toggle").click()
 
     # --- Files menu ---
     page.locator(".dropdown-toggle").click()

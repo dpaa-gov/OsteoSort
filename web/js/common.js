@@ -154,13 +154,14 @@ export function plotHover(id) {
 // the scrolling measurement fields and an open dropdown list, one tooltip that
 // floats over the page is placed by script from where the hovered thing is on
 // screen: above a field's code, beside a name in a list. It goes when the
-// pointer leaves or anything scrolls.
+// pointer leaves or anything scrolls. The plan's list of tests scrolls too,
+// inside its dialog, and has the same one.
 const floatingTip = document.createElement("div");
 floatingTip.className = "floating-tip";
 floatingTip.hidden = true;
 document.body.append(floatingTip);
 document.addEventListener("mouseover", (event) => {
-    const target = event.target.closest?.(".measure-scroll [data-tooltip], .ts-dropdown .option[data-tooltip]");
+    const target = event.target.closest?.(".measure-scroll [data-tooltip], .ts-dropdown .option[data-tooltip], .plan-tests [data-tooltip]");
     floatingTip.hidden = !target;
     if (!target) return;
     floatingTip.textContent = target.dataset.tooltip;
@@ -331,6 +332,14 @@ function settingNotes({ absolute, yeojohnson, zeromean, tails }) {
     return notes;
 }
 
+// What is set, in a line: "Yeo-Johnson · 2 tails · α 0.1". A regression has
+// no settings but the alpha, and is given none.
+export const describeSettings = (chosen, alpha) => [
+    ...(chosen ? [chosen.absolute && "Absolute", chosen.yeojohnson && "Yeo-Johnson", chosen.zeromean && "Zero mean",
+        chosen.tails === 1 ? "1 tail" : "2 tails"] : []),
+    `α ${alpha}`,
+].filter(Boolean).join(" · ");
+
 export function initSettings(prefix, analysisSelect) {
     const form = $(prefix + "form");
     const alpha = () => Number(form.querySelector(`input[name="${prefix}alpha"]:checked`).value);
@@ -346,12 +355,7 @@ export function initSettings(prefix, analysisSelect) {
         for (const block of form.querySelectorAll("[data-analysis]")) block.hidden = block.dataset.analysis !== analysis;
         for (const part of form.querySelectorAll(".tails-group, .ttest-settings")) part.hidden = analysis === "regression";
         // what is set, beside the heading while the settings are folded away
-        const chosen = settings();
-        const summary = analysis === "regression" ? [] : [
-            chosen.absolute && "Absolute", chosen.yeojohnson && "Yeo-Johnson", chosen.zeromean && "Zero mean",
-            chosen.tails === 1 ? "1 tail" : "2 tails",
-        ];
-        $(prefix + "settings-summary").textContent = [...summary, `α ${alpha()}`].filter(Boolean).join(" · ");
+        $(prefix + "settings-summary").textContent = describeSettings(analysis === "regression" ? null : settings(), alpha());
         const notes = analysis === "regression" ? [] : settingNotes(settings());
         $(prefix + "notes").replaceChildren(...notes.map((note) => {
             const element = document.createElement("div");
