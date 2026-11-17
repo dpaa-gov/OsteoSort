@@ -98,6 +98,28 @@ function off_thread(::Type{T}, work::F)::T where {T, F}
     return result[]::T
 end
 
+# Single comparisons and table searches wait in line for a worker thread, and
+# a search may keep one for SEARCH_SECONDS. With no limit, requests sent
+# faster than they are answered would wait without end, and the server would
+# go on working through them long after whoever sent them had gone. So only
+# this many may be computing or waiting, and the next is told the server is
+# busy. Batches have a limit of their own (MAX_QUEUED_JOBS), as do downloads
+# (MAX_DOWNLOADS), whose pieces are not counted here.
+const MAX_IN_LINE = 8
+const IN_LINE = Threads.Atomic{Int}(0)
+
+function in_line(::Type{T}, work::F)::T where {T, F}
+    if Threads.atomic_add!(IN_LINE, 1) >= MAX_IN_LINE
+        Threads.atomic_sub!(IN_LINE, 1)
+        throw(RequestError(503, BUSY))
+    end
+    try
+        return off_thread(T, work)
+    finally
+        Threads.atomic_sub!(IN_LINE, 1)
+    end
+end
+
 # A download's body: a result table, written out as CSV as it is sent, not
 # held whole. It is the one answer written that way. `write_download` writes
 # it and returns whether it wrote all of it; `download_finished` is called

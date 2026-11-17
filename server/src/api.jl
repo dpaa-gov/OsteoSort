@@ -342,7 +342,7 @@ function single_handler(state::AppState, req::HTTP.Request)
     alpha = alpha_field(body)
     settings = analysis == "regression" ? nothing : settings_field(body)
     data = prepare_single(state, body, analysis, groups)
-    result = off_thread(AnalysisResult, () -> analyse(data, analysis, alpha, settings))
+    result = in_line(AnalysisResult, () -> analyse(data, analysis, alpha, settings))
     if row_count(result.results) == 0
         reasons = result.rejected[:reason]::Vector{String}
         throw(RequestError(422, isempty(reasons) ? NO_RESULT : "No comparison could be made. " * last(reasons)))
@@ -702,7 +702,7 @@ const SEARCH_SECONDS = 10
 function rows_handler(state::AppState, req::HTTP.Request, id::String)
     query = HTTP.queryparams(HTTP.URI(req.target))
     table, _ = require_table(state, id, query)
-    return json_response(200, off_thread(TablePage, () -> table_page(table, query)))
+    return json_response(200, in_line(TablePage, () -> table_page(table, query)))
 end
 
 const TablePage = @NamedTuple{columns::Vector{String}, rows::Vector{Vector{Cell}}, total::Int, filtered::Int}

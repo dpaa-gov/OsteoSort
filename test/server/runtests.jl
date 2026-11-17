@@ -260,6 +260,40 @@ end
     @test OSS.read_json(HTTP.Request("POST", "/api/single", [], bytes("{\"alpha\": 0.1}"))).alpha == 0.1
 end
 
+# Lists inside lists, tens of thousands deep, fit in a small request. Reading
+# them goes a level deeper for each, and JSON before 1.13 ran out of stack
+# doing it. It now refuses anything deeper than 512 levels without trying.
+@testset "a request nested too deep is refused unread" begin
+    deep = Vector{UInt8}("{\"a\": " * "["^30_000 * "]"^30_000 * "}")
+    @test length(deep) < OSS.SMALL_BODY_BYTES
+    @test_throws ArgumentError JSON.parse(deep) # a stack overflow would be another kind of error
+    refused = try OSS.read_json(HTTP.Request("POST", "/api/single", [], deep)) catch e; e end
+    @test refused isa OSS.RequestError && refused.status == 400 && refused.message == "The request body is not valid JSON"
+    # nothing a request holds is anywhere near as deep
+    @test OSS.read_json(HTTP.Request("POST", "/api/plan", [], Vector{UInt8}("{\"tests\": [{\"measurements\": [\"hum_01\"]}]}"))) isa OSS.Body
+end
+
+# Single comparisons and table searches wait for a worker thread, and only so
+# many may: sent faster than they are answered, they would otherwise wait
+# without end.
+@testset "waiting analyses are limited" begin
+    gate = Base.Event()
+    held = [Threads.@spawn OSS.in_line(Int, () -> (wait(gate); 1)) for _ in 1:OSS.MAX_IN_LINE]
+    @test timedwait(() -> OSS.IN_LINE[] == OSS.MAX_IN_LINE, 10) == :ok
+    refused = try OSS.in_line(Int, () -> 1) catch e; e end
+    @test refused isa OSS.RequestError && refused.status == 503 && refused.message == OSS.BUSY
+    @test OSS.IN_LINE[] == OSS.MAX_IN_LINE # the one refused took no place
+    notify(gate)
+    @test all(task -> fetch(task) == 1, held)
+    @test OSS.IN_LINE[] == 0
+    @test OSS.in_line(Int, () -> 1) == 1
+    # one that is refused part way, or fails, gives its place back too
+    answered = try OSS.in_line(Int, () -> throw(OSS.RequestError(422, "no"))) catch e; e end
+    @test answered isa OSS.RequestError && answered.status == 422
+    @test_throws TaskFailedException OSS.in_line(Int, () -> error("failed"))
+    @test OSS.IN_LINE[] == 0
+end
+
 # A file small on disk can be a table too large to hold: it is refused before
 # the table is made. 70 KB here would be 540 MB.
 @testset "an upload's table has a size limit" begin
