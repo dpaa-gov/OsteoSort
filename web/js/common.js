@@ -129,11 +129,18 @@ function hoveredAt(gd, mx, my) {
         if (full.visible !== true) continue;
         if (full.type === "bar" || full.type === "histogram") {
             for (const bin of trace) {
-                const lower = bin.ph0 ?? bin.p - full.width / 2, upper = bin.ph1 ?? bin.p + full.width / 2;
+                // A bar is pointed at where it is drawn, from p0 to p1. A
+                // histogram's ph0 and ph1 are something else, the values its
+                // bin can hold, which is what the label says. Where the data
+                // is whole numbers and a bin one wide, that is a single value:
+                // no width at all, and nothing the pointer could be inside.
+                const left = bin.p0 ?? bin.p - full.width / 2, right = bin.p1 ?? bin.p + full.width / 2;
                 const base = bin.b || 0, top = base + bin.s;
-                if (!bin.s || mx < px(lower) || mx > px(upper) || my < py(top) || my > py(base)) continue;
-                const range = full.type === "histogram" ? `${hoverNumber(lower)} – ${hoverNumber(upper)}` : hoverNumber(bin.p);
-                return { x: px(bin.p), y: py(top), text: `${full.name}\n${xTitle || "Range"}: ${range}\nCount: ${bin.s}` };
+                if (!bin.s || mx < px(left) || mx > px(right) || my < py(top) || my > py(base)) continue;
+                const one = bin.ph0 === bin.ph1;
+                const holds = one ? hoverNumber(bin.ph0) : `${hoverNumber(bin.ph0)} – ${hoverNumber(bin.ph1)}`;
+                const range = full.type === "histogram" ? holds : hoverNumber(bin.p);
+                return { x: px(bin.p), y: py(top), text: `${full.name}\n${xTitle || (one ? "Value" : "Range")}: ${range}\nCount: ${bin.s}` };
             }
             continue;
         }

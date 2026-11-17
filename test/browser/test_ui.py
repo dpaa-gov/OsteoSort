@@ -155,6 +155,20 @@ def summary_numbers(page):
     return numbers
 
 
+def bar_labels(page, plot):
+    """Point at the middle of every bar of a plot; returns how many bars there are and the hover label each one showed."""
+    spots = page.locator(f"#{plot} .bars .point path").evaluate_all(
+        "paths => paths.map(path => path.getBoundingClientRect()).filter(box => box.height >= 1).map(box => [box.left + box.width / 2, box.top + box.height / 2])")
+    labels = []
+    for x, y in spots:
+        page.mouse.move(x, y)
+        page.wait_for_timeout(50)   # the label is placed on the next frame
+        if page.locator(".plot-tip").is_visible():
+            labels.append(page.locator(".plot-tip").inner_text())
+    page.mouse.move(800, 20)
+    return len(spots), labels
+
+
 def process(page, prefix):
     """Click Analyze and wait for the new result to be on screen."""
     runs = page.locator(f"#{prefix}-results").get_attribute("data-run") or "0"
@@ -221,6 +235,9 @@ def run(page):
     headings = page.locator("#s-table thead th").all_text_contents()
     check(headings[:4] == ["Element 1", "Side 1", "Element 2", "Side 2"], f"the two specimens' columns are numbered: {headings[:4]}")
     check(page.locator("#s-plot .bars path").count() > 3, "reference histogram is drawn")
+    bars, labels = bar_labels(page, "s-plot")
+    check(bars > 3 and len(labels) == bars and all(re.fullmatch(r"Reference\nRange: -?[\d.]+ \u2013 -?[\d.]+\nCount: \d+", label) for label in labels),
+          f"every bar of the histogram says on hover what it holds and how many: {labels[0]!r}")
     page.locator("#s-copy").click()
     expect(page.locator("#s-copy span")).to_have_text("Copied")
     copied = page.evaluate("navigator.clipboard.readText()").split("\n")
@@ -843,6 +860,15 @@ def run(page):
     quick.goto(URL)
     expect(quick.locator("#s-reference + .ts-wrapper .item").first).to_be_visible()
     check(not quick.locator("#progress-modal").is_visible(), "a quick load shows no dialog")
+    # A histogram of whole numbers has bars that each hold one value. They are pointed at
+    # like any other bar (os coxa's showed no label at all), and say the value.
+    choose(quick, "s-element", "Os coxa")
+    quick.fill("#s-osc_01-left", "210")
+    quick.fill("#s-osc_01-right", "212")
+    process(quick, "s")
+    bars, labels = bar_labels(quick, "s-plot")
+    check(bars > 3 and len(labels) == bars and all(re.fullmatch(r"Reference\nValue: -?\d+\nCount: \d+", label) for label in labels),
+          f"a histogram of whole numbers has a hover label on every bar too: {bars} bars, {labels[:1]}")
     # The header and sidebar stay in place while the results scroll. What is scrolled
     # into view stops below the header, and a list opened in the sidebar fits the window.
     quick.set_viewport_size({"width": 1366, "height": 600})
