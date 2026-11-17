@@ -67,6 +67,34 @@ export function fitToScreen() {
     apply();
 }
 
+// --- The sidebar, kept in sight ---
+
+// The header stays at the top of the window and the sidebar under it, while
+// the results scroll (the two are sticky, in the stylesheet). A sidebar that
+// fits the window is held just below the header. One taller than the window
+// cannot all be in sight: it scrolls with the page until its foot, where
+// Analyze is, reaches the foot of the window, and is held there. Where that
+// is depends on the heights of the header, the sidebar and the window, so it
+// is worked out here, and again whenever one of them changes: a tab shown,
+// the settings opened, the window resized.
+const SIDEBAR_GAP = 20; // between the header and the sidebar, as the page's own padding
+export function holdSidebars() {
+    const header = document.querySelector(".app-navbar");
+    const sidebars = [...document.querySelectorAll(".app-sidebar")];
+    const place = () => {
+        const windowHeight = window.innerHeight / zoomFor(); // in the page's own pixels, which a zoomed page has fewer of
+        for (const sidebar of sidebars) {
+            if (!sidebar.offsetHeight) continue; // on the tab that is not shown
+            const top = Math.min(header.offsetHeight + SIDEBAR_GAP, windowHeight - sidebar.offsetHeight);
+            sidebar.style.setProperty("--sidebar-top", `${top}px`);
+        }
+    };
+    const watcher = new ResizeObserver(place);
+    for (const element of [header, ...sidebars]) watcher.observe(element);
+    window.addEventListener("resize", place);
+    place();
+}
+
 // --- Hover labels ---
 
 // Plots show their own hover labels, not Plotly's: one look, in the app's

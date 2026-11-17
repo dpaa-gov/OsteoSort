@@ -61,8 +61,15 @@ body {
     align-items: flex-start;
   }
 
+  /* The sidebar stays in sight while the results beside it scroll. How far
+     from the top of the window it is held is set by script (common.js), which
+     knows the header's height and whether the sidebar fits the window. It is
+     above the results, so a tooltip of its own that reaches over them shows. */
   .app-sidebar {
     flex: 0 0 360px;
+    position: sticky;
+    top: var(--sidebar-top, 66px);
+    z-index: 2;
   }
 }
 
@@ -106,7 +113,11 @@ textarea {
 .icon-copy { --icon: url(../icons/copy.svg); }
 
 /* Header: darker than the sidebar, with a gold accent border */
+/* The header stays at the top of the window as the page scrolls under it */
 .app-navbar {
+  position: sticky;
+  top: 0;
+  z-index: 1020;
   background-color: var(--os-navy-dark);
   border-bottom: 2px solid var(--os-gold);
   min-height: 44px;
