@@ -639,8 +639,28 @@ def run(page):
     added = plan_rows("regression")
     check(added.locator(".plan-name").all_text_contents() == ["Humerus (left) \u2192 Femur (right)"] and added.locator("input").is_checked(),
           "a regression is added to the plan, ticked")
-    page.locator("#p-add").click()
-    check(plan_rows("regression").count() == 1, "the same regression is not added twice")
+    # the strip offers only what is still to add, and moves on to it
+    offered = choices(page, "p-element-b")
+    after = offered[(offered.index("femur") + 1) % len(offered)]
+    check(chosen(page, "p-element-a") == ["humerus"] and chosen(page, "p-element-b") == [after] and page.locator("#p-add").is_enabled()
+          and page.locator("#p-side-a input:checked").get_attribute("value") == "Left" and page.locator("#p-side-b input:checked").get_attribute("value") == "Right",
+          f"once one is added the strip moves on to the next bone on the same sides: {after}")
+    choose(page, "p-element-b", "Femur")
+    pick(page, "p-side-b", "Right")
+    check(page.locator("#p-add").is_disabled() and page.locator("#p-add").inner_text() == "Added" and plan_rows("regression").count() == 1,
+          "a regression already in the plan cannot be added again, and Add says so")
+    for side_a, side_b in (("Left", "Left"), ("Right", "Left"), ("Right", "Right")):
+        choose(page, "p-element-b", "Femur")
+        pick(page, "p-side-a", side_a)
+        pick(page, "p-side-b", side_b)
+        check(page.locator("#p-add").inner_text() == "Add", f"the same two bones on other sides are another regression: {side_a}, {side_b}")
+        page.locator("#p-add").click()
+    check(plan_rows("regression").count() == 4 and "femur" not in choices(page, "p-element-b") and "humerus" in choices(page, "p-element-a"),
+          "a bone goes from the list once every pairing of sides with it has been added")
+    for _ in range(3):
+        plan_rows("regression").nth(1).locator(".plan-remove").click()
+    check(plan_rows("regression").locator(".plan-name").all_text_contents() == ["Humerus (left) \u2192 Femur (right)"]
+          and "femur" in choices(page, "p-element-b"), "and comes back when one of them is removed")
     expect(page.locator("#plan-total")).to_have_text("3 tests \u00b7 1,280 pairs to compare")
     check([page.locator(f"[data-plan-tab={kind}] .plan-tab-count").inner_text() for kind in ("pairmatch", "articulation", "regression")] == ["1", "1", "1"],
           "each tab says how many of its tests are ticked")
@@ -689,6 +709,30 @@ def run(page):
           and numbers["Settings"] == "\u03b1 0.05" and "R\u00b2" in page.locator("#m-pane-not_excluded thead th").all_text_contents()
           and same(first, kept["rows"][0][:11]) and first[1:6] == ["Humerus", "Left", first[3], "Femur", "Right"],
           f"picking another test shows its own summary and tables: {first[:6]}")
+    # the test already shown is left as it is when its line is clicked again
+    page.locator("#m-pane-not_excluded .page-link", has_text="2").first.click()
+    expect(page.locator("#m-pane-not_excluded .table-count")).to_contain_text("Showing 11 to 20")
+    runs = page.locator("#m-results").get_attribute("data-run")
+    page.locator("#m-plan-table tbody tr").nth(2).click()
+    page.wait_for_timeout(300)
+    check(page.locator("#m-results").get_attribute("data-run") == runs
+          and page.locator("#m-pane-not_excluded .table-count").inner_text().startswith("Showing 11 to 20"),
+          "clicking the test that is shown keeps its page, sort and search")
+    # rows that arrive late for a test no longer shown are not put under the one that is
+    late = []
+    slow_rows = re.compile(r"/rows\?test=1&")
+    page.route(slow_rows, lambda route: late.append(route))
+    page.locator("#m-plan-table tbody tr").nth(0).click()
+    page.locator("#m-plan-table tbody tr").nth(2).click()
+    expect(page.locator("#m-pane-not_excluded .table-count")).to_have_text(f"Showing 1 to 10 of {kept['total']} entries")
+    page.unroute(slow_rows)
+    for route in late:
+        route.continue_()
+    page.wait_for_timeout(700)
+    shown_rows = table_rows(page, "#m-pane-not_excluded")
+    check(len(late) == 3 and all(row[4] == "Femur" for row in shown_rows) and page.locator("#m-test-name").inner_text() == titles[2]
+          and "R\u00b2" in page.locator("#m-pane-not_excluded thead th").all_text_contents(),
+          "rows that arrive late for another test are not shown under the test that is picked")
     with page.expect_download() as download:
         page.locator("#m-pane-not_excluded .btn", has_text="Download").click()
     check(download.value.suggested_filename == "regression-humerus-left-femur-right-not_excluded.csv"

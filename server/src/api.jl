@@ -563,9 +563,13 @@ function run_plan(state::AppState, plan::Plan, job::Job)::PlanOutput
     replaces === nothing || release_job!(state.jobs, replaces)
     make_room!(state.jobs, comparisons)
     @atomic job.steps = length(plan.tests)
+    @atomic job.step = 1 # before the stage, so the page is never told it is on test 0
     @atomic job.stage = "comparing"
     tests = PlanTest[]
     for (i, fields) in enumerate(plan.tests)
+        # Cleared or replaced since it started: nobody will see the rest, and
+        # every other run is waiting for this one's turn to end
+        find_job(state.jobs, job.id) === nothing && break
         @atomic job.step = i
         push!(tests, run_test(plan, fields, prepared[i]))
         prepared[i] = nothing # its rows are not needed again
@@ -681,6 +685,7 @@ function download_tables(state::AppState, id::String, query::Query)::Tuple{Vecto
     name = get(query, "table", "")
     name in TABLE_ORDER || bad_request(NO_SUCH_TABLE)
     ran = PlanTest[test for test in output.tests if haskey(test.output.tables, name)]
+    isempty(ran) && throw(RequestError(422, "None of the plan's tests has results to download"))
     return ResultTable[test.output.tables[name] for test in ran], String[test.title for test in ran], "plan-" * name * ".csv"
 end
 

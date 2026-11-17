@@ -30,8 +30,10 @@ const plural = (n, word) => `${n.toLocaleString("en-US")} ${word}${n === 1 ? "" 
 
 // `labels()` gives the selected reference groups, `settings()` the alpha and
 // settings as { alpha, settings } and `upload()` the file as described when it
-// was chosen; `run(plan)` is called with what was ticked.
-export function initPlan({ reference, labels, settings, upload, run }) {
+// was chosen; `run(plan)` is called with what was ticked. What the file
+// supports is asked of the sidebar's own filters: `inFile(bones)`,
+// `inFileFor(bone, codes)`, `measured(bone)` and `filePairs()`.
+export function initPlan({ reference, labels, settings, upload, run, inFile, inFileFor, measured, filePairs }) {
     const modal = $("plan-modal");
 
     // What has been chosen, kept for as long as the file stays loaded. A test
@@ -51,10 +53,6 @@ export function initPlan({ reference, labels, settings, upload, run }) {
     }
 
     const name = (bone) => capFirst(bone);
-    const inFile = (bones) => bones.filter((bone) => upload().elements.has(bone));
-    const valued = (bone, codes) => codes.filter((code) => upload().elements.get(bone)?.columns.has(code));
-    // Measurements of a bone that both the file and the selected groups have
-    const measured = (bone) => valued(bone, reference.measurements(labels(), bone));
     const kept = (key, codes) => codes.filter((code) => !choiceFor(key).off.has(code));
     const regressionKey = ({ a, sideA, b, sideB }) => `regression|${a}|${sideA}|${b}|${sideB}`;
 
@@ -95,7 +93,7 @@ export function initPlan({ reference, labels, settings, upload, run }) {
 
     // An articulating pair's measurements come with the pair, as in the sidebar
     function articulation(pair, side) {
-        const a = valued(pair.bonea, pair.a), b = valued(pair.boneb, pair.b);
+        const a = inFileFor(pair.bonea, pair.a), b = inFileFor(pair.boneb, pair.b);
         const absent = [...pair.a.filter((code) => !a.includes(code)), ...pair.b.filter((code) => !b.includes(code))];
         const label = `${name(pair.bonea)} ↔ ${name(pair.boneb)}, ${side.toLowerCase()}`;
         return counted({
@@ -124,10 +122,9 @@ export function initPlan({ reference, labels, settings, upload, run }) {
 
     // Every test on offer: what both the file and the selected groups have
     function tests() {
-        const pairs = reference.pairs(labels()).filter((pair) => upload().elements.has(pair.bonea) && upload().elements.has(pair.boneb));
         return {
             pairmatch: inFile(reference.elements(labels())).map(pairMatch),
-            articulation: pairs.flatMap((pair) => SIDES.map((side) => articulation(pair, side))),
+            articulation: filePairs().flatMap((pair) => SIDES.map((side) => articulation(pair, side))),
             regression: regressions.map(regression),
         };
     }
@@ -223,6 +220,7 @@ export function initPlan({ reference, labels, settings, upload, run }) {
             remove.addEventListener("click", () => {
                 regressions = regressions.filter((entry) => entry !== test.entry);
                 chosen.delete(test.key);
+                builderChoices(); // it can be added again
                 render();
             });
             element.append(remove);
@@ -313,35 +311,71 @@ export function initPlan({ reference, labels, settings, upload, run }) {
 
     // --- Adding a regression ---
 
+    // A regression is two bones, each on a side. The strip offers only what
+    // is not in the plan yet: a second bone is listed while some pairing of
+    // sides with the first is still to be added, and a first bone while it
+    // has such a second. Add says so where the pairing on show is in already.
     const builder = {
         a: makeSelect("p-element-a", () => builderChoices(), boneName),
         b: makeSelect("p-element-b", () => builderSides(), boneName),
-        sideA: makeChoice("p-side-a"),
-        sideB: makeChoice("p-side-b"),
+        sideA: makeChoice("p-side-a", () => builderSides()),
+        sideB: makeChoice("p-side-b", () => builderSides()),
     };
 
+    const regressionBones = () => inFile(reference.regressionBones(labels()));
+    // The sides of a bone the file has; both, where it does not say
+    function sidesOf(bone) {
+        const sides = SIDES.filter((side) => upload().elements.get(bone)?.sides.includes(side));
+        return sides.length ? sides : SIDES;
+    }
+    const added = (entry) => regressions.some((other) => regressionKey(other) === regressionKey(entry));
+    // The pairings of sides of two bones that are not in the plan yet
+    const free = (a, b) => sidesOf(a).flatMap((sideA) => sidesOf(b).map((sideB) => ({ a, sideA, b, sideB }))).filter((entry) => !added(entry));
+    // The bones a first bone can still be set against
+    const seconds = (a) => regressionBones().filter((b) => b !== a && free(a, b).length);
+    const onShow = () => ({ a: valueOf(builder.a), sideA: valueOf(builder.sideA), b: valueOf(builder.b), sideB: valueOf(builder.sideB) });
+
     function builderSides() {
-        for (const [bone, side] of [[valueOf(builder.a), builder.sideA], [valueOf(builder.b), builder.sideB]]) {
-            const sides = upload().elements.get(bone)?.sides ?? [];
-            side.setAvailable(sides.length ? sides : SIDES);
-        }
-        $("p-add").disabled = !valueOf(builder.a) || !valueOf(builder.b);
+        const { a, b } = onShow();
+        builder.sideA.setAvailable(sidesOf(a));
+        builder.sideB.setAvailable(sidesOf(b));
+        const taken = Boolean(a && b) && added(onShow());
+        $("p-add").disabled = !a || !b || taken;
+        $("p-add").textContent = taken ? "Added" : "Add";
     }
 
     // The first bone predicts the second, which is any other
     function builderChoices() {
-        const bones = inFile(reference.regressionBones(labels()));
-        setChoices(builder.a, bones);
-        setChoices(builder.b, bones.filter((bone) => bone !== valueOf(builder.a)));
+        setChoices(builder.a, regressionBones().filter((a) => seconds(a).length));
+        setChoices(builder.b, seconds(valueOf(builder.a)));
+        builderSides();
+    }
+
+    // After one is added the strip moves on to the next still to add: the
+    // bone after the second in the list, on the same sides where the file has
+    // them, so that several bones are set against one a click at a time. When
+    // the list has been gone through, it is the second bone's other sides.
+    function moveOn({ a, sideA, b, sideB }) {
+        const bones = regressionBones().filter((bone) => bone !== a);
+        const from = bones.indexOf(b);
+        const next = [...bones.slice(from + 1), ...bones.slice(0, from + 1)].find((bone) => free(a, bone).length);
+        builderChoices();
+        if (!next) return; // nothing left for this first bone, which has gone from its list
+        const pairing = free(a, next).find((entry) => entry.sideA === sideA && entry.sideB === sideB) ?? free(a, next)[0];
+        builder.b.setValue(next, true);
+        builder.sideA.setAvailable(sidesOf(a));
+        builder.sideB.setAvailable(sidesOf(next));
+        builder.sideA.setValue(pairing.sideA);
+        builder.sideB.setValue(pairing.sideB);
         builderSides();
     }
 
     $("p-add").addEventListener("click", () => {
-        const entry = { a: valueOf(builder.a), sideA: valueOf(builder.sideA), b: valueOf(builder.b), sideB: valueOf(builder.sideB) };
-        const key = regressionKey(entry);
-        if (!regressions.some((other) => regressionKey(other) === key)) regressions.push(entry);
+        const entry = onShow();
+        if (!added(entry)) regressions.push(entry);
         // one that was asked for by name is meant to be run
-        choiceFor(key).ticked = true;
+        choiceFor(regressionKey(entry)).ticked = true;
+        moveOn(entry);
         render();
     });
 

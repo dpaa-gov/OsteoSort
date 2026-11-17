@@ -210,6 +210,11 @@ export function makeChoice(id, onChange) {
     $(id).addEventListener("change", () => onChange && onChange());
     return {
         getValue: () => inputs.find((input) => input.checked).value,
+        // Chooses an option from script, where it is on offer; nothing is told of it, as when a dropdown is set
+        setValue(value) {
+            const input = inputs.find((option) => option.value === value && !option.disabled);
+            if (input) input.checked = true;
+        },
         setAvailable(sides) {
             const known = inputs.some((input) => sides.includes(input.value));
             for (const input of inputs) input.disabled = known && !sides.includes(input.value);

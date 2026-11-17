@@ -255,6 +255,14 @@ end
             # a file that cannot be read fails the plan, in the same words as a single run
             unread = wait_for(JSON.parse(post("/api/plan", merge(common, (settings = settings, tests = tests, csv = "accession,side\n1,left\n"))).body).job)
             @test unread.status == "error" && occursin("accession, side and element", unread.error)
+            # a plan none of whose tests ran has nothing to download together, and says so before it starts to answer
+            none_ran = JSON.parse(post("/api/plan", merge(common, (settings = settings, tests = tests[4:4], csv = case_csv))).body).job
+            @test wait_for(none_ran).tests[1].error == OSS.NO_RESULT
+            for query in ("test=all&table=excluded", "test=all&table=excluded&check=1")
+                refusal = HTTP.get(API * "/api/jobs/$none_ran/download?$query"; status_exception = false)
+                @test refusal.status == 422 && JSON.parse(refusal.body).error == "None of the plan's tests has results to download"
+            end
+            HTTP.post(API * "/api/jobs/$none_ran/release")
             # every test is counted before any is compared: a plan over the limit is refused whole
             too_big = try OSS.check_plan_size(9_000_000, 2_000_000) catch e; e end
             @test too_big isa OSS.RequestError && occursin("9,000,000 comparisons", too_big.message) && occursin("fewer tests", too_big.message)
@@ -267,6 +275,14 @@ end
                 sleep(0.01)
             end
             @test (@atomic over.status) == "error" && occursin("This plan would make", @atomic over.error)
+            # A plan cleared or replaced part way stops at its next test: the rest
+            # would be computed for nobody while every other run waits its turn
+            roomy = OSS.AppState(config, ReentrantLock(), OSS.articulation_config(config), OSS.JobStore(), snapshot, "", "", OSS.now(OSS.UTC))
+            gone = OSS.create_job!(roomy.jobs)
+            OSS.release_job!(roomy.jobs, gone.id)
+            @test isempty(OSS.run_plan(roomy, plan, gone).tests)
+            stays = OSS.create_job!(roomy.jobs)
+            @test length(OSS.run_plan(roomy, plan, stays).tests) == 3 && (@atomic stays.step) == 3
             # a run says which test it is on while it compares
             @test (@atomic kept.steps) == 4 && (@atomic kept.step) == 4
         end

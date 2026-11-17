@@ -77,7 +77,7 @@ function describeUpload(text, reference) {
 export function initMultiple(reference) {
     const meta = reference.meta;
     let upload = null;
-    let tables = [];
+    let tables = []; // the result tables on the page
     let currentJob = null; // the one run whose results this page holds on the server
 
     // Tells the server to forget a run. sendBeacon still goes out while the page is closing.
@@ -87,12 +87,6 @@ export function initMultiple(reference) {
     // not when the browser only sets the page aside to come back to: its results would be gone on return
     window.addEventListener("pagehide", (event) => { if (!event.persisted) release(currentJob); });
     const labels = () => valuesOf(selects.reference);
-    // The plan is another way to run what this form runs: several tests of the file as one run
-    const plan = initPlan({
-        reference, labels, upload: () => upload, run: (chosen) => runPlan(chosen),
-        settings: () => ({ alpha: form.alpha(), settings: form.settings() }),
-    });
-
     const selects = {
         reference: makeSelect("m-reference", () => refresh()),
         analysis: makeChoice("m-analysis", () => form.refresh()),
@@ -114,6 +108,17 @@ export function initMultiple(reference) {
     // Measurements the file has at least one value for, for that element
     const inFileFor = (bone, codes) => (upload ? codes.filter((code) => upload.elements.get(bone)?.columns.has(code)) : codes);
     const measured = (bone) => inFileFor(bone, reference.measurements(labels(), bone));
+    // Articulating pairs the selected groups have data for, both of whose bones are in the file
+    const filePairs = () => reference.pairs(labels()).filter((pair) => !upload || (upload.elements.has(pair.bonea) && upload.elements.has(pair.boneb)));
+
+    // The plan is another way to run what this form runs: several tests of the
+    // file as one run. It is given the form's own filters, so the two always
+    // agree on what the file supports.
+    const plan = initPlan({
+        reference, labels, upload: () => upload, run: (chosen) => runPlan(chosen),
+        settings: () => ({ alpha: form.alpha(), settings: form.settings() }),
+        inFile, inFileFor, measured, filePairs,
+    });
     function sidesFor(...bones) {
         if (!upload) return ["Left", "Right"];
         const lists = bones.map((bone) => upload.elements.get(bone)?.sides ?? []);
@@ -181,8 +186,7 @@ export function initMultiple(reference) {
     function refresh() {
         setChoices(selects.element, inFile(reference.elements(labels())));
         measurementChoices();
-        const pairs = reference.pairs(labels()).filter((pair) => !upload || (upload.elements.has(pair.bonea) && upload.elements.has(pair.boneb)));
-        setChoices(selects.pair, pairs.map((pair) => pair.label));
+        setChoices(selects.pair, filePairs().map((pair) => pair.label));
         articulationChoices();
         setChoices(selects.elementA, inFile(reference.regressionBones(labels())));
         regressionChoices("a");
@@ -230,6 +234,7 @@ export function initMultiple(reference) {
 
     $("m-clear").addEventListener("click", () => {
         release(currentJob);
+        retireTables();
         currentJob = null;
         $("m-file").value = "";
         upload = null;
@@ -290,7 +295,14 @@ export function initMultiple(reference) {
     // One analysis as it is shown: its headline numbers, its p-values and its
     // tables. `found` is a run's status or that of one test of a plan, `body`
     // what it was made with, and `test` the number of a plan's test.
+    // The tables on the page give way: to another test's, another run's, or nothing
+    function retireTables() {
+        for (const table of tables) table.retire();
+        tables = [];
+    }
+
     function showAnalysis(job, found, body, test) {
+        retireTables();
         markRun($("m-results"));
         const ran = !found.error;
         $("m-summary-panel").hidden = $("m-tables-panel").hidden = !ran;
@@ -342,6 +354,8 @@ export function initMultiple(reference) {
     function renderPlan(job, status, chosen) {
         const body = $("m-plan-table").tBodies[0];
         const pick = (index) => {
+            // already shown: its page, sort and search stay as they are
+            if (body.rows[index].classList.contains("picked")) return;
             [...body.rows].forEach((row, i) => {
                 row.classList.toggle("picked", i === index);
                 row.querySelector("button")?.setAttribute("aria-pressed", String(i === index));
@@ -402,6 +416,7 @@ export function initMultiple(reference) {
             // the run names the one it replaces, so the server makes room for it without counting that one
             const { job } = await postJSON(path, { ...body, replaces: currentJob ?? undefined });
             release(currentJob); // the previous run's results are replaced by this one
+            retireTables();
             currentJob = job;
             $("m-results").hidden = true; // they are gone from the server, whether or not this run succeeds
             render(job, await waitFor(job));

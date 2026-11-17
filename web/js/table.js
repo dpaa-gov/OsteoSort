@@ -47,15 +47,14 @@ export class ResultTable {
                 </div>
             </div>`;
         container.querySelector("a[download]").addEventListener("click", checkedDownload);
-        let timer;
         container.querySelector(".page-size").addEventListener("change", (event) => {
             this.state.limit = Number(event.target.value);
             this.state.offset = 0;
             this.load();
         });
         container.querySelector(".table-search").addEventListener("input", (event) => {
-            clearTimeout(timer);
-            timer = setTimeout(() => {
+            clearTimeout(this.timer);
+            this.timer = setTimeout(() => {
                 this.state.search = event.target.value;
                 this.state.offset = 0;
                 this.load();
@@ -64,7 +63,16 @@ export class ResultTable {
         this.load();
     }
 
+    // Called when another table takes this one's place on the page, or its
+    // results are gone from the server. Rows still on their way, or a search
+    // not yet sent, would otherwise be shown under whatever is there now.
+    retire() {
+        this.retired = true;
+        clearTimeout(this.timer);
+    }
+
     async load() {
+        if (this.retired) return;
         const { offset, limit, search, sort, dir } = this.state;
         const query = new URLSearchParams({ ...this.of, table: this.name, offset, limit, search, sort, dir });
         const request = (this.request = (this.request ?? 0) + 1);
@@ -72,10 +80,10 @@ export class ResultTable {
         try {
             page = await getJSON(`${this.base}/rows?${query}`);
         } catch (error) {
-            if (request === this.request) showError(error.message);
+            if (request === this.request && !this.retired) showError(error.message);
             return;
         }
-        if (request !== this.request) return; // a newer search, sort or page has been asked for
+        if (request !== this.request || this.retired) return; // a newer search, sort or page has been asked for, or another table shown
         this.total = page.total;
         // The reference breakdown is not a column on screen: it shows when the
         // sample size is hovered, and it is in the download.
