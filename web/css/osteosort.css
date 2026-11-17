@@ -113,7 +113,15 @@ textarea {
 .icon-copy { --icon: url(../icons/copy.svg); }
 
 /* Header: darker than the sidebar, with a gold accent border */
-/* The header stays at the top of the window as the page scrolls under it */
+/* The header stays at the top of the window as the page scrolls under it.
+   What the browser scrolls into view stops below it: how far below is set
+   by script (common.js), which knows the header's height; this is for before
+   the script has run. */
+html {
+  scroll-padding-top: 56px;
+}
+
+
 .app-navbar {
   position: sticky;
   top: 0;

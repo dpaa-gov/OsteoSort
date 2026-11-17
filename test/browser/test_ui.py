@@ -733,6 +733,21 @@ def run(page):
     check(len(late) == 3 and all(row[4] == "Femur" for row in shown_rows) and page.locator("#m-test-name").inner_text() == titles[2]
           and "R\u00b2" in page.locator("#m-pane-not_excluded thead th").all_text_contents(),
           "rows that arrive late for another test are not shown under the test that is picked")
+    # a test whose tables could not be loaded is shown again by clicking it, which is how it is tried again
+    seen = len(problems)
+    failing = re.compile(r"/rows\?test=3&")
+    page.route(failing, lambda route: route.fulfill(status=503, content_type="application/json", body='{"error": "The server is busy"}'))
+    page.locator("#m-plan-table tbody tr").nth(0).click()
+    page.locator("#m-plan-table tbody tr").nth(2).click()
+    expect(page.locator("#error-modal")).to_be_visible()
+    check(page.locator("#error-text").inner_text() == "The server is busy", "a table that cannot be loaded says why")
+    page.locator("#error-modal .btn", has_text="Dismiss").click()
+    expect(page.locator("#error-modal")).to_be_hidden()
+    page.unroute(failing)
+    page.locator("#m-plan-table tbody tr").nth(2).click()
+    expect(page.locator("#m-pane-not_excluded .table-count")).to_have_text(f"Showing 1 to 10 of {kept['total']} entries")
+    check(all(row[4] == "Femur" for row in table_rows(page, "#m-pane-not_excluded")), "clicking the test again loads it")
+    problems[seen:] = [p for p in problems[seen:] if "status of 503" not in p]   # the browser logs the answers just given
     with page.expect_download() as download:
         page.locator("#m-pane-not_excluded .btn", has_text="Download").click()
     check(download.value.suggested_filename == "regression-humerus-left-femur-right-not_excluded.csv"
@@ -828,6 +843,19 @@ def run(page):
     quick.goto(URL)
     expect(quick.locator("#s-reference + .ts-wrapper .item").first).to_be_visible()
     check(not quick.locator("#progress-modal").is_visible(), "a quick load shows no dialog")
+    # The header and sidebar stay in place while the results scroll. What is scrolled
+    # into view stops below the header, and a list opened in the sidebar fits the window.
+    quick.set_viewport_size({"width": 1366, "height": 600})
+    quick.locator("#nav-multiple").click()
+    header = quick.locator(".app-navbar").bounding_box()
+    padding = quick.evaluate("parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop)")
+    check(padding >= header["height"], f"what the browser scrolls into view is kept clear of the header: {padding} px for a header of {header['height']}")
+    quick.locator("#m-element + .ts-wrapper .ts-control").click()
+    listed = quick.locator("#m-element + .ts-wrapper .ts-dropdown-content")
+    expect(listed).to_be_visible()
+    box = listed.bounding_box()
+    check(box["y"] + box["height"] <= 600 and box["height"] >= 90 and listed.evaluate("list => list.scrollHeight > list.clientHeight"),
+          f"a list of bones opened low in a short window ends inside it and scrolls: {round(box['y'])} to {round(box['y'] + box['height'])} of 600")
     quick.close()
 
     # leaving or closing the page frees its results too

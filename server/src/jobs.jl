@@ -210,8 +210,9 @@ end
 
 find_job(store::JobStore, id) = lock(() -> get(store.jobs, id, nothing), store.lock)
 
-# Forgets a job and its results. One waiting for its turn is not computed;
-# one already computing finishes unseen.
+# Forgets a job and its results. One waiting for its turn is not computed. A
+# single analysis already computing finishes unseen; a plan stops before its
+# next test (`run_tests`).
 function release_job!(store::JobStore, id)
     lock(() -> pop!(store.jobs, id, nothing), store.lock) === nothing || tidy()
     return

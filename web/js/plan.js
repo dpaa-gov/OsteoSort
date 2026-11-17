@@ -32,8 +32,8 @@ const plural = (n, word) => `${n.toLocaleString("en-US")} ${word}${n === 1 ? "" 
 // settings as { alpha, settings } and `upload()` the file as described when it
 // was chosen; `run(plan)` is called with what was ticked. What the file
 // supports is asked of the sidebar's own filters: `inFile(bones)`,
-// `inFileFor(bone, codes)`, `measured(bone)` and `filePairs()`.
-export function initPlan({ reference, labels, settings, upload, run, inFile, inFileFor, measured, filePairs }) {
+// `inFileFor(bone, codes)`, `measured(bone)`, `filePairs()` and `sidesFor(bone)`.
+export function initPlan({ reference, labels, settings, upload, run, inFile, inFileFor, measured, filePairs, sidesFor }) {
     const modal = $("plan-modal");
 
     // What has been chosen, kept for as long as the file stays loaded. A test
@@ -323,9 +323,11 @@ export function initPlan({ reference, labels, settings, upload, run, inFile, inF
     };
 
     const regressionBones = () => inFile(reference.regressionBones(labels()));
-    // The sides of a bone the file has; both, where it does not say
+    // The sides of a bone the strip can offer: those of its two buttons that
+    // the file has, as the sidebar finds them; both, where it has neither
     function sidesOf(bone) {
-        const sides = SIDES.filter((side) => upload().elements.get(bone)?.sides.includes(side));
+        const inFile = sidesFor(bone);
+        const sides = SIDES.filter((side) => inFile.includes(side));
         return sides.length ? sides : SIDES;
     }
     const added = (entry) => regressions.some((other) => regressionKey(other) === regressionKey(entry));
@@ -359,20 +361,20 @@ export function initPlan({ reference, labels, settings, upload, run, inFile, inF
         const bones = regressionBones().filter((bone) => bone !== a);
         const from = bones.indexOf(b);
         const next = [...bones.slice(from + 1), ...bones.slice(0, from + 1)].find((bone) => free(a, bone).length);
-        builderChoices();
+        builderChoices(); // the lists without what was just added
         if (!next) return; // nothing left for this first bone, which has gone from its list
         const pairing = free(a, next).find((entry) => entry.sideA === sideA && entry.sideB === sideB) ?? free(a, next)[0];
         builder.b.setValue(next, true);
-        builder.sideA.setAvailable(sidesOf(a));
-        builder.sideB.setAvailable(sidesOf(next));
+        builder.sideB.setAvailable(sidesOf(next)); // a side can only be chosen once it is on offer
         builder.sideA.setValue(pairing.sideA);
         builder.sideB.setValue(pairing.sideB);
         builderSides();
     }
 
     $("p-add").addEventListener("click", () => {
+        // (Add cannot be pressed for a pairing that is in the plan already)
         const entry = onShow();
-        if (!added(entry)) regressions.push(entry);
+        regressions.push(entry);
         // one that was asked for by name is meant to be run
         choiceFor(regressionKey(entry)).ticked = true;
         moveOn(entry);

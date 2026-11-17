@@ -283,6 +283,20 @@ end
             @test isempty(OSS.run_plan(roomy, plan, gone).tests)
             stays = OSS.create_job!(roomy.jobs)
             @test length(OSS.run_plan(roomy, plan, stays).tests) == 3 && (@atomic stays.step) == 3
+            # stopped after its first test, a plan gives back that test, whole, and goes no further
+            sorted_out() = Union{Nothing, OSJ.Prepared}[OSS.prepare_multiple(fields, plan.groups, upload) for fields in plan.tests]
+            asked = Ref(0)
+            part = OSS.run_tests(plan, sorted_out(), stays; wanted = () -> (asked[] += 1) <= 1)
+            @test asked[] == 2 && length(part) == 1 && (@atomic stays.step) == 1
+            @test part[1].title == "Pair-match: Humerus" && part[1].error == "" &&
+                  part[1].output.summary.comparisons == status.tests[1].summary.comparisons
+            # and one stopped through its job, between the second test and the third
+            midway = OSS.create_job!(roomy.jobs)
+            two = OSS.run_tests(plan, sorted_out(), midway; wanted = function ()
+                (@atomic midway.step) == 2 && OSS.release_job!(roomy.jobs, midway.id)
+                return OSS.find_job(roomy.jobs, midway.id) !== nothing
+            end)
+            @test [test.title for test in two] == ["Pair-match: Humerus", "Regression: Humerus (left) to Femur (right)"]
             # a run says which test it is on while it compares
             @test (@atomic kept.steps) == 4 && (@atomic kept.step) == 4
         end

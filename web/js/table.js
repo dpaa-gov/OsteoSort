@@ -80,10 +80,13 @@ export class ResultTable {
         try {
             page = await getJSON(`${this.base}/rows?${query}`);
         } catch (error) {
-            if (request === this.request && !this.retired) showError(error.message);
+            if (request !== this.request || this.retired) return;
+            this.failed = true; // what is on the page is not what was asked for
+            showError(error.message);
             return;
         }
         if (request !== this.request || this.retired) return; // a newer search, sort or page has been asked for, or another table shown
+        this.failed = false;
         this.total = page.total;
         // The reference breakdown is not a column on screen: it shows when the
         // sample size is hovered, and it is in the download.

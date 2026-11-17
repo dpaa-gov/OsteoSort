@@ -88,6 +88,10 @@ export function holdSidebars() {
             const top = Math.min(header.offsetHeight + SIDEBAR_GAP, windowHeight - sidebar.offsetHeight);
             sidebar.style.setProperty("--sidebar-top", `${top}px`);
         }
+        // What the browser scrolls into view, such as a field tabbed back to,
+        // is brought to below the header and not under it. The window scrolls
+        // in its own pixels, of which a zoomed header takes more.
+        document.documentElement.style.scrollPaddingTop = `${Math.ceil(header.offsetHeight * zoomFor()) + 8}px`;
     };
     const watcher = new ResizeObserver(place);
     for (const element of [header, ...sidebars]) watcher.observe(element);
@@ -206,6 +210,23 @@ document.addEventListener("scroll", () => { floatingTip.hidden = true; }, true);
 
 // --- Dropdowns (Tom Select) ---
 
+// A list that opens in a sidebar held in place, or in a dialog, cannot be
+// brought into sight by scrolling the page: what reaches past the foot of the
+// window, or of the dialog, would be out of reach. So such a list is made as
+// short as the room under it, and scrolls within itself as a long list
+// already does. It is never shorter than a few choices.
+const LEAST_LIST = 96;
+function fitList(dropdown) {
+    const list = dropdown.querySelector(".ts-dropdown-content");
+    list.style.maxHeight = "";
+    const holder = dropdown.closest(".modal-body, .app-sidebar");
+    if (!holder || (holder.matches(".app-sidebar") && getComputedStyle(holder).position !== "sticky")) return;
+    const foot = holder.matches(".modal-body") ? holder.getBoundingClientRect().bottom : window.innerHeight;
+    // what is measured on screen is in the window's pixels; a height is set in the page's own
+    const room = (foot - list.getBoundingClientRect().top) / zoomFor() - 12;
+    if (room < list.offsetHeight) list.style.maxHeight = `${Math.max(LEAST_LIST, room)}px`;
+}
+
 // `describe(value)` may return { text, tooltip } to show a choice differently
 // from the value that is sent to the server (measurement codes, for example).
 export function makeSelect(id, onChange, describe) {
@@ -223,6 +244,7 @@ export function makeSelect(id, onChange, describe) {
         closeAfterSelect: !element.multiple,
         // a dropdown is done once a value is picked; leaving it focused keeps its search field open
         onItemAdd() { if (!element.multiple) this.blur(); },
+        onDropdownOpen: fitList,
         onChange: () => onChange && onChange(),
     });
     select.describe = describe;

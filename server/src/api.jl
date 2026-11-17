@@ -565,16 +565,23 @@ function run_plan(state::AppState, plan::Plan, job::Job)::PlanOutput
     @atomic job.steps = length(plan.tests)
     @atomic job.step = 1 # before the stage, so the page is never told it is on test 0
     @atomic job.stage = "comparing"
+    # Cleared or replaced since it started, a plan stops: nobody will see the
+    # rest, and every other run is waiting for this one's turn to end
+    tests = run_tests(plan, prepared, job; wanted = () -> find_job(state.jobs, job.id) !== nothing)
+    return PlanOutput(tests, round(time() - started; digits = 2))
+end
+
+# A plan's tests, one after another. `wanted` is asked before each, and the
+# rest are left when it says no: what is given back is the tests done so far.
+function run_tests(plan::Plan, prepared::Vector{Union{Nothing, OSJ.Prepared}}, job::Job; wanted::F)::Vector{PlanTest} where {F}
     tests = PlanTest[]
     for (i, fields) in enumerate(plan.tests)
-        # Cleared or replaced since it started: nobody will see the rest, and
-        # every other run is waiting for this one's turn to end
-        find_job(state.jobs, job.id) === nothing && break
+        wanted() || break
         @atomic job.step = i
         push!(tests, run_test(plan, fields, prepared[i]))
         prepared[i] = nothing # its rows are not needed again
     end
-    return PlanOutput(tests, round(time() - started; digits = 2))
+    return tests
 end
 
 function require_job(state::AppState, id::String)

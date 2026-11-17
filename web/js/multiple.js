@@ -117,7 +117,7 @@ export function initMultiple(reference) {
     const plan = initPlan({
         reference, labels, upload: () => upload, run: (chosen) => runPlan(chosen),
         settings: () => ({ alpha: form.alpha(), settings: form.settings() }),
-        inFile, inFileFor, measured, filePairs,
+        inFile, inFileFor, measured, filePairs, sidesFor,
     });
     function sidesFor(...bones) {
         if (!upload) return ["Left", "Right"];
@@ -292,15 +292,15 @@ export function initMultiple(reference) {
         }
     }
 
-    // One analysis as it is shown: its headline numbers, its p-values and its
-    // tables. `found` is a run's status or that of one test of a plan, `body`
-    // what it was made with, and `test` the number of a plan's test.
     // The tables on the page give way: to another test's, another run's, or nothing
     function retireTables() {
         for (const table of tables) table.retire();
         tables = [];
     }
 
+    // One analysis as it is shown: its headline numbers, its p-values and its
+    // tables. `found` is a run's status or that of one test of a plan, `body`
+    // what it was made with, and `test` the number of a plan's test.
     function showAnalysis(job, found, body, test) {
         retireTables();
         markRun($("m-results"));
@@ -354,8 +354,11 @@ export function initMultiple(reference) {
     function renderPlan(job, status, chosen) {
         const body = $("m-plan-table").tBodies[0];
         const pick = (index) => {
-            // already shown: its page, sort and search stay as they are
-            if (body.rows[index].classList.contains("picked")) return;
+            // Already shown: its page, sort and search stay as they are. One
+            // that did not come up whole, a table of it failing to load, is
+            // shown again, which is how it is tried again.
+            const whole = tables.length === TABLES.length && !tables.some((table) => table.failed);
+            if (body.rows[index].classList.contains("picked") && whole) return;
             [...body.rows].forEach((row, i) => {
                 row.classList.toggle("picked", i === index);
                 row.querySelector("button")?.setAttribute("aria-pressed", String(i === index));
