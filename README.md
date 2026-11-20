@@ -133,4 +133,6 @@ Lynch, J.J. 2026 OsteoSort. Computerized Osteometric Sorting. Version 2.1.0. Def
 
 ## License
 
-GNU General Public License v2.0
+GNU Affero General Public License v3.0; the text is in `LICENSE`.
+
+Anyone may run, change and share it. A changed copy that is run for other people to use must offer them its source.
