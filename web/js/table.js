@@ -3,7 +3,18 @@
 
 import { getJSON, showError, NUMERIC_COLUMNS, summariseMeasurements } from "./common.js";
 
-const PAGE_SIZES = [10, 25, 50];
+export const PAGE_SIZES = [10, 25, 50];
+
+// What goes in the foot of a table that is shown a page at a time: which rows
+// are on show, how many to a page, and the pages to go to
+export const FOOTER = `
+    <div class="table-count"></div>
+    <div class="table-paging">
+        <select class="form-select form-select-sm page-size" aria-label="Rows per page">
+            ${PAGE_SIZES.map((size) => `<option value="${size}">${size} per page</option>`).join("")}
+        </select>
+        <ul class="pagination pagination-sm"></ul>
+    </div>`;
 
 // For a click on a link that downloads results. A link alone would save the
 // server's "expired" or "busy" message as the file, so the server is asked
@@ -37,15 +48,7 @@ export class ResultTable {
                 <input type="search" class="form-control form-control-sm table-search" placeholder="Search" aria-label="Search">
             </div>
             <div class="table-responsive"><table class="table table-striped result-table"><thead><tr></tr></thead><tbody></tbody></table></div>
-            <div class="table-footer">
-                <div class="table-count"></div>
-                <div class="table-paging">
-                    <select class="form-select form-select-sm page-size" aria-label="Rows per page">
-                        ${PAGE_SIZES.map((size) => `<option value="${size}">${size} per page</option>`).join("")}
-                    </select>
-                    <ul class="pagination pagination-sm"></ul>
-                </div>
-            </div>`;
+            <div class="table-footer">${FOOTER}</div>`;
         container.querySelector("a[download]").addEventListener("click", checkedDownload);
         container.querySelector(".page-size").addEventListener("change", (event) => {
             this.state.limit = Number(event.target.value);
@@ -158,41 +161,45 @@ export class ResultTable {
     }
 
     renderFooter(page) {
-        const first = page.filtered ? this.state.offset + 1 : 0;
-        const size = this.state.limit;
-        const last = Math.min(this.state.offset + size, page.filtered);
-        let info = `Showing ${first} to ${last} of ${page.filtered.toLocaleString()} entries`;
-        if (page.filtered !== page.total) info += ` (filtered from ${page.total.toLocaleString()} total entries)`;
-        this.container.querySelector(".table-count").textContent = info;
-
-        const pages = Math.max(1, Math.ceil(page.filtered / size));
-        const current = Math.floor(this.state.offset / size) + 1;
-        const list = this.container.querySelector(".pagination");
-        list.replaceChildren();
-        const add = (label, target, { active = false, disabled = false, name = "" } = {}) => {
-            const item = document.createElement("li");
-            item.className = "page-item" + (active ? " active" : "") + (disabled ? " disabled" : "");
-            const link = document.createElement("button");
-            link.type = "button";
-            link.className = "page-link";
-            link.textContent = label;
-            if (name) link.setAttribute("aria-label", name);
-            if (!disabled && !active) {
-                link.addEventListener("click", () => {
-                    this.state.offset = (target - 1) * size;
-                    this.load();
-                });
-            }
-            item.append(link);
-            list.append(item);
-        };
-        add("\u2039", current - 1, { disabled: current === 1, name: "Previous page" });
-        for (const number of pageNumbers(current, pages)) {
-            if (number === null) add("…", 0, { disabled: true });
-            else add(String(number), number, { active: number === current });
-        }
-        add("\u203a", current + 1, { disabled: current === pages, name: "Next page" });
+        showPaging(this.container, { ...this.state, filtered: page.filtered, total: page.total }, (offset) => {
+            this.state.offset = offset;
+            this.load();
+        });
     }
+}
+
+// Fills a table's foot, found within `container`: the rows from `offset` on,
+// `limit` to a page, of `filtered` that match out of `total`. `turn(offset)`
+// is called with where the page asked for starts.
+export function showPaging(container, { offset, limit, filtered, total }, turn) {
+    const first = filtered ? offset + 1 : 0;
+    const last = Math.min(offset + limit, filtered);
+    let info = `Showing ${first} to ${last} of ${filtered.toLocaleString()} entries`;
+    if (filtered !== total) info += ` (filtered from ${total.toLocaleString()} total entries)`;
+    container.querySelector(".table-count").textContent = info;
+
+    const pages = Math.max(1, Math.ceil(filtered / limit));
+    const current = Math.floor(offset / limit) + 1;
+    const list = container.querySelector(".pagination");
+    list.replaceChildren();
+    const add = (label, target, { active = false, disabled = false, name = "" } = {}) => {
+        const item = document.createElement("li");
+        item.className = "page-item" + (active ? " active" : "") + (disabled ? " disabled" : "");
+        const link = document.createElement("button");
+        link.type = "button";
+        link.className = "page-link";
+        link.textContent = label;
+        if (name) link.setAttribute("aria-label", name);
+        if (!disabled && !active) link.addEventListener("click", () => turn((target - 1) * limit));
+        item.append(link);
+        list.append(item);
+    };
+    add("\u2039", current - 1, { disabled: current === 1, name: "Previous page" });
+    for (const number of pageNumbers(current, pages)) {
+        if (number === null) add("…", 0, { disabled: true });
+        else add(String(number), number, { active: number === current });
+    }
+    add("\u203a", current + 1, { disabled: current === pages, name: "Next page" });
 }
 
 // 1 2 3 4 5 … 36, with the window following the current page

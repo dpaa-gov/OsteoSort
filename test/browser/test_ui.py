@@ -877,6 +877,44 @@ def run(page):
     expect(page.locator("#plan-modal")).to_be_hidden()
     check(plan_summary() == ["No tests chosen"] and page.locator("#m-process").is_disabled(), "an emptied plan leaves Analyze nothing to run")
     check(held(plan_job) and page.locator("#m-plan-panel").is_visible(), "closing the plan without running it leaves the last results as they were")
+    # a plan of many tests lists them a page at a time, as a table of results is
+    page.set_input_files("#m-file", DATA / "classic_case_data.csv")
+    page.locator("#m-plan-open").click()
+    expect(page.locator("#plan-modal")).to_be_visible()
+    for kind in ("pairmatch", "articulation"):
+        plan_tab(kind)
+        page.locator("[data-plan-tick=all]").click()
+    many = page.locator(".plan-row input:checked").count()
+    page.locator("#plan-done").click()
+    expect(page.locator("#plan-modal")).to_be_hidden()
+    process(page, "m")
+    foot = "#m-plan-footer"
+    expect(page.locator(f"{foot} .table-count")).to_have_text(f"Showing 1 to 10 of {many} entries")
+    first_page = [row[0] for row in table_rows(page, "#m-plan-table")]
+    pages = [str(number + 1) for number in range(-(-many // 10))]
+    check(10 < many <= 25 and len(first_page) == 10 and page.locator("#m-plan-table tr.picked").count() == 1
+          and page.locator(f"{foot} .page-item").all_text_contents() == ["\u2039", *pages, "\u203a"],
+          f"a plan of {many} tests lists the first 10, the one shown among them, with the rest a page on")
+    page.locator(f"{foot} .page-link", has_text="2").click()
+    expect(page.locator(f"{foot} .table-count")).to_have_text(f"Showing 11 to {min(20, many)} of {many} entries")
+    second_page = [row[0] for row in table_rows(page, "#m-plan-table")]
+    check(len(second_page) == min(10, many - 10) and not set(first_page) & set(second_page) and page.locator("#m-plan-table tr.picked").count() == 0,
+          "page 2 of the plan goes on where page 1 ended")
+    later = page.locator("#m-plan-table tbody tr:not(.failed)").first
+    title = later.locator(".plan-pick").inner_text()
+    later.click()
+    expect(page.locator("#m-test-name")).to_have_text(title)
+    expect(later).to_have_class(re.compile("picked"))
+    page.locator(f"{foot} [aria-label='Previous page']").click()
+    expect(page.locator(f"{foot} .table-count")).to_have_text(f"Showing 1 to 10 of {many} entries")
+    check(page.locator("#m-plan-table tr.picked").count() == 0 and page.locator("#m-test-name").inner_text() == title,
+          "a test picked on another page stays the one shown when the page is turned")
+    page.select_option(f"{foot} .page-size", "25")
+    expect(page.locator(f"{foot} .table-count")).to_have_text(f"Showing 1 to {many} of {many} entries")
+    check(len(table_rows(page, "#m-plan-table")) == many and page.locator("#m-plan-table tr.picked").count() == 1,
+          "25 to a page lists them all, the one shown still picked out")
+    page.screenshot(path=SCREENS / "12b-plan-pages.png", full_page=True)
+    page.select_option(f"{foot} .page-size", "10")
     pick(page, "m-analysis", "Pair-match")
     page.locator("label[for=m-alpha-01]").click()
     page.locator("#m-form .settings-toggle").click()
