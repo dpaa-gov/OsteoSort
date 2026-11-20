@@ -119,7 +119,8 @@ export function initPlan({ reference, labels, settings, upload, changed, inFile,
         return counted({
             key, kind: "regression", label, title: `Regression: ${label}`, entry,
             editors: [{ label: name(a), codes: offeredA }, { label: name(b), codes: offeredB }],
-            reason: bones.includes(a) && bones.includes(b) ? "" : "Not in the selected reference groups",
+            reason: !(bones.includes(a) && bones.includes(b)) ? "Not in the selected reference groups" :
+                offeredA.length && offeredB.length ? "" : "No measurements in common with the reference data",
             request: { analysis: "regression", element_a: a, element_b: b, side_a: sideA, side_b: sideB,
                 measurements_a: usedA, measurements_b: usedB },
         }, [[a, sideA, usedA], [b, sideB, usedB]]);
@@ -280,17 +281,24 @@ export function initPlan({ reference, labels, settings, upload, changed, inFile,
             tab.querySelector(".plan-tab-count").textContent = count || "";
         }
         $("plan-builder").hidden = active !== "regression";
+        // All has something to tick where the tab offers a test; None has
+        // something to clear there too, or where a test of its kind is ticked
+        // that the tab no longer lists
         const offered = listed[active].some((test) => !test.reason);
-        for (const button of modal.querySelectorAll("[data-plan-tick]")) button.disabled = !offered;
+        const tickedHere = [...chosen].some(([key, choice]) => choice.ticked && key.startsWith(`${active}|`));
+        for (const button of modal.querySelectorAll("[data-plan-tick]")) {
+            button.disabled = !offered && !(button.dataset.planTick === "none" && tickedHere);
+        }
         if (focused) [...modal.querySelectorAll("[data-plan-id]")].find((element) => element.dataset.planId === focused)?.focus();
 
         const run = ticked();
         const pairs = run.reduce((sum, test) => sum + test.pairs, 0);
         const most = reference.meta.max_comparisons;
-        const over = pairs > most;
-        $("plan-total").classList.toggle("over", over);
+        const over = pairs > most, tooMany = run.length > reference.meta.max_plan_tests;
+        $("plan-total").classList.toggle("over", over || tooMany);
         $("plan-total").textContent = planTotal(run.length, pairs) +
-            (over ? `, more than the ${most.toLocaleString("en-US")} one run can make` : "");
+            (tooMany ? `, more than the ${reference.meta.max_plan_tests} tests one plan can have` : "") +
+            (over ? `, more than the ${most.toLocaleString("en-US")} pairs one run can make` : "");
         changed();
     }
 
@@ -306,10 +314,17 @@ export function initPlan({ reference, labels, settings, upload, changed, inFile,
         render();
     });
 
-    // All or None ticks or clears every test the tab in front offers
+    // All ticks every test the tab in front offers. None clears every test
+    // of the tab's kind: those it lists, and any ticked earlier that it no
+    // longer does (its bone gone with a reference group, say), which could
+    // not be unticked by hand. A test's key starts with its kind.
     for (const button of modal.querySelectorAll("[data-plan-tick]")) {
         button.addEventListener("click", () => {
-            for (const test of listed[active]) choiceFor(test.key).ticked = button.dataset.planTick === "all" && !test.reason;
+            if (button.dataset.planTick === "all") {
+                for (const test of listed[active]) choiceFor(test.key).ticked = !test.reason;
+            } else {
+                for (const [key, choice] of chosen) if (key.startsWith(`${active}|`)) choice.ticked = false;
+            }
             render();
         });
     }
@@ -404,12 +419,13 @@ export function initPlan({ reference, labels, settings, upload, changed, inFile,
         // What Analyze would run as things stand: the ticked tests the file
         // and the selected reference groups still support, each with its
         // title and request, how many of each kind and how many pairs they
-        // compare, whether that is `over` what one run can make, and how many
+        // compare, whether that is `over` what one run can make or they are
+        // `tooMany` for one plan, and how many
         // ticked tests are `unavailable`: no longer supported, as when the
         // reference groups have changed since they were ticked. Worked out
         // afresh each time, since the sidebar can change under a plan.
         current() {
-            const none = { tests: [], kinds: {}, pairs: 0, over: false, unavailable: 0 };
+            const none = { tests: [], kinds: {}, pairs: 0, over: false, tooMany: false, unavailable: 0 };
             if (!upload()) return none;
             listed = tests();
             const run = ticked();
@@ -420,6 +436,7 @@ export function initPlan({ reference, labels, settings, upload, changed, inFile,
                 kinds: Object.fromEntries(KINDS.map((kind) => [kind, run.filter((test) => test.kind === kind).length])),
                 pairs,
                 over: pairs > reference.meta.max_comparisons,
+                tooMany: run.length > reference.meta.max_plan_tests,
                 unavailable: [...chosen].filter(([key, choice]) => choice.ticked && !keys.has(key)).length,
             };
         },

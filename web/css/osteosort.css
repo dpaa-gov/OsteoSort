@@ -1725,11 +1725,12 @@ html {
   margin-bottom: 0;
 }
 
-.plan-table tbody tr {
+/* a test that ran is a line to pick; one that failed only says why */
+.plan-table tbody tr:not(.failed) {
   cursor: pointer;
 }
 
-.plan-table tbody tr:hover > td,
+.plan-table tbody tr:not(.failed):hover > td,
 .plan-table tbody tr.picked > td {
   background-color: var(--os-gold-tint);
   box-shadow: none;
@@ -1746,7 +1747,6 @@ html {
 
 .plan-table .plan-failed {
   color: #778f9e;
-  cursor: default;
 }
 
 /* which of a plan's tests the summary is of, after the heading */

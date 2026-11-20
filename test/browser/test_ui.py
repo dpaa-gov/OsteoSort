@@ -485,6 +485,25 @@ def run(page):
     page.fill(f"{pane} input[type=search]", "^a$")
     expect(page.locator(f"{pane} .table-count")).to_contain_text("filtered from")
     check(all("a" in r for r in table_rows(page, pane)), "search filters the rows")
+    # A search typed while the last is still being answered waits for it: one request for
+    # rows at a time, and then the latest. Left to run together, they would take the few
+    # places the server has for all its users.
+    sent, waiting = [], []
+    pane_rows = re.compile(r"/rows\?table=not_excluded&")
+    page.route(pane_rows, lambda route: (sent.append(route.request.url), waiting.append(route)))
+    for typed in ("1", "10", "100"):
+        page.fill(f"{pane} input[type=search]", typed)
+        page.wait_for_timeout(400)   # longer than the page waits for typing to stop: each is a search of its own
+    check(len(sent) == 1 and "search=1&" in sent[0], f"while a search is out, the ones typed after it are not sent: {len(sent)} sent")
+    waiting.pop().continue_()
+    page.wait_for_timeout(500)
+    check(len(sent) == 2 and "search=100&" in sent[1], "when it is answered, the latest search is sent, and none of those between")
+    page.unroute(pane_rows)
+    waiting.pop().continue_()
+    latest = api(f"api/jobs/{last_job()}/rows?table=not_excluded&search=100&limit=10")["filtered"]
+    expect(page.locator(f"{pane} .table-count")).to_contain_text(f"of {latest:,} entries")
+    with page.expect_response(lambda response: "search=%5Ea%24" in response.url):   # answered before the test goes on
+        page.fill(f"{pane} input[type=search]", "^a$")
 
     page.get_by_role("tab", name="Excluded", exact=True).click()
     expect(page.locator("#m-pane-excluded .table-count")).to_have_text(f"Showing 1 to 10 of {len(excluded)} entries")

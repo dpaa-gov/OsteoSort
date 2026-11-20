@@ -71,22 +71,43 @@ export class ResultTable {
         clearTimeout(this.timer);
     }
 
+    // Asks for the rows as the search, sort and page now stand, one request
+    // at a time. A search typed a letter at a time asks faster than a large
+    // table answers, and the server works each request through whether or not
+    // anyone still waits for it: left to run together they would take the few
+    // places it has for all its users, until the newest was refused as busy.
+    // So while a request is out, asking again only notes that what it brings
+    // back is no longer wanted; when it comes back, the rows are asked for
+    // once more as things then stand.
     async load() {
         if (this.retired) return;
-        const { offset, limit, search, sort, dir } = this.state;
-        const query = new URLSearchParams({ ...this.of, table: this.name, offset, limit, search, sort, dir });
-        const request = (this.request = (this.request ?? 0) + 1);
-        let page;
+        this.stale = true; // what is shown, or on its way, is not what is now asked for
+        if (this.asking) return;
+        this.asking = true;
         try {
-            page = await getJSON(`${this.base}/rows?${query}`);
-        } catch (error) {
-            if (request !== this.request || this.retired) return;
-            this.failed = true; // what is on the page is not what was asked for
-            showError(error.message);
-            return;
+            while (this.stale && !this.retired) {
+                this.stale = false;
+                const { offset, limit, search, sort, dir } = this.state;
+                const query = new URLSearchParams({ ...this.of, table: this.name, offset, limit, search, sort, dir });
+                let page;
+                try {
+                    page = await getJSON(`${this.base}/rows?${query}`);
+                } catch (error) {
+                    if (this.stale || this.retired) continue; // asked for again since, or another table shown
+                    this.failed = true; // what is on the page is not what was asked for
+                    showError(error.message);
+                    return;
+                }
+                if (this.stale || this.retired) continue;
+                this.failed = false;
+                this.show(page);
+            }
+        } finally {
+            this.asking = false;
         }
-        if (request !== this.request || this.retired) return; // a newer search, sort or page has been asked for, or another table shown
-        this.failed = false;
+    }
+
+    show(page) {
         this.total = page.total;
         // The reference breakdown is not a column on screen: it shows when the
         // sample size is hovered, and it is in the download.
