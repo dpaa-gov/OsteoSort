@@ -4,7 +4,7 @@ import {
     $, getJSON, postJSON, capFirst, showError, progress, makeSelect, makeChoice, boneName, setChoices, valueOf, valuesOf,
     initSettings, fillTable, markRun, PLOT_CONFIG, PLOT_LAYOUT, COLORS, markLabel, statTile, settingsTile, plotHover,
 } from "./common.js";
-import { ResultTable, checkedDownload } from "./table.js";
+import { ResultTable, checkedDownload, showPaging, FOOTER, PAGE_SIZES } from "./table.js";
 import { initPlan, planTotal } from "./plan.js";
 
 const NA_STRINGS = ["", " ", "NA"];
@@ -388,15 +388,33 @@ export function initMultiple(reference) {
     // can be downloaded for every test at once, as one list.
     for (const link of $("m-plan-downloads").querySelectorAll("a")) link.addEventListener("click", checkedDownload);
     const PLAN_COLUMNS = [["Comparisons", "comparisons"], ["Potential matches", "potential_matches"], ["Exclusions", "exclusions"], ["Rejected", "rejected"]];
+
+    // The lines are shown a page at a time, as a table's rows are. They are
+    // all here already, so another page asks nothing of the server.
+    let planRows = [];
+    const planPage = { offset: 0, limit: PAGE_SIZES[0] };
+    function showPlanRows() {
+        $("m-plan-table").tBodies[0].replaceChildren(...planRows.slice(planPage.offset, planPage.offset + planPage.limit));
+        showPaging($("m-plan-footer"), { ...planPage, filtered: planRows.length, total: planRows.length }, (offset) => {
+            planPage.offset = offset;
+            showPlanRows();
+        });
+    }
+    $("m-plan-footer").innerHTML = FOOTER;
+    $("m-plan-footer").querySelector(".page-size").addEventListener("change", (event) => {
+        planPage.limit = Number(event.target.value);
+        planPage.offset = 0;
+        showPlanRows();
+    });
+
     function renderPlan(job, status, chosen) {
-        const body = $("m-plan-table").tBodies[0];
         const pick = (index) => {
             // Already shown: its page, sort and search stay as they are. One
             // that did not come up whole, a table of it failing to load, is
             // shown again, which is how it is tried again.
             const whole = tables.length === TABLES.length && !tables.some((table) => table.failed);
-            if (body.rows[index].classList.contains("picked") && whole) return;
-            [...body.rows].forEach((row, i) => {
+            if (planRows[index].classList.contains("picked") && whole) return;
+            planRows.forEach((row, i) => {
                 row.classList.toggle("picked", i === index);
                 row.querySelector("button")?.setAttribute("aria-pressed", String(i === index));
             });
@@ -405,7 +423,7 @@ export function initMultiple(reference) {
             // a regression has no settings of its own
             showAnalysis(job, status.tests[index], { alpha: chosen.alpha, settings: asked.analysis === "regression" ? undefined : chosen.settings }, index + 1);
         };
-        body.replaceChildren(...status.tests.map((found, index) => {
+        planRows = status.tests.map((found, index) => {
             const row = document.createElement("tr");
             const name = row.insertCell();
             if (found.error) {
@@ -430,7 +448,7 @@ export function initMultiple(reference) {
             }
             row.addEventListener("click", () => pick(index));
             return row;
-        }));
+        });
         for (const link of $("m-plan-downloads").querySelectorAll("a")) {
             const name = link.dataset.table;
             const rows = status.tests.reduce((sum, found) => sum + (found.tables[name]?.total ?? 0), 0);
@@ -445,6 +463,9 @@ export function initMultiple(reference) {
         $("m-plan-run").textContent = `${ran} of ${status.tests.length} tests completed in ${status.seconds.toFixed(2)} seconds`;
         $("m-plan-panel").hidden = false;
         const first = status.tests.findIndex((found) => !found.error);
+        // the page the list opens on is the one with the test that is shown
+        planPage.offset = first > 0 ? first - first % planPage.limit : 0;
+        showPlanRows();
         if (first >= 0) return pick(first);
         $("m-test-name").textContent = "";
         showAnalysis(job, { error: true });
