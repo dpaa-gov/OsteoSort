@@ -129,7 +129,7 @@ If the workflow fails, no draft is made and a deploy of that tag fails at the do
 
 ## Citation
 
-Lynch, J.J. 2026 OsteoSort. Computerized Osteometric Sorting. Version 2.0.0. Defense POW/MIA Accounting Agency, Offutt AFB, NE.
+Lynch, J.J. 2026 OsteoSort. Computerized Osteometric Sorting. Version 2.1.0. Defense POW/MIA Accounting Agency, Offutt AFB, NE.
 
 ## License
 
