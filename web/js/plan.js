@@ -1,9 +1,10 @@
-// The analysis plan: every test the uploaded case file can support, listed in
-// a dialog to be ticked and run together, a tab for each kind of analysis.
-// Pair-matches and articulations are listed for the file as it is;
-// regressions are added one at a time, as any bone can be set against any
-// other. What is ticked runs as one run, with the
-// reference groups, alpha and settings the sidebar has set for all of it.
+// The plan: every test the uploaded case file can support, listed in a dialog
+// to be ticked, a tab for each kind of analysis. Pair-matches and
+// articulations are listed for the file as it is; regressions are added one
+// at a time, as any bone can be set against any other. The dialog only
+// chooses. What is ticked is run from the sidebar, by Analyze while Plan is
+// the analysis there, as one run with the reference groups, alpha and
+// settings the sidebar has set for all of it.
 
 import { $, capFirst, makeSelect, makeChoice, boneName, setChoices, valueOf, describeSettings } from "./common.js";
 
@@ -28,12 +29,16 @@ const make = (tag, className, text) => {
 };
 const plural = (n, word) => `${n.toLocaleString("en-US")} ${word}${n === 1 ? "" : "s"}`;
 
+// How much a plan is, as the dialog and the sidebar both say it
+export const planTotal = (tests, pairs) => `${plural(tests, "test")} \u00b7 ${plural(pairs, "pair")} to compare`;
+
 // `labels()` gives the selected reference groups, `settings()` the alpha and
 // settings as { alpha, settings } and `upload()` the file as described when it
-// was chosen; `run(plan)` is called with what was ticked. What the file
-// supports is asked of the sidebar's own filters: `inFile(bones)`,
-// `inFileFor(bone, codes)`, `measured(bone)`, `filePairs()` and `sidesFor(bone)`.
-export function initPlan({ reference, labels, settings, upload, run, inFile, inFileFor, measured, filePairs, sidesFor }) {
+// was chosen; `changed()` is called whenever what is ticked may be something
+// else, so the sidebar says the same as the dialog. What the file supports is asked of the
+// sidebar's own filters: `inFile(bones)`, `inFileFor(bone, codes)`,
+// `measured(bone)`, `filePairs()` and `sidesFor(bone)`.
+export function initPlan({ reference, labels, settings, upload, changed, inFile, inFileFor, measured, filePairs, sidesFor }) {
     const modal = $("plan-modal");
 
     // What has been chosen, kept for as long as the file stays loaded. A test
@@ -284,9 +289,9 @@ export function initPlan({ reference, labels, settings, upload, run, inFile, inF
         const most = reference.meta.max_comparisons;
         const over = pairs > most;
         $("plan-total").classList.toggle("over", over);
-        $("plan-total").textContent = `${plural(run.length, "test")} \u00b7 ${plural(pairs, "pair")} to compare` +
+        $("plan-total").textContent = planTotal(run.length, pairs) +
             (over ? `, more than the ${most.toLocaleString("en-US")} one run can make` : "");
-        $("plan-run").disabled = !run.length || over;
+        changed();
     }
 
     for (const tab of modal.querySelectorAll("[data-plan-tab]")) {
@@ -381,7 +386,7 @@ export function initPlan({ reference, labels, settings, upload, run, inFile, inF
         render();
     });
 
-    // --- Opening and running ---
+    // --- Opening and closing ---
 
     modal.addEventListener("show.bs.modal", () => {
         $("plan-file").textContent = upload().name;
@@ -393,20 +398,31 @@ export function initPlan({ reference, labels, settings, upload, run, inFile, inF
         render();
     });
 
-    // The run starts once the dialog has gone: two dialogs changing places
-    // at once leave the page unable to scroll.
-    let waiting = null;
-    $("plan-run").addEventListener("click", () => {
-        waiting = { tests: ticked().map(({ title, kind, request }) => ({ title, analysis: kind, request })), ...settings() };
-        bootstrap.Modal.getOrCreateInstance(modal).hide();
-    });
-    modal.addEventListener("hidden.bs.modal", () => {
-        const plan = waiting;
-        waiting = null;
-        if (plan) run(plan);
-    });
+    // (Closed by Done or otherwise, what is ticked stays ticked: nothing is done on closing.)
 
     return {
+        // What Analyze would run as things stand: the ticked tests the file
+        // and the selected reference groups still support, each with its
+        // title and request, how many of each kind and how many pairs they
+        // compare, whether that is `over` what one run can make, and how many
+        // ticked tests are `unavailable`: no longer supported, as when the
+        // reference groups have changed since they were ticked. Worked out
+        // afresh each time, since the sidebar can change under a plan.
+        current() {
+            const none = { tests: [], kinds: {}, pairs: 0, over: false, unavailable: 0 };
+            if (!upload()) return none;
+            listed = tests();
+            const run = ticked();
+            const keys = new Set(run.map((test) => test.key));
+            const pairs = run.reduce((sum, test) => sum + test.pairs, 0);
+            return {
+                tests: run.map(({ title, kind, request }) => ({ title, analysis: kind, request })),
+                kinds: Object.fromEntries(KINDS.map((kind) => [kind, run.filter((test) => test.kind === kind).length])),
+                pairs,
+                over: pairs > reference.meta.max_comparisons,
+                unavailable: [...chosen].filter(([key, choice]) => choice.ticked && !keys.has(key)).length,
+            };
+        },
         // A different file is a different plan
         reset() {
             chosen = new Map();

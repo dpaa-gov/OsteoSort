@@ -5,7 +5,7 @@ import {
     initSettings, fillTable, markRun, PLOT_CONFIG, PLOT_LAYOUT, COLORS, markLabel, statTile, settingsTile, plotHover,
 } from "./common.js";
 import { ResultTable, checkedDownload } from "./table.js";
-import { initPlan } from "./plan.js";
+import { initPlan, planTotal } from "./plan.js";
 
 const NA_STRINGS = ["", " ", "NA"];
 const STAGES = { queued: [10, "Starting..."], sorting: [50, "Sorting data..."], comparing: [75, "Running comparisons..."] };
@@ -89,7 +89,7 @@ export function initMultiple(reference) {
     const labels = () => valuesOf(selects.reference);
     const selects = {
         reference: makeSelect("m-reference", () => refresh()),
-        analysis: makeChoice("m-analysis", () => form.refresh()),
+        analysis: makeChoice("m-analysis", () => { form.refresh(); showPlan(); }),
         element: makeSelect("m-element", () => measurementChoices(), boneName),
         measurements: makeSelect("m-measurements", null, reference.describe),
         pair: makeSelect("m-pair", () => articulationChoices(), boneName),
@@ -111,14 +111,48 @@ export function initMultiple(reference) {
     // Articulating pairs the selected groups have data for, both of whose bones are in the file
     const filePairs = () => reference.pairs(labels()).filter((pair) => !upload || (upload.elements.has(pair.bonea) && upload.elements.has(pair.boneb)));
 
-    // The plan is another way to run what this form runs: several tests of the
-    // file as one run. It is given the form's own filters, so the two always
-    // agree on what the file supports.
+    // The plan is a fourth analysis: several tests of the file as one run,
+    // chosen in its dialog and run by Analyze like the other three. It is
+    // given the form's own filters, so the two always agree on what the file
+    // supports.
     const plan = initPlan({
-        reference, labels, upload: () => upload, run: (chosen) => runPlan(chosen),
+        reference, labels, upload: () => upload, changed: () => showPlan(),
         settings: () => ({ alpha: form.alpha(), settings: form.settings() }),
         inFile, inFileFor, measured, filePairs, sidesFor,
     });
+    const planning = () => valueOf(selects.analysis) === "plan";
+
+    // While Plan is the analysis, the sidebar says what the plan holds as
+    // things stand: the dialog may have changed it, or the file or reference
+    // groups under it. Analyze cannot be pressed for a plan with nothing to
+    // run or more than one run can make; why is said here, above it.
+    const KIND_NAMES = { pairmatch: ["pair-match", "pair-matches"], articulation: ["articulation", "articulations"], regression: ["regression", "regressions"] };
+    function showPlan() {
+        const box = $("m-plan-summary");
+        const line = (text, className) => {
+            const row = document.createElement("div");
+            if (className) row.className = className;
+            row.textContent = text;
+            return row;
+        };
+        const now = plan.current();
+        const lines = [];
+        if (!upload) {
+            lines.push(line("Choose a case file to plan its tests", "quiet"));
+        } else if (!now.tests.length) {
+            lines.push(line("No tests chosen", "quiet"));
+        } else {
+            lines.push(line(planTotal(now.tests.length, now.pairs)));
+            lines.push(line(Object.entries(KIND_NAMES).filter(([kind]) => now.kinds[kind])
+                .map(([kind, [one, many]]) => `${now.kinds[kind]} ${now.kinds[kind] === 1 ? one : many}`).join(" \u00b7 "), "quiet"));
+            if (now.over) lines.push(line(`More than the ${meta.max_comparisons.toLocaleString("en-US")} pairs one run can make`, "problem"));
+        }
+        if (now.unavailable) {
+            lines.push(line(`${now.unavailable} ticked ${now.unavailable === 1 ? "test is" : "tests are"} not available as things are set`, "problem"));
+        }
+        box.replaceChildren(...lines);
+        $("m-process").disabled = planning() && (!now.tests.length || now.over);
+    }
     function sidesFor(...bones) {
         if (!upload) return ["Left", "Right"];
         const lists = bones.map((bone) => upload.elements.get(bone)?.sides ?? []);
@@ -191,6 +225,7 @@ export function initMultiple(reference) {
         setChoices(selects.elementA, inFile(reference.regressionBones(labels())));
         regressionChoices("a");
         dependentChoices();
+        showPlan();
     }
 
     // A file chosen or cleared: what it holds is said, and its plan starts empty
@@ -433,13 +468,16 @@ export function initMultiple(reference) {
     $("m-form").addEventListener("submit", (event) => {
         event.preventDefault();
         if (!upload) return showError("Choose a case file to upload first");
+        if (planning()) return runPlan();
         const body = requestBody();
         if (missingMeasurements(body)) return showError("The measurement data is missing");
         start("api/multiple", body, (job, status) => renderResults(job, status, body));
     });
 
-    // What was ticked in the plan, with the alpha and settings as they were when it was run
-    function runPlan(chosen) {
+    // What is ticked in the plan, with the alpha and settings as they are when Analyze is pressed
+    function runPlan() {
+        const chosen = { tests: plan.current().tests, alpha: form.alpha(), settings: form.settings() };
+        if (!chosen.tests.length) return showError("Choose at least one test for the plan");
         const body = { references: labels(), alpha: chosen.alpha, settings: chosen.settings, csv: upload.text,
             tests: chosen.tests.map((test) => test.request) };
         start("api/plan", body, (job, status) => renderPlan(job, status, chosen));

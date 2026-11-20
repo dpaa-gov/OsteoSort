@@ -163,6 +163,7 @@
                                 <input type="radio" class="btn-check" name="m-analysis" id="m-analysis-pairmatch" value="pairmatch" checked><label class="btn" for="m-analysis-pairmatch">Pair-match</label>
                                 <input type="radio" class="btn-check" name="m-analysis" id="m-analysis-articulation" value="articulation"><label class="btn" for="m-analysis-articulation">Articulation</label>
                                 <input type="radio" class="btn-check" name="m-analysis" id="m-analysis-regression" value="regression"><label class="btn" for="m-analysis-regression">Regression</label>
+                                <input type="radio" class="btn-check" name="m-analysis" id="m-analysis-plan" value="plan"><label class="btn" for="m-analysis-plan">Plan</label>
                             </div>
 
                             <div data-analysis="pairmatch">
@@ -202,6 +203,13 @@
                                 </div>
                             </div>
 
+                            <!-- several tests of the file as one run: chosen in a dialog (plan.js), said here, and run by Analyze -->
+                            <div data-analysis="plan" hidden>
+                                <div class="sidebar-section-label">Tests</div>
+                                <div class="plan-summary" id="m-plan-summary" aria-live="polite"></div>
+                                <button class="btn btn-neutral w-100 plan-open" type="button" id="m-plan-open" data-bs-toggle="modal" data-bs-target="#plan-modal" hidden><i class="os-icon icon-table-list"></i> Edit plan...</button>
+                            </div>
+
                             <!-- folded away until asked for; what is set shows beside the heading -->
                             <button class="sidebar-section-label settings-toggle collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#m-settings" aria-expanded="false" aria-controls="m-settings">
                                 <span>Settings</span><span class="settings-summary" id="m-settings-summary"></span>
@@ -228,8 +236,6 @@
                                 <div class="col-6"><button class="btn btn-gold w-100" type="submit" id="m-process"><i class="os-icon icon-play"></i> Analyze</button></div>
                                 <div class="col-6"><button class="btn btn-neutral w-100" type="button" id="m-clear"><i class="os-icon icon-eraser"></i> Clear</button></div>
                             </div>
-                            <!-- several tests of the file as one run, with the reference groups and settings above -->
-                            <button class="btn btn-neutral w-100 plan-open" type="button" id="m-plan-open" data-bs-toggle="modal" data-bs-target="#plan-modal" hidden><i class="os-icon icon-table-list"></i> Analysis plan...</button>
                         </form>
                     </div>
                     <div class="app-results">
@@ -281,11 +287,11 @@
         </div>
     </main>
 
-    <!-- The analysis plan (plan.js): every test the uploaded file supports, to be ticked and run as one run -->
+    <!-- The plan (plan.js): every test the uploaded file supports, to be ticked here and run as one run by Analyze -->
     <div class="modal fade" id="plan-modal" tabindex="-1" aria-labelledby="plan-title">
         <div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content plan-dialog">
             <div class="modal-header">
-                <h4 class="modal-title" id="plan-title">Analysis plan</h4>
+                <h4 class="modal-title" id="plan-title">Plan</h4>
                 <span class="plan-file" id="plan-file"></span>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
@@ -326,8 +332,8 @@
             </div>
             <div class="modal-footer">
                 <div class="plan-total" id="plan-total" aria-live="polite"></div>
-                <button type="button" class="btn btn-neutral" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-gold" id="plan-run"><i class="os-icon icon-play"></i> Run plan</button>
+                <!-- what is ticked is kept as it is ticked: there is nothing to cancel, and Analyze runs it -->
+                <button type="button" class="btn btn-gold" id="plan-done" data-bs-dismiss="modal">Done</button>
             </div>
         </div></div>
     </div>

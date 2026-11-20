@@ -1180,6 +1180,27 @@ html {
   margin-top: var(--os-gap);
 }
 
+/* What the plan holds, in the sidebar while Plan is the analysis: how much it
+   is, how many of each kind, then anything that stops it being run */
+.well .plan-summary {
+  color: var(--os-text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.well .plan-summary .quiet {
+  color: var(--os-muted);
+}
+
+.well .plan-summary .quiet:not(:first-child),
+.well .plan-summary .problem {
+  font-size: 12px;
+}
+
+.well .plan-summary .problem {
+  color: #f0b4a0;
+}
+
 /* One size whichever tab is in front and however many tests it lists: the
    dialog does not move or change shape as tabs are changed, rows opened or a
    list of bones dropped down. It has room under the regression strip for

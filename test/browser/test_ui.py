@@ -588,18 +588,28 @@ def run(page):
     page.mouse.move(800, 20)
     page.screenshot(path=SCREENS / "5-multiple-articulation.png", full_page=True)
 
-    # --- Multiple: an analysis plan, several tests of the file as one run ---
+    # --- Multiple: a plan, several tests of the file as one run ---
+    def plan_summary():
+        return page.locator("#m-plan-summary div").all_text_contents()
+
     page.locator("#m-clear").click()
-    check(page.locator("#m-plan-open").is_hidden(), "the plan is offered once a file is loaded, not before")
+    pick(page, "m-analysis", "Plan")
+    check(plan_summary() == ["Choose a case file to plan its tests"] and page.locator("#m-plan-open").is_hidden()
+          and page.locator("#m-process").is_disabled() and page.locator("#m-element + .ts-wrapper").is_hidden(),
+          "Plan is a fourth analysis: with no file it asks for one, and Analyze has nothing to run")
+    pick(page, "m-analysis", "Pair-match")
+    check(page.locator("#m-process").is_enabled() and page.locator("#m-plan-summary").is_hidden(), "another analysis has Analyze back")
     page.set_input_files("#m-file", DATA / "classic_case_data.csv")
-    expect(page.locator("#m-plan-open")).to_be_visible()
     # what the sidebar offers for the same bones is what the plan's tests are run on
     in_file = choices(page, "m-element")
     pick(page, "m-analysis", "Regression")
     choose(page, "m-element-a", "Humerus")
     choose(page, "m-element-b", "Femur")
     humerus, femur = chosen(page, "m-measurements-a"), chosen(page, "m-measurements-b")
-    pick(page, "m-analysis", "Pair-match")
+    pick(page, "m-analysis", "Plan")
+    expect(page.locator("#m-plan-open")).to_be_visible()
+    check(plan_summary() == ["No tests chosen"] and page.locator("#m-process").is_disabled()
+          and page.locator("#m-form .plan-open").count() == 1, "with a file, the plan can be opened; nothing is in it yet")
 
     def plan_rows(kind):
         return page.locator(f"[data-plan={kind}] .plan-row")
@@ -627,8 +637,9 @@ def run(page):
     check("Femur \u2194 Os coxa, left" in listed and "Femur \u2194 Os coxa, right" in listed and len(listed) % 2 == 0,
           f"and each articulating pair on each side: {len(listed)}")
     check(page.locator(".plan-row input:checked").count() == 0 and plan_rows("regression").count() == 0
-          and page.locator("#plan-run").is_disabled() and page.locator("#plan-total").inner_text() == "0 tests \u00b7 0 pairs to compare",
-          "nothing is ticked to begin with, and there is nothing to run")
+          and page.locator("#plan-total").inner_text() == "0 tests \u00b7 0 pairs to compare"
+          and page.locator("#plan-modal .modal-footer .btn").all_inner_texts() == ["Done"],
+          "nothing is ticked to begin with, and the dialog has no button that runs anything")
     check(page.locator(".plan-tab.active").inner_text() == "Pair-match" and page.locator("[data-plan=articulation]").is_hidden()
           and page.locator("#plan-builder").is_hidden(), "the kinds of test are tabs, the pair-matches in front")
     row = plan_row("pairmatch", "Humerus")
@@ -693,11 +704,17 @@ def run(page):
     expect(page.locator("#plan-total")).to_have_text("3 tests \u00b7 1,280 pairs to compare")
     page.screenshot(path=SCREENS / "11-plan.png")
 
+    # the dialog only chooses: Done closes it, the sidebar says what the plan holds, and Analyze runs it
     runs = page.locator("#m-results").get_attribute("data-run") or "0"
-    page.locator("#plan-run").click()
+    page.locator("#plan-done").click()
+    expect(page.locator("#plan-modal")).to_be_hidden()
+    check(plan_summary() == ["3 tests \u00b7 1,280 pairs to compare", "1 pair-match \u00b7 1 articulation \u00b7 1 regression"]
+          and (page.locator("#m-results").get_attribute("data-run") or "0") == runs and page.locator("#m-process").is_enabled(),
+          "Done runs nothing: the sidebar says what the plan holds, and Analyze can be pressed")
+    page.screenshot(path=SCREENS / "11b-plan-sidebar.png")
+    page.locator("#m-process").click()
     expect(page.locator("#m-results")).not_to_have_attribute("data-run", runs, timeout=30000)
     expect(page.locator("#progress-modal")).to_be_hidden()
-    expect(page.locator("#plan-modal")).to_be_hidden()
     plan_job = last_job()
     expected = api_plan({**common, "alpha": 0.05, "settings": SETTINGS, "csv": classic, "tests": [
         {"analysis": "pairmatch", "element": "humerus", "measurements": [code for code in humerus if code != "hum_03"]},
@@ -796,10 +813,11 @@ def run(page):
     check(page.locator(".plan-row input:checked").count() == 3
           and plan_row("pairmatch", "Humerus").locator(".plan-measures").inner_text().strip() == f"{len(humerus) - 1} of {len(humerus)}",
           "opened again, the plan is as it was left")
-    page.locator("#plan-modal .btn", has_text="Cancel").click()
+    page.locator("#plan-modal .btn-close").click()
     expect(page.locator("#plan-modal")).to_be_hidden()
     page.set_input_files("#m-file", DATA / "edge_cases.csv")
     expect(page.locator("#m-upload-summary")).to_contain_text("humerous")
+    check(plan_summary() == ["No tests chosen"] and page.locator("#m-process").is_disabled(), "another file empties the plan in the sidebar too")
     page.locator("#m-plan-open").click()
     expect(page.locator("#plan-modal")).to_be_visible()
     check(page.locator(".plan-row input:checked").count() == 0 and plan_rows("regression").count() == 0
@@ -825,11 +843,22 @@ def run(page):
     check(emptied.locator(".plan-reason").inner_text() == "No measurements selected" and emptied.locator(".plan-chip").count() == 2
           and fold.inner_text() == "Not available (3)" and plan_tab("pairmatch") == "1",
           "a test with every measurement taken out says so, and is not folded away with the others")
+    # the sidebar counts what can be run, and says when something ticked cannot
+    page.locator("#plan-done").click()
+    expect(page.locator("#plan-modal")).to_be_hidden()
+    said = plan_summary()
+    check(len(said) == 3 and said[0].startswith("1 test \u00b7 ") and said[1] == "1 pair-match"
+          and said[2] == "1 ticked test is not available as things are set" and page.locator("#m-process").is_enabled(),
+          f"a ticked test that cannot be run is left out of the plan, and the sidebar says so: {said}")
+    page.locator("#m-plan-open").click()
+    expect(page.locator("#plan-modal")).to_be_visible()
     page.locator("[data-plan-tick=none]").click()
-    check(page.locator(".plan-row input:checked").count() == 0 and page.locator("#plan-run").is_disabled(), "and None clears them")
+    check(page.locator(".plan-row input:checked").count() == 0, "and None clears them")
     page.locator("#plan-modal .btn-close").click()
     expect(page.locator("#plan-modal")).to_be_hidden()
+    check(plan_summary() == ["No tests chosen"] and page.locator("#m-process").is_disabled(), "an emptied plan leaves Analyze nothing to run")
     check(held(plan_job) and page.locator("#m-plan-panel").is_visible(), "closing the plan without running it leaves the last results as they were")
+    pick(page, "m-analysis", "Pair-match")
     page.locator("label[for=m-alpha-01]").click()
     page.locator("#m-form .settings-toggle").click()
 
