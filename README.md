@@ -28,6 +28,8 @@ Reference data is re-read from ARDS when the page is opened, so anything switche
 3. **Single:** type the measurements. **Multiple:** upload a case file; the choices narrow to what the file and the reference data both have.
 4. Press **Analyze**.
 
+**Plan.** Multiple runs one analysis at a time, or several as a plan. **Plan** is the fourth choice under Analysis, beside the three analyses. With a case file loaded, **Edit plan...** opens a dialog with a tab for each kind of analysis. Pair-match lists every bone, and Articulation every articulating pair on each side, that the file and the selected reference groups support; tests the file cannot support are folded under **Not available**, each with the reason. On the Regression tab, regressions are added one at a time, as any bone can predict any other. Tick the tests to run and press a test's measurements to take any out; **Ticked only** shows just what will run. **Done** closes the dialog, the sidebar then says how many tests and pairs the plan holds, and **Analyze** runs it. What is ticked is kept while the file stays loaded, so a plan can be run again with other settings or reference groups without opening the dialog. Analyze cannot be pressed for a plan with no tests, or with more pairs than one run can make. Every test in a plan is run with the sidebar's reference groups, alpha and settings, which the dialog shows. The results list every test with its headline numbers; pick one to see its summary and tables. **Download all** saves the not excluded, excluded or rejected rows of every test as one list, with each row's test named in a first column; a column that only some analyses report (mean and SD, or R²) is empty for the others.
+
 **Results.** A pair is *Excluded* when its p-value is at or below alpha, otherwise *Cannot Exclude*. Hovering a row's sample size `n` shows which reference groups it came from. Multiple's tables can be searched, sorted and downloaded; Single's **Copy** copies the result.
 
 **Rejected.** Anything that could not be compared is listed with the reason:
@@ -41,9 +43,9 @@ Reference data is re-read from ARDS when the page is opened, so anything switche
 
 **Case files.** A CSV with `accession`, `side` and `element` columns, then one column per measurement named with its ARDS code (`Hum_01`, `Fem_04`, ...). **Files > Template** is an empty one with the measurements currently enabled in ARDS; **Files > Example** is a commingled assemblage of 1,056 specimens. A cell that is blank, `NA`, zero, negative or not a number counts as not taken.
 
-Limits: 5 MB per file, 10,000,000 cells (rows × measurement columns), and 2,000,000 comparisons per run.
+Limits: 5 MB per file, 10,000,000 cells (rows × measurement columns), and 2,000,000 comparisons per run. A plan is one run: the limit is on its tests together, of which it can have 100.
 
-**How long results are kept.** A Multiple run's results stay on the server until the page clears them, starts another run or is closed, or for an hour after they were last used. The server holds 2,000,000 result rows across all users. When a new run needs room, results not used in the last 15 minutes are dropped, least recently used first; results in use are never dropped, so if they leave no room the new run is refused with a time to try again.
+**How long results are kept.** A Multiple run's results, a plan's among them, stay on the server until the page clears them, starts another run or is closed, or for an hour after they were last used. The server holds 2,000,000 result rows across all users. When a new run needs room, results not used in the last 15 minutes are dropped, least recently used first; results in use are never dropped, so if they leave no room the new run is refused with a time to try again.
 
 ## Local development
 
@@ -127,8 +129,10 @@ If the workflow fails, no draft is made and a deploy of that tag fails at the do
 
 ## Citation
 
-Lynch, J.J. 2026 OsteoSort. Computerized Osteometric Sorting. Version 2.0.0. Defense POW/MIA Accounting Agency, Offutt AFB, NE.
+Lynch, J.J. 2026 OsteoSort. Computerized Osteometric Sorting. Version 2.1.0. Defense POW/MIA Accounting Agency, Offutt AFB, NE.
 
 ## License
 
-GNU General Public License v2.0
+GNU Affero General Public License v3.0; the text is in `LICENSE`.
+
+Anyone may run, change and share it. A changed copy that is run for other people to use must offer them its source.

@@ -98,12 +98,35 @@ function off_thread(::Type{T}, work::F)::T where {T, F}
     return result[]::T
 end
 
+# Single comparisons and table searches wait in line for a worker thread, and
+# a search may keep one for SEARCH_SECONDS. With no limit, requests sent
+# faster than they are answered would wait without end, and the server would
+# go on working through them long after whoever sent them had gone. So only
+# this many may be computing or waiting, and the next is told the server is
+# busy. Batches have a limit of their own (MAX_QUEUED_JOBS), as do downloads
+# (MAX_DOWNLOADS), whose pieces are not counted here.
+const MAX_IN_LINE = 8
+const IN_LINE = Threads.Atomic{Int}(0)
+
+function in_line(::Type{T}, work::F)::T where {T, F}
+    if Threads.atomic_add!(IN_LINE, 1) >= MAX_IN_LINE
+        Threads.atomic_sub!(IN_LINE, 1)
+        throw(RequestError(503, BUSY))
+    end
+    try
+        return off_thread(T, work)
+    finally
+        Threads.atomic_sub!(IN_LINE, 1)
+    end
+end
+
 # A download's body: a result table, written out as CSV as it is sent, not
 # held whole. It is the one answer written that way. `write_download` writes
 # it and returns whether it wrote all of it; `download_finished` is called
 # once the response is over, however it ended (both in api.jl).
 struct Download <: HTTP.AbstractBody
-    table::ResultTable
+    tables::Vector{ResultTable} # one; or a plan's, one for each of its tests, written as a single list
+    tests::Vector{String}       # what each of those tests is called in the list; none for a table by itself
     jobs::JobStore      # its job is looked for here before each piece: cleared results stop it
     id::String
     target::String      # the request, for the log
@@ -181,6 +204,7 @@ function route(state::AppState, req::HTTP.Request)::HTTP.Response
         elseif req.method == "POST"
             is("api", "single") && return single_handler(state, req)
             is("api", "multiple") && return multiple_handler(state, req)
+            is("api", "plan") && return plan_handler(state, req)
             of_job("release") && return release_handler(state, String(parts[3]))
         end
         return error_response(404, "Not found")
@@ -212,8 +236,9 @@ const REQUEST_TOO_LARGE = "The request is too large"
 # gets the answer; one larger than this is refused and the connection closed.
 const DISCARD_BYTES = 32 * 1024^2
 
-# A case file is uploaded to one route; every other request is small.
-body_limit(target) = startswith(target, "/api/multiple") ? MAX_BODY_BYTES : SMALL_BODY_BYTES
+# A case file is uploaded to two routes, for one analysis of it or a plan of
+# several; every other request is small.
+body_limit(target) = startswith(target, "/api/multiple") || startswith(target, "/api/plan") ? MAX_BODY_BYTES : SMALL_BODY_BYTES
 
 # What HTTP.jl raises when a request has not arrived within BODY_SECONDS
 const TOO_SLOW = HTTP.IOPoll.DeadlineExceededError

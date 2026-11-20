@@ -61,8 +61,15 @@ body {
     align-items: flex-start;
   }
 
+  /* The sidebar stays in sight while the results beside it scroll. How far
+     from the top of the window it is held is set by script (common.js), which
+     knows the header's height and whether the sidebar fits the window. It is
+     above the results, so a tooltip of its own that reaches over them shows. */
   .app-sidebar {
     flex: 0 0 360px;
+    position: sticky;
+    top: var(--sidebar-top, 66px);
+    z-index: 2;
   }
 }
 
@@ -106,7 +113,19 @@ textarea {
 .icon-copy { --icon: url(../icons/copy.svg); }
 
 /* Header: darker than the sidebar, with a gold accent border */
+/* The header stays at the top of the window as the page scrolls under it.
+   What the browser scrolls into view stops below it: how far below is set
+   by script (common.js), which knows the header's height; this is for before
+   the script has run. */
+html {
+  scroll-padding-top: 56px;
+}
+
+
 .app-navbar {
+  position: sticky;
+  top: 0;
+  z-index: 1020;
   background-color: var(--os-navy-dark);
   border-bottom: 2px solid var(--os-gold);
   min-height: 44px;
@@ -1153,4 +1172,590 @@ textarea {
   line-height: 1.5;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
   pointer-events: none;
+}
+
+/* The analysis plan: a dialog listing every test the file supports, one to a
+   line, under what the sidebar has set for them */
+.well .plan-open {
+  margin-top: var(--os-gap);
+}
+
+/* What the plan holds, in the sidebar while Plan is the analysis: how much it
+   is, how many of each kind, then anything that stops it being run */
+.well .plan-summary {
+  color: var(--os-text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.well .plan-summary .quiet {
+  color: var(--os-muted);
+}
+
+.well .plan-summary .quiet:not(:first-child),
+.well .plan-summary .problem {
+  font-size: 12px;
+}
+
+.well .plan-summary .problem {
+  color: #f0b4a0;
+}
+
+/* One size whichever tab is in front and however many tests it lists: the
+   dialog does not move or change shape as tabs are changed, rows opened or a
+   list of bones dropped down. It has room under the regression strip for
+   that list, which would otherwise make the dialog scroll to hold it. */
+.plan-dialog.modal-content {
+  height: min(100%, 780px);
+}
+
+.plan-dialog .modal-header {
+  align-items: baseline;
+  gap: 14px;
+}
+
+.plan-file {
+  color: #586f80;
+  font-size: 13px;
+}
+
+/* What the plan is run with, from the sidebar: a label and what is set, twice */
+.plan-uses {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 14px;
+  margin: 16px 0 8px;
+  padding: 10px 12px;
+  background-color: #f7fafc;
+  border: 1px solid #dae6ec;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.plan-uses dt {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  line-height: 1.75;
+  text-transform: uppercase;
+  color: #778f9e;
+}
+
+.plan-uses dd {
+  margin: 0;
+}
+
+.plan-note {
+  margin-left: 10px;
+  font-size: 12px;
+  color: #778f9e;
+}
+
+/* The tabs, and under them the column headings, stay at the top of the
+   dialog while the tests scroll beneath */
+.plan-bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding-top: 8px;
+  background-color: var(--bs-modal-bg);
+}
+
+/* The dialog's own padding above would leave a gap over the bar for the rows
+   to show through as they pass, so the space is the first box's instead */
+.plan-dialog .modal-body {
+  padding-top: 0;
+}
+
+.plan-bar-top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  border-bottom: 1px solid #dae6ec;
+}
+
+/* the results tabs' look: a gold tint and a gold line under the one in front */
+.plan-tabs {
+  display: flex;
+}
+
+.plan-tab {
+  min-width: 9.5rem;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 4px 4px 0 0;
+  background: none;
+  color: #586f80;
+}
+
+.plan-tab:hover {
+  background-color: var(--os-gold-tint);
+  color: #2a4051;
+}
+
+.plan-tab.active,
+.plan-tab.active:hover {
+  background-color: var(--os-gold-tint);
+  color: #2a4051;
+  font-weight: 600;
+  box-shadow: inset 0 -3px 0 var(--os-gold);
+}
+
+/* how many of a tab's tests are ticked */
+.plan-tab-count:not(:empty) {
+  display: inline-block;
+  min-width: 20px;
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background-color: var(--os-navy);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-only {
+  margin: 0 2px 6px 0;
+  font-size: 13px;
+  color: #2a4051;
+}
+
+.plan-dialog .form-check-input {
+  cursor: pointer;
+}
+
+.plan-dialog .form-check-input:checked {
+  background-color: var(--os-gold);
+  border-color: var(--os-gold);
+}
+
+.plan-dialog .form-check-input:focus {
+  border-color: var(--os-gold);
+  box-shadow: 0 0 0 2px rgba(212, 168, 67, 0.3);
+}
+
+/* One grid for the column headings and every row under them: tick box, test,
+   specimens, pairs, measurements, and room for a regression's × */
+.plan-columns,
+.plan-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 96px 84px 150px 24px;
+  column-gap: 12px;
+  align-items: center;
+}
+
+.plan-columns {
+  padding: 10px 10px 6px;
+  border-bottom: 1px solid #dae6ec;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #778f9e;
+}
+
+.plan-columns > :first-child {
+  grid-column: 1 / 3;
+}
+
+/* the last heading shares its line with All and None */
+.plan-columns-end {
+  grid-column: 5 / -1;
+  display: flex;
+  justify-content: space-between;
+}
+
+.plan-ticks {
+  display: flex;
+  gap: 10px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.plan-tests .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-tick,
+.plan-measures,
+.plan-remove,
+.plan-pick {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #2a4051;
+}
+
+.plan-tick {
+  font-size: 12px;
+  color: #586f80;
+  text-decoration: underline dotted #becfd9;
+  text-underline-offset: 3px;
+}
+
+.plan-tick:hover:not(:disabled) {
+  color: var(--os-navy);
+}
+
+.plan-tick:disabled {
+  opacity: 0.4;
+}
+
+.plan-empty {
+  padding: 14px 10px;
+  color: #778f9e;
+  font-size: 13px;
+}
+
+/* The tests a file cannot support, folded under one line at the foot of a tab */
+.plan-fold {
+  display: block;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  background: none;
+  text-align: left;
+  font-size: 13px;
+  color: #586f80;
+}
+
+.plan-fold::before {
+  content: "\25b8";
+  display: inline-block;
+  width: 16px;
+  color: #778f9e;
+}
+
+.plan-fold[aria-expanded="true"]::before {
+  content: "\25be";
+}
+
+.plan-fold:hover {
+  color: var(--os-navy);
+}
+
+.plan-row {
+  padding: 7px 10px;
+  border-bottom: 1px solid #eef4f7;
+}
+
+.plan-row.ticked {
+  background-color: var(--os-gold-tint);
+}
+
+.plan-row .form-check-input {
+  margin: 0;
+}
+
+.plan-name {
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+/* A test that cannot be run stays on the list, greyed, with the reason under its name */
+.plan-row.unavailable .plan-name,
+.plan-row.unavailable .plan-count,
+.plan-row.unavailable .plan-pairs {
+  color: #778f9e;
+  cursor: default;
+}
+
+.plan-reason {
+  display: block;
+  font-size: 12px;
+}
+
+/* how many measurements a test uses: a pill, since pressing it opens them */
+.plan-row .plan-measures {
+  justify-self: start;
+  padding: 1px 10px;
+  border: 1px solid #becfd9;
+  border-radius: 12px;
+  background-color: #ffffff;
+  font-size: 13px;
+}
+
+.plan-row .plan-measures:hover:not(:disabled),
+.plan-row .plan-measures[aria-expanded="true"] {
+  border-color: #778f9e;
+}
+
+.plan-measures::after {
+  content: " \25be";
+  color: #778f9e;
+}
+
+.plan-measures[aria-expanded="true"]::after {
+  content: " \25b4";
+}
+
+.plan-row .plan-measures:disabled {
+  border-color: #dae6ec;
+  background: none;
+  color: #778f9e;
+}
+
+.plan-given {
+  display: flex;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.plan-given .with {
+  color: #778f9e;
+}
+
+.plan-row [data-tooltip] {
+  cursor: help;
+}
+
+.plan-remove {
+  font-size: 18px;
+  line-height: 1;
+  color: #778f9e;
+}
+
+.plan-remove:hover {
+  color: #cc4444;
+}
+
+/* a test's measurements, each a button: outlined and tinted gold while it is in, grey once taken out */
+.plan-editor {
+  grid-column: 2 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0 4px;
+}
+
+.plan-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.plan-chips-label {
+  width: 80px;
+  font-size: 12px;
+  color: #586f80;
+}
+
+.plan-row .plan-chip {
+  padding: 2px 8px;
+  border: 1px solid #becfd9;
+  border-radius: 4px;
+  background-color: #ffffff;
+  color: #778f9e;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.plan-row .plan-chip[aria-pressed="true"] {
+  background-color: var(--os-gold-tint);
+  border-color: var(--os-gold);
+  color: #2a4051;
+  font-weight: 500;
+}
+
+/* on a ticked row, itself tinted, a measurement that is in is white to stand off it */
+.plan-row.ticked .plan-chip[aria-pressed="true"] {
+  background-color: #ffffff;
+}
+
+.plan-row .plan-chip[aria-pressed="false"] {
+  text-decoration: line-through;
+}
+
+.plan-chip:focus-visible,
+.plan-tab:focus-visible,
+.plan-fold:focus-visible,
+.plan-measures:focus-visible,
+.plan-tick:focus-visible,
+.plan-remove:focus-visible,
+.plan-pick:focus-visible {
+  outline: 2px solid rgba(212, 168, 67, 0.6);
+  outline-offset: 2px;
+}
+
+/* Where a regression is put together: a strip of the dialog's own light
+   grey, its controls white with the gold kept for what is chosen */
+.plan-builder[hidden] {
+  display: none;
+}
+
+.plan-builder {
+  display: flex;
+  align-items: center;
+  gap: var(--os-gap);
+  margin: 10px 0 0;
+  padding: 10px;
+  background-color: #f7fafc;
+  border: 1px solid #dae6ec;
+  border-radius: 4px;
+}
+
+.plan-builder .ts-wrapper {
+  flex: 1 1 0;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.plan-builder .ts-wrapper .ts-control,
+.plan-builder .ts-wrapper.single.input-active .ts-control,
+.plan-builder .ts-wrapper.full .ts-control {
+  flex-wrap: nowrap;
+  align-items: center;
+  min-height: var(--os-control);
+  padding: 6px 8px !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  border: 1px solid #becfd9;
+  box-shadow: none;
+  color: #2a4051;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.plan-builder .ts-wrapper.focus .ts-control {
+  border-color: var(--os-gold);
+  box-shadow: 0 0 0 2px rgba(212, 168, 67, 0.3);
+}
+
+.plan-builder .ts-wrapper .ts-control > input {
+  min-width: 2px !important;
+  color: #2a4051;
+}
+
+.plan-builder .ts-dropdown {
+  width: max-content;
+  min-width: 100%;
+  background-color: #ffffff;
+  border: 1px solid #becfd9;
+}
+
+.plan-builder .ts-dropdown .option {
+  color: #2a4051;
+}
+
+.plan-builder .side-group {
+  flex: none;
+}
+
+.plan-builder .segmented .btn {
+  padding: 0 12px;
+  background-color: #ffffff;
+  border-color: #becfd9;
+  color: #2a4051;
+}
+
+.plan-builder .segmented .btn:hover {
+  border-color: #778f9e;
+  color: var(--os-navy);
+}
+
+/* the chosen side, as everywhere: a gold outline and tint, here with dark words to read on white */
+.plan-builder .segmented .btn-check:checked + .btn {
+  background-color: var(--os-gold-tint);
+  border-color: var(--os-gold);
+  color: #2a4051;
+  font-weight: 600;
+}
+
+.plan-predicts {
+  color: #778f9e;
+  padding: 0 2px;
+  cursor: help;
+}
+
+/* The dialog's buttons are the app's: gold for the one that runs the plan,
+   neutral for the rest. Add is the height of the controls beside it. */
+.plan-builder .plan-add {
+  height: var(--os-control);
+  padding: 0 18px;
+}
+
+.plan-builder .plan-add:disabled {
+  opacity: 0.4;
+}
+
+.plan-dialog .modal-footer {
+  gap: 4px;
+}
+
+.plan-total {
+  margin-right: auto;
+  font-size: 14px;
+  color: #2a4051;
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-total.over {
+  color: #c0392b;
+}
+
+/* Above a plan's tests: each kind of table for all of them at once */
+.table-toolbar.plan-downloads {
+  justify-content: flex-start;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+
+.plan-downloads-label {
+  margin-right: 4px;
+  font-size: 13px;
+  color: #586f80;
+}
+
+.plan-downloads .count {
+  color: #778f9e;
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-downloads .btn.disabled {
+  opacity: 0.45;
+}
+
+/* A plan's results: a line for each test, the one shown picked out */
+.panel .plan-table {
+  margin-bottom: 0;
+}
+
+.plan-table tbody tr {
+  cursor: pointer;
+}
+
+.plan-table tbody tr:hover > td,
+.plan-table tbody tr.picked > td {
+  background-color: var(--os-gold-tint);
+  box-shadow: none;
+}
+
+.plan-table tbody tr.picked > td:first-child {
+  box-shadow: inset 3px 0 0 var(--os-gold);
+}
+
+.plan-pick {
+  text-align: left;
+  font-weight: 500;
+}
+
+.plan-table .plan-failed {
+  color: #778f9e;
+  cursor: default;
+}
+
+/* which of a plan's tests the summary is of, after the heading */
+.test-name {
+  font-weight: 400;
+  color: #586f80;
+}
+
+.test-name:not(:empty)::before {
+  content: "\b7";
+  margin: 0 6px;
 }

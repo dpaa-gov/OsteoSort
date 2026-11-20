@@ -163,6 +163,7 @@
                                 <input type="radio" class="btn-check" name="m-analysis" id="m-analysis-pairmatch" value="pairmatch" checked><label class="btn" for="m-analysis-pairmatch">Pair-match</label>
                                 <input type="radio" class="btn-check" name="m-analysis" id="m-analysis-articulation" value="articulation"><label class="btn" for="m-analysis-articulation">Articulation</label>
                                 <input type="radio" class="btn-check" name="m-analysis" id="m-analysis-regression" value="regression"><label class="btn" for="m-analysis-regression">Regression</label>
+                                <input type="radio" class="btn-check" name="m-analysis" id="m-analysis-plan" value="plan"><label class="btn" for="m-analysis-plan">Plan</label>
                             </div>
 
                             <div data-analysis="pairmatch">
@@ -202,6 +203,13 @@
                                 </div>
                             </div>
 
+                            <!-- several tests of the file as one run: chosen in a dialog (plan.js), said here, and run by Analyze -->
+                            <div data-analysis="plan" hidden>
+                                <div class="sidebar-section-label">Tests</div>
+                                <div class="plan-summary" id="m-plan-summary" aria-live="polite"></div>
+                                <button class="btn btn-neutral w-100 plan-open" type="button" id="m-plan-open" data-bs-toggle="modal" data-bs-target="#plan-modal" hidden><i class="os-icon icon-table-list"></i> Edit plan...</button>
+                            </div>
+
                             <!-- folded away until asked for; what is set shows beside the heading -->
                             <button class="sidebar-section-label settings-toggle collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#m-settings" aria-expanded="false" aria-controls="m-settings">
                                 <span>Settings</span><span class="settings-summary" id="m-settings-summary"></span>
@@ -232,8 +240,8 @@
                     </div>
                     <div class="app-results">
                         <div id="m-results" hidden>
-                            <div class="panel">
-                                <div class="main-section-label">Summary</div>
+                            <div class="panel" id="m-summary-panel">
+                                <div class="main-section-label">Summary<span class="test-name" id="m-test-name"></span></div>
                                 <div class="summary-row">
                                     <div class="summary-side">
                                         <div class="stat-tiles" id="m-summary"></div>
@@ -243,7 +251,23 @@
                                     <div class="plot-box"><div id="m-histogram" class="plot-histogram" data-filename="osteosort-p-values"></div></div>
                                 </div>
                             </div>
-                            <div class="panel">
+                            <!-- a plan's tests, one to a line; the one picked is shown above and below as a single run is -->
+                            <div class="panel" id="m-plan-panel" hidden>
+                                <div class="main-section-label">Plan</div>
+                                <!-- a table of every test at once, as one list with each row's test named first -->
+                                <div class="table-toolbar plan-downloads" id="m-plan-downloads">
+                                    <span class="plan-downloads-label">Download all</span>
+                                    <a class="btn btn-neutral btn-sm" data-table="not_excluded" download="plan-not_excluded.csv"><i class="os-icon icon-download"></i> Not excluded <span class="count"></span></a>
+                                    <a class="btn btn-neutral btn-sm" data-table="excluded" download="plan-excluded.csv"><i class="os-icon icon-download"></i> Excluded <span class="count"></span></a>
+                                    <a class="btn btn-neutral btn-sm" data-table="rejected" download="plan-rejected.csv"><i class="os-icon icon-download"></i> Rejected <span class="count"></span></a>
+                                </div>
+                                <div class="table-responsive"><table class="table plan-table" id="m-plan-table">
+                                    <thead><tr><th>Test</th><th class="num">Comparisons</th><th class="num">Potential matches</th><th class="num">Exclusions</th><th class="num">Rejected</th></tr></thead>
+                                    <tbody></tbody>
+                                </table></div>
+                                <div class="stat-run" id="m-plan-run"></div>
+                            </div>
+                            <div class="panel" id="m-tables-panel">
                                 <div class="main-section-label">Results</div>
                                 <ul class="nav nav-tabs results-tabs" role="tablist">
                                     <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#m-pane-not_excluded" type="button">Not excluded</button></li>
@@ -262,6 +286,57 @@
             </div>
         </div>
     </main>
+
+    <!-- The plan (plan.js): every test the uploaded file supports, to be ticked here and run as one run by Analyze -->
+    <div class="modal fade" id="plan-modal" tabindex="-1" aria-labelledby="plan-title">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content plan-dialog">
+            <div class="modal-header">
+                <h4 class="modal-title" id="plan-title">Plan</h4>
+                <span class="plan-file" id="plan-file"></span>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- a plan is run with what the sidebar has set: said here, changed there -->
+                <dl class="plan-uses">
+                    <dt>Reference</dt><dd id="p-reference"></dd>
+                    <dt>Settings</dt><dd><span id="p-settings"></span><span class="plan-note">Set in the sidebar, for every test in the plan. A regression uses only the alpha.</span></dd>
+                </dl>
+                <div class="plan-tests">
+                    <!-- stays in sight while the tests under it scroll -->
+                    <div class="plan-bar">
+                        <div class="plan-bar-top">
+                            <div class="plan-tabs" role="tablist" aria-label="Kind of test">
+                                <button type="button" role="tab" class="plan-tab" data-plan-tab="pairmatch">Pair-match<span class="plan-tab-count"></span></button>
+                                <button type="button" role="tab" class="plan-tab" data-plan-tab="articulation">Articulation<span class="plan-tab-count"></span></button>
+                                <button type="button" role="tab" class="plan-tab" data-plan-tab="regression">Regression<span class="plan-tab-count"></span></button>
+                            </div>
+                            <div class="form-check form-switch plan-only"><input class="form-check-input" type="checkbox" role="switch" id="plan-ticked-only"><label class="form-check-label" for="plan-ticked-only">Ticked only</label></div>
+                        </div>
+                        <!-- any bone can predict any other, so regressions are added one at a time -->
+                        <div class="plan-builder" id="plan-builder" hidden>
+                            <select id="p-element-a" aria-label="Independent element"></select>
+                            <div class="btn-group segmented side-group" role="group" aria-label="Independent side" id="p-side-a"><input type="radio" class="btn-check" name="p-side-a" id="p-side-a-left" value="Left" checked><label class="btn" for="p-side-a-left">Left</label><input type="radio" class="btn-check" name="p-side-a" id="p-side-a-right" value="Right"><label class="btn" for="p-side-a-right">Right</label></div>
+                            <span class="plan-predicts" data-tooltip="Predicts">&rarr;</span>
+                            <select id="p-element-b" aria-label="Dependent element"></select>
+                            <div class="btn-group segmented side-group" role="group" aria-label="Dependent side" id="p-side-b"><input type="radio" class="btn-check" name="p-side-b" id="p-side-b-left" value="Left" checked><label class="btn" for="p-side-b-left">Left</label><input type="radio" class="btn-check" name="p-side-b" id="p-side-b-right" value="Right"><label class="btn" for="p-side-b-right">Right</label></div>
+                            <button class="btn btn-neutral plan-add" type="button" id="p-add">Add</button>
+                        </div>
+                        <div class="plan-columns"><span>Test</span><span class="num">Specimens</span><span class="num">Pairs</span><span class="plan-columns-end"><span>Measurements</span><span class="plan-ticks">
+                            <button type="button" class="plan-tick" data-plan-tick="all">All</button>
+                            <button type="button" class="plan-tick" data-plan-tick="none">None</button></span></span></div>
+                    </div>
+                    <div class="plan-rows" data-plan="pairmatch" data-empty="No bone in the file is in the selected reference groups"></div>
+                    <div class="plan-rows" data-plan="articulation" data-empty="The file has no two bones that articulate" hidden></div>
+                    <div class="plan-rows" data-plan="regression" data-empty="None added" hidden></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <div class="plan-total" id="plan-total" aria-live="polite"></div>
+                <!-- what is ticked is kept as it is ticked: there is nothing to cancel, and Analyze runs it -->
+                <button type="button" class="btn btn-gold" id="plan-done" data-bs-dismiss="modal">Done</button>
+            </div>
+        </div></div>
+    </div>
 
     <div class="modal" id="progress-modal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
         <div class="modal-dialog"><div class="modal-content">

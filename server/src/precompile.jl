@@ -75,5 +75,20 @@ using PrecompileTools: @setup_workload, @compile_workload
             download_finished(download)
             respond(HTTP.Request("POST", "/api/jobs/$job/release"))
         end
+
+        # the three again as one plan, and a test that has nothing to compare
+        tests = (batches..., (analysis = "pairmatch", element = "tibia", measurements = ["tib_01"]))
+        plan = JSON.parse(post("/api/plan", merge(common, (settings = settings, tests = tests, csv = csv))).body).job
+        while JSON.parse(get("/api/jobs/$plan").body).status == "running"
+            sleep(0.01)
+        end
+        get("/api/jobs/$plan/rows?test=2&table=not_excluded&limit=10&search=C&sort=1&dir=desc")
+        get("/api/jobs/$plan/download?test=1&table=excluded&check=1")
+        for which in ("test=3&table=rejected", "test=all&table=excluded", "test=all&table=rejected")
+            download = get("/api/jobs/$plan/download?$which").body
+            write_download(IOBuffer(), download)
+            download_finished(download)
+        end
+        respond(HTTP.Request("POST", "/api/jobs/$plan/release"))
     end
 end

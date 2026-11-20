@@ -5,16 +5,35 @@ import { getJSON, showError, NUMERIC_COLUMNS, summariseMeasurements } from "./co
 
 const PAGE_SIZES = [10, 25, 50];
 
+// For a click on a link that downloads results. A link alone would save the
+// server's "expired" or "busy" message as the file, so the server is asked
+// first and the download started only if it can be had.
+export async function checkedDownload(event) {
+    event.preventDefault();
+    const link = event.currentTarget.cloneNode(); // a copy, which does not ask again
+    try {
+        await getJSON(`${link.href}&check=1`);
+    } catch (error) {
+        return showError(error.message);
+    }
+    link.hidden = true;
+    document.body.append(link);
+    link.click();
+    link.remove();
+}
+
 export class ResultTable {
-    constructor(container, jobId, name) {
+    // `test` is given for a table of a plan, whose tables are found by test as well: 1 is its first
+    constructor(container, jobId, name, test) {
         this.container = container;
         this.base = `api/jobs/${jobId}`;
         this.name = name;
+        this.of = test ? { test } : {};
         this.state = { offset: 0, limit: PAGE_SIZES[0], search: "", sort: 0, dir: "asc" };
         this.total = 0;
         container.innerHTML = `
             <div class="table-toolbar">
-                <a class="btn btn-neutral btn-sm" href="${this.base}/download?table=${name}" download="${name}.csv"><i class="os-icon icon-download"></i> Download</a>
+                <a class="btn btn-neutral btn-sm" href="${this.base}/download?${new URLSearchParams({ ...this.of, table: name })}" download="${name}.csv"><i class="os-icon icon-download"></i> Download</a>
                 <input type="search" class="form-control form-control-sm table-search" placeholder="Search" aria-label="Search">
             </div>
             <div class="table-responsive"><table class="table table-striped result-table"><thead><tr></tr></thead><tbody></tbody></table></div>
@@ -27,29 +46,15 @@ export class ResultTable {
                     <ul class="pagination pagination-sm"></ul>
                 </div>
             </div>`;
-        // A link alone would save the server's "expired" or "busy" message as the file; ask first.
-        container.querySelector("a[download]").addEventListener("click", async (event) => {
-            event.preventDefault();
-            const link = event.currentTarget.cloneNode(); // a copy, which does not ask again
-            try {
-                await getJSON(`${link.href}&check=1`);
-            } catch (error) {
-                return showError(error.message);
-            }
-            link.hidden = true;
-            document.body.append(link);
-            link.click();
-            link.remove();
-        });
-        let timer;
+        container.querySelector("a[download]").addEventListener("click", checkedDownload);
         container.querySelector(".page-size").addEventListener("change", (event) => {
             this.state.limit = Number(event.target.value);
             this.state.offset = 0;
             this.load();
         });
         container.querySelector(".table-search").addEventListener("input", (event) => {
-            clearTimeout(timer);
-            timer = setTimeout(() => {
+            clearTimeout(this.timer);
+            this.timer = setTimeout(() => {
                 this.state.search = event.target.value;
                 this.state.offset = 0;
                 this.load();
@@ -58,18 +63,30 @@ export class ResultTable {
         this.load();
     }
 
+    // Called when another table takes this one's place on the page, or its
+    // results are gone from the server. Rows still on their way, or a search
+    // not yet sent, would otherwise be shown under whatever is there now.
+    retire() {
+        this.retired = true;
+        clearTimeout(this.timer);
+    }
+
     async load() {
+        if (this.retired) return;
         const { offset, limit, search, sort, dir } = this.state;
-        const query = new URLSearchParams({ table: this.name, offset, limit, search, sort, dir });
+        const query = new URLSearchParams({ ...this.of, table: this.name, offset, limit, search, sort, dir });
         const request = (this.request = (this.request ?? 0) + 1);
         let page;
         try {
             page = await getJSON(`${this.base}/rows?${query}`);
         } catch (error) {
-            if (request === this.request) showError(error.message);
+            if (request !== this.request || this.retired) return;
+            this.failed = true; // what is on the page is not what was asked for
+            showError(error.message);
             return;
         }
-        if (request !== this.request) return; // a newer search, sort or page has been asked for
+        if (request !== this.request || this.retired) return; // a newer search, sort or page has been asked for, or another table shown
+        this.failed = false;
         this.total = page.total;
         // The reference breakdown is not a column on screen: it shows when the
         // sample size is hovered, and it is in the download.

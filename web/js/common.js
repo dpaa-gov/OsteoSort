@@ -67,6 +67,38 @@ export function fitToScreen() {
     apply();
 }
 
+// --- The sidebar, kept in sight ---
+
+// The header stays at the top of the window and the sidebar under it, while
+// the results scroll (the two are sticky, in the stylesheet). A sidebar that
+// fits the window is held just below the header. One taller than the window
+// cannot all be in sight: it scrolls with the page until its foot, where
+// Analyze is, reaches the foot of the window, and is held there. Where that
+// is depends on the heights of the header, the sidebar and the window, so it
+// is worked out here, and again whenever one of them changes: a tab shown,
+// the settings opened, the window resized.
+const SIDEBAR_GAP = 20; // between the header and the sidebar, as the page's own padding
+export function holdSidebars() {
+    const header = document.querySelector(".app-navbar");
+    const sidebars = [...document.querySelectorAll(".app-sidebar")];
+    const place = () => {
+        const windowHeight = window.innerHeight / zoomFor(); // in the page's own pixels, which a zoomed page has fewer of
+        for (const sidebar of sidebars) {
+            if (!sidebar.offsetHeight) continue; // on the tab that is not shown
+            const top = Math.min(header.offsetHeight + SIDEBAR_GAP, windowHeight - sidebar.offsetHeight);
+            sidebar.style.setProperty("--sidebar-top", `${top}px`);
+        }
+        // What the browser scrolls into view, such as a field tabbed back to,
+        // is brought to below the header and not under it. The window scrolls
+        // in its own pixels, of which a zoomed header takes more.
+        document.documentElement.style.scrollPaddingTop = `${Math.ceil(header.offsetHeight * zoomFor()) + 8}px`;
+    };
+    const watcher = new ResizeObserver(place);
+    for (const element of [header, ...sidebars]) watcher.observe(element);
+    window.addEventListener("resize", place);
+    place();
+}
+
 // --- Hover labels ---
 
 // Plots show their own hover labels, not Plotly's: one look, in the app's
@@ -97,11 +129,18 @@ function hoveredAt(gd, mx, my) {
         if (full.visible !== true) continue;
         if (full.type === "bar" || full.type === "histogram") {
             for (const bin of trace) {
-                const lower = bin.ph0 ?? bin.p - full.width / 2, upper = bin.ph1 ?? bin.p + full.width / 2;
+                // A bar is pointed at where it is drawn, from p0 to p1. A
+                // histogram's ph0 and ph1 are something else, the values its
+                // bin can hold, which is what the label says. Where the data
+                // is whole numbers and a bin one wide, that is a single value:
+                // no width at all, and nothing the pointer could be inside.
+                const left = bin.p0 ?? bin.p - full.width / 2, right = bin.p1 ?? bin.p + full.width / 2;
                 const base = bin.b || 0, top = base + bin.s;
-                if (!bin.s || mx < px(lower) || mx > px(upper) || my < py(top) || my > py(base)) continue;
-                const range = full.type === "histogram" ? `${hoverNumber(lower)} – ${hoverNumber(upper)}` : hoverNumber(bin.p);
-                return { x: px(bin.p), y: py(top), text: `${full.name}\n${xTitle || "Range"}: ${range}\nCount: ${bin.s}` };
+                if (!bin.s || mx < px(left) || mx > px(right) || my < py(top) || my > py(base)) continue;
+                const one = bin.ph0 === bin.ph1;
+                const holds = one ? hoverNumber(bin.ph0) : `${hoverNumber(bin.ph0)} – ${hoverNumber(bin.ph1)}`;
+                const range = full.type === "histogram" ? holds : hoverNumber(bin.p);
+                return { x: px(bin.p), y: py(top), text: `${full.name}\n${xTitle || (one ? "Value" : "Range")}: ${range}\nCount: ${bin.s}` };
             }
             continue;
         }
@@ -154,13 +193,14 @@ export function plotHover(id) {
 // the scrolling measurement fields and an open dropdown list, one tooltip that
 // floats over the page is placed by script from where the hovered thing is on
 // screen: above a field's code, beside a name in a list. It goes when the
-// pointer leaves or anything scrolls.
+// pointer leaves or anything scrolls. The plan's list of tests scrolls too,
+// inside its dialog, and has the same one.
 const floatingTip = document.createElement("div");
 floatingTip.className = "floating-tip";
 floatingTip.hidden = true;
 document.body.append(floatingTip);
 document.addEventListener("mouseover", (event) => {
-    const target = event.target.closest?.(".measure-scroll [data-tooltip], .ts-dropdown .option[data-tooltip]");
+    const target = event.target.closest?.(".measure-scroll [data-tooltip], .ts-dropdown .option[data-tooltip], .plan-tests [data-tooltip]");
     floatingTip.hidden = !target;
     if (!target) return;
     floatingTip.textContent = target.dataset.tooltip;
@@ -176,6 +216,23 @@ document.addEventListener("mouseover", (event) => {
 document.addEventListener("scroll", () => { floatingTip.hidden = true; }, true);
 
 // --- Dropdowns (Tom Select) ---
+
+// A list that opens in a sidebar held in place, or in a dialog, cannot be
+// brought into sight by scrolling the page: what reaches past the foot of the
+// window, or of the dialog, would be out of reach. So such a list is made as
+// short as the room under it, and scrolls within itself as a long list
+// already does. It is never shorter than a few choices.
+const LEAST_LIST = 96;
+function fitList(dropdown) {
+    const list = dropdown.querySelector(".ts-dropdown-content");
+    list.style.maxHeight = "";
+    const holder = dropdown.closest(".modal-body, .app-sidebar");
+    if (!holder || (holder.matches(".app-sidebar") && getComputedStyle(holder).position !== "sticky")) return;
+    const foot = holder.matches(".modal-body") ? holder.getBoundingClientRect().bottom : window.innerHeight;
+    // what is measured on screen is in the window's pixels; a height is set in the page's own
+    const room = (foot - list.getBoundingClientRect().top) / zoomFor() - 12;
+    if (room < list.offsetHeight) list.style.maxHeight = `${Math.max(LEAST_LIST, room)}px`;
+}
 
 // `describe(value)` may return { text, tooltip } to show a choice differently
 // from the value that is sent to the server (measurement codes, for example).
@@ -194,6 +251,7 @@ export function makeSelect(id, onChange, describe) {
         closeAfterSelect: !element.multiple,
         // a dropdown is done once a value is picked; leaving it focused keeps its search field open
         onItemAdd() { if (!element.multiple) this.blur(); },
+        onDropdownOpen: fitList,
         onChange: () => onChange && onChange(),
     });
     select.describe = describe;
@@ -209,6 +267,11 @@ export function makeChoice(id, onChange) {
     $(id).addEventListener("change", () => onChange && onChange());
     return {
         getValue: () => inputs.find((input) => input.checked).value,
+        // Chooses an option from script, where it is on offer; nothing is told of it, as when a dropdown is set
+        setValue(value) {
+            const input = inputs.find((option) => option.value === value && !option.disabled);
+            if (input) input.checked = true;
+        },
         setAvailable(sides) {
             const known = inputs.some((input) => sides.includes(input.value));
             for (const input of inputs) input.disabled = known && !sides.includes(input.value);
@@ -331,6 +394,14 @@ function settingNotes({ absolute, yeojohnson, zeromean, tails }) {
     return notes;
 }
 
+// What is set, in a line: "Yeo-Johnson · 2 tails · α 0.1". A regression has
+// no settings but the alpha, and is given none.
+export const describeSettings = (chosen, alpha) => [
+    ...(chosen ? [chosen.absolute && "Absolute", chosen.yeojohnson && "Yeo-Johnson", chosen.zeromean && "Zero mean",
+        chosen.tails === 1 ? "1 tail" : "2 tails"] : []),
+    `α ${alpha}`,
+].filter(Boolean).join(" · ");
+
 export function initSettings(prefix, analysisSelect) {
     const form = $(prefix + "form");
     const alpha = () => Number(form.querySelector(`input[name="${prefix}alpha"]:checked`).value);
@@ -346,12 +417,7 @@ export function initSettings(prefix, analysisSelect) {
         for (const block of form.querySelectorAll("[data-analysis]")) block.hidden = block.dataset.analysis !== analysis;
         for (const part of form.querySelectorAll(".tails-group, .ttest-settings")) part.hidden = analysis === "regression";
         // what is set, beside the heading while the settings are folded away
-        const chosen = settings();
-        const summary = analysis === "regression" ? [] : [
-            chosen.absolute && "Absolute", chosen.yeojohnson && "Yeo-Johnson", chosen.zeromean && "Zero mean",
-            chosen.tails === 1 ? "1 tail" : "2 tails",
-        ];
-        $(prefix + "settings-summary").textContent = [...summary, `α ${alpha()}`].filter(Boolean).join(" · ");
+        $(prefix + "settings-summary").textContent = describeSettings(analysis === "regression" ? null : settings(), alpha());
         const notes = analysis === "regression" ? [] : settingNotes(settings());
         $(prefix + "notes").replaceChildren(...notes.map((note) => {
             const element = document.createElement("div");

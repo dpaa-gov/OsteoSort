@@ -1,6 +1,6 @@
 // Entry point: load what the dropdowns are built from, then start both tabs.
 
-import { $, getJSON, Reference, progress, fitToScreen } from "./common.js";
+import { $, getJSON, Reference, progress, fitToScreen, holdSidebars } from "./common.js";
 import { initSingle } from "./single.js";
 import { initMultiple } from "./multiple.js";
 
@@ -22,6 +22,7 @@ try {
     initSingle(reference);
     initMultiple(reference);
     $("app-content").hidden = false;
+    holdSidebars();
 } catch (error) {
     $("load-error").textContent = error.message;
     $("load-error").hidden = false;

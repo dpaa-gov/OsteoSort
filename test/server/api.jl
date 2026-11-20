@@ -151,6 +151,156 @@ end
             @test occursin("accession, side and element", failed.error)
         end
 
+        # A plan is several analyses of one upload in one run. Each of its tests
+        # must come out as the same analysis does when it is run by itself.
+        @testset "plan" begin
+            measured(bone) = [m for m in OSJ.available_measurements(groups, bone) if m in upload.measurements]
+            tests = [
+                (analysis = "pairmatch", element = "humerus", measurements = measured("humerus")),
+                (analysis = "regression", element_a = "humerus", element_b = "femur", side_a = "Left", side_b = "Right",
+                 measurements_a = measured("humerus"), measurements_b = measured("femur")),
+                (analysis = "articulation", element_a = "humerus", element_b = "ulna", side = "Left",
+                 measurements_a = ["hum_06"], measurements_b = ["uln_11"]),
+                (analysis = "pairmatch", element = "Patella", measurements = ["pat_01"]),   # not in the file
+            ]
+            alone = map(tests[1:3]) do test
+                fields = test.analysis == "regression" ? test : merge(test, (settings = settings,))
+                wait_for(JSON.parse(post("/api/multiple", merge(common, fields, (csv = case_csv,))).body).job)
+            end
+            response = post("/api/plan", merge(common, (settings = settings, tests = tests, csv = case_csv)))
+            @test response.status == 202
+            job = JSON.parse(response.body).job
+            status = wait_for(job)
+            @test status.status == "done" && status.analysis == "plan" && length(status.tests) == 4
+            @test [test.analysis for test in status.tests] == ["pairmatch", "regression", "articulation", "pairmatch"]
+            @test [test.name for test in status.tests] ==
+                  ["pairmatch-humerus", "regression-humerus-left-femur-right", "articulation-humerus-ulna-left", "pairmatch-patella"]
+            for (test, single) in zip(status.tests, alone)
+                @test test.error == ""
+                @test all(name -> getproperty(test.summary, name) == getproperty(single.summary, name),
+                          (:comparisons, :specimens, :potential_matches, :exclusions, :exclusion_percent, :rejected))
+                @test test.summary.comparisons > 0
+                @test collect(test.histogram.excluded) == collect(single.histogram.excluded)
+                @test all(name -> test.tables[name].total == single.tables[name].total &&
+                                  collect(test.tables[name].columns) == collect(single.tables[name].columns),
+                          ("not_excluded", "excluded", "rejected"))
+            end
+            # the regression's columns are its own, and each test's rows are found by its number
+            @test "R²" in status.tests[2].tables.excluded.columns && "Mean" in status.tests[1].tables.excluded.columns
+            for (number, single) in enumerate(alone), table in ("not_excluded", "excluded", "rejected")
+                query = "table=$table&limit=1000&sort=1"
+                @test get_json("/api/jobs/$job/rows?test=$number&$query").rows == get_json("/api/jobs/$(single.id)/rows?$query").rows
+            end
+            @test get_json("/api/jobs/$job/rows?test=3&table=not_excluded&limit=1").rows[1][[2, 5]] == ["Humerus", "Ulna"]
+            # a test with nothing to compare says so and leaves the others as they are
+            nothing_found = status.tests[4]
+            @test nothing_found.error == OSS.NO_RESULT && nothing_found.summary.comparisons == 0 && isempty(nothing_found.tables)
+            @test HTTP.get(API * "/api/jobs/$job/rows?test=4&table=excluded"; status_exception = false).status == 400
+            # a table is asked for by its test
+            for query in ("table=excluded", "table=excluded&test=0", "table=excluded&test=5", "table=excluded&test=x")
+                @test HTTP.get(API * "/api/jobs/$job/rows?$query"; status_exception = false).status == 400
+            end
+            # a download is named after its test
+            download = HTTP.get(API * "/api/jobs/$job/download?test=2&table=excluded")
+            @test occursin("filename=\"regression-humerus-left-femur-right-excluded.csv\"", HTTP.header(download, "Content-Disposition"))
+            @test length(OSS.parse_csv(String(download.body))) == status.tests[2].tables.excluded.total + 1
+            # A table of every test downloads as one list: each row's test named first,
+            # and a column for whatever any of the analyses reports
+            for (table, extra) in (("excluded", ["Mean", "SD", "R²"]), ("not_excluded", ["Mean", "SD", "R²"]), ("rejected", ["Reason"]))
+                together = HTTP.get(API * "/api/jobs/$job/download?test=all&table=$table")
+                @test occursin("filename=\"plan-$table.csv\"", HTTP.header(together, "Content-Disposition"))
+                rows = OSS.parse_csv(String(together.body))
+                heading = rows[1]
+                @test heading[1:7] == ["Test", "Accession 1", "Element 1", "Side 1", "Accession 2", "Element 2", "Side 2"]
+                @test filter(in(extra), heading) == extra && allunique(heading) && all(row -> length(row) == length(heading), rows)
+                titles = ["Pair-match: Humerus", "Regression: Humerus (left) to Femur (right)", "Articulation: Humerus-Ulna, left"]
+                @test unique(row[1] for row in rows[2:end]) == [title for (title, test) in zip(titles, status.tests) if test.tables[table].total > 0]
+                # every test's rows are there, in the plan's order, and say what that test's own download says
+                @test length(rows) - 1 == sum(test.tables[table].total for test in status.tests[1:3])
+                for (number, title) in enumerate(titles)
+                    own = OSS.parse_csv(String(HTTP.get(API * "/api/jobs/$job/download?test=$number&table=$table").body))
+                    mine = [row for row in rows[2:end] if row[1] == title]
+                    places = [findfirst(==(name), heading) for name in own[1]]
+                    @test [row[places] for row in mine] == own[2:end]
+                    # and nothing under a heading its analysis does not report
+                    others = setdiff(2:length(heading), places)
+                    @test all(row -> all(isempty, row[others]), mine)
+                end
+            end
+            excluded = OSS.parse_csv(String(HTTP.get(API * "/api/jobs/$job/download?test=all&table=excluded").body))
+            @test excluded[1][8:end] == ["Measurements", "n", "Mean", "SD", "R²", "p", "Result", "Reference"]
+            @test HTTP.get(API * "/api/jobs/$job/download?test=all&table=excluded&check=1").status == 204
+            @test HTTP.get(API * "/api/jobs/$job/download?test=all&table=nope"; status_exception = false).status == 400
+            @test HTTP.get(API * "/api/jobs/$job/rows?test=all&table=excluded"; status_exception = false).status == 400   # a list to download, not to page through
+            @test HTTP.get(API * "/api/jobs/$(alone[1].id)/download?test=all&table=excluded"; status_exception = false).status == 400
+
+            # the whole plan is one run: held as one, and released as one
+            kept = OSS.find_job(state.jobs, job)
+            @test OSS.result_rows(kept) == sum(test.tables[name].total for test in status.tests[1:3] for name in ("not_excluded", "excluded", "rejected"))
+            @test HTTP.post(API * "/api/jobs/$job/release").status == 204
+            @test HTTP.get(API * "/api/jobs/$job"; status_exception = false).status == 404
+            foreach(single -> HTTP.post(API * "/api/jobs/$(single.id)/release"), alone)
+
+            # a plan of regressions alone needs no settings; any other does
+            regression = tests[2:2]
+            @test wait_for(JSON.parse(post("/api/plan", merge(common, (tests = regression, csv = case_csv))).body).job).status == "done"
+            refused(body) = (response = post("/api/plan", merge(common, (csv = case_csv,), body)); (response.status, JSON.parse(response.body).error))
+            @test refused((tests = tests,)) == (400, "Missing field: settings")
+            @test refused((settings = settings,)) == (400, "Missing field: tests")
+            @test refused((settings = settings, tests = [])) == (400, "Choose at least one test to run")
+            @test refused((settings = settings, tests = ["pairmatch"])) == (400, "tests must be a list of tests")
+            @test refused((settings = settings, tests = [(analysis = "nope",)])) == (400, "analysis must be pairmatch, articulation or regression")
+            @test refused((settings = settings, tests = [(analysis = "pairmatch", element = "humerus")])) == (400, "Missing field: measurements")
+            @test refused((settings = settings, tests = fill(tests[1], OSS.MAX_PLAN_TESTS + 1)))[2] == "A plan can have at most 100 tests"
+            # a file that cannot be read fails the plan, in the same words as a single run
+            unread = wait_for(JSON.parse(post("/api/plan", merge(common, (settings = settings, tests = tests, csv = "accession,side\n1,left\n"))).body).job)
+            @test unread.status == "error" && occursin("accession, side and element", unread.error)
+            # a plan none of whose tests ran has nothing to download together, and says so before it starts to answer
+            none_ran = JSON.parse(post("/api/plan", merge(common, (settings = settings, tests = tests[4:4], csv = case_csv))).body).job
+            @test wait_for(none_ran).tests[1].error == OSS.NO_RESULT
+            for query in ("test=all&table=excluded", "test=all&table=excluded&check=1")
+                refusal = HTTP.get(API * "/api/jobs/$none_ran/download?$query"; status_exception = false)
+                @test refusal.status == 422 && JSON.parse(refusal.body).error == "None of the plan's tests has results to download"
+            end
+            HTTP.post(API * "/api/jobs/$none_ran/release")
+            # every test is counted before any is compared: a plan over the limit is refused whole
+            too_big = try OSS.check_plan_size(9_000_000, 2_000_000) catch e; e end
+            @test too_big isa OSS.RequestError && occursin("9,000,000 comparisons", too_big.message) && occursin("fewer tests", too_big.message)
+            plan = OSS.Plan(groups, 0.1, osj_settings, case_csv,
+                OSS.TestFields[OSS.multiple_fields(JSON.parse(JSON.json(test)), test.analysis) for test in tests[1:3]], nothing)
+            store = OSS.JobStore(max_rows = sum(test.summary.comparisons for test in status.tests) - 1)
+            cramped = OSS.AppState(config, ReentrantLock(), OSS.articulation_config(config), store, snapshot, "", "", OSS.now(OSS.UTC))
+            over = OSS.start_job!(job -> OSS.run_plan(cramped, plan, job), store)
+            while (@atomic over.status) == "running"
+                sleep(0.01)
+            end
+            @test (@atomic over.status) == "error" && occursin("This plan would make", @atomic over.error)
+            # A plan cleared or replaced part way stops at its next test: the rest
+            # would be computed for nobody while every other run waits its turn
+            roomy = OSS.AppState(config, ReentrantLock(), OSS.articulation_config(config), OSS.JobStore(), snapshot, "", "", OSS.now(OSS.UTC))
+            gone = OSS.create_job!(roomy.jobs)
+            OSS.release_job!(roomy.jobs, gone.id)
+            @test isempty(OSS.run_plan(roomy, plan, gone).tests)
+            stays = OSS.create_job!(roomy.jobs)
+            @test length(OSS.run_plan(roomy, plan, stays).tests) == 3 && (@atomic stays.step) == 3
+            # stopped after its first test, a plan gives back that test, whole, and goes no further
+            sorted_out() = Union{Nothing, OSJ.Prepared}[OSS.prepare_multiple(fields, plan.groups, upload) for fields in plan.tests]
+            asked = Ref(0)
+            part = OSS.run_tests(plan, sorted_out(), stays; wanted = () -> (asked[] += 1) <= 1)
+            @test asked[] == 2 && length(part) == 1 && (@atomic stays.step) == 1
+            @test part[1].title == "Pair-match: Humerus" && part[1].error == "" &&
+                  part[1].output.summary.comparisons == status.tests[1].summary.comparisons
+            # and one stopped through its job, between the second test and the third
+            midway = OSS.create_job!(roomy.jobs)
+            two = OSS.run_tests(plan, sorted_out(), midway; wanted = function ()
+                (@atomic midway.step) == 2 && OSS.release_job!(roomy.jobs, midway.id)
+                return OSS.find_job(roomy.jobs, midway.id) !== nothing
+            end)
+            @test [test.title for test in two] == ["Pair-match: Humerus", "Regression: Humerus (left) to Femur (right)"]
+            # a run says which test it is on while it compares
+            @test (@atomic kept.steps) == 4 && (@atomic kept.step) == 4
+        end
+
         @testset "room for a run is made from results nobody is using" begin
             # a store that may hold 1,000 result rows; each of these batches has 400
             store = OSS.JobStore(max_rows = 1000)

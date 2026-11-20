@@ -1,6 +1,6 @@
 name = "OsteoSortServer"
 uuid = "65314acc-07de-4768-819d-154fb2e2c80f"
-version = "2.0.0"
+version = "2.1.0"
 authors = ["Jeff Lynch <jjlynch@osteocoder.com>"]
 
 [deps]
@@ -18,7 +18,7 @@ OSJ = {path = "../OSJ"}
 
 [compat]
 HTTP = "2"
-JSON = "1"
+JSON = "1.13.2"
 LibPQ_jll = "16"
 PrecompileTools = "1"
 julia = "1.13"
