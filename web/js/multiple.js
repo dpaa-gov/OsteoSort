@@ -125,7 +125,8 @@ export function initMultiple(reference) {
     // While Plan is the analysis, the sidebar says what the plan holds as
     // things stand: the dialog may have changed it, or the file or reference
     // groups under it. Analyze cannot be pressed for a plan with nothing to
-    // run or more than one run can make; why is said here, above it.
+    // run, more tests than a plan can have or more pairs than one run can
+    // make; why is said here, above it.
     const KIND_NAMES = { pairmatch: ["pair-match", "pair-matches"], articulation: ["articulation", "articulations"], regression: ["regression", "regressions"] };
     function showPlan() {
         const box = $("m-plan-summary");
@@ -145,13 +146,14 @@ export function initMultiple(reference) {
             lines.push(line(planTotal(now.tests.length, now.pairs)));
             lines.push(line(Object.entries(KIND_NAMES).filter(([kind]) => now.kinds[kind])
                 .map(([kind, [one, many]]) => `${now.kinds[kind]} ${now.kinds[kind] === 1 ? one : many}`).join(" \u00b7 "), "quiet"));
+            if (now.tooMany) lines.push(line(`More than the ${meta.max_plan_tests} tests one plan can have`, "problem"));
             if (now.over) lines.push(line(`More than the ${meta.max_comparisons.toLocaleString("en-US")} pairs one run can make`, "problem"));
         }
         if (now.unavailable) {
             lines.push(line(`${now.unavailable} ticked ${now.unavailable === 1 ? "test is" : "tests are"} not available as things are set`, "problem"));
         }
         box.replaceChildren(...lines);
-        $("m-process").disabled = planning() && (!now.tests.length || now.over);
+        $("m-process").disabled = planning() && (!now.tests.length || now.over || now.tooMany);
     }
     function sidesFor(...bones) {
         if (!upload) return ["Left", "Right"];
@@ -407,7 +409,8 @@ export function initMultiple(reference) {
             const row = document.createElement("tr");
             const name = row.insertCell();
             if (found.error) {
-                // nothing to show for it but why
+                // nothing to show for it but why, and nothing to pick
+                row.className = "failed";
                 name.textContent = chosen.tests[index].title;
                 const why = row.insertCell();
                 why.colSpan = PLAN_COLUMNS.length;

@@ -360,6 +360,8 @@ if HAVE_DB
         @test isempty(intersect(collect(meta.disabled_measurements), [m.code for m in meta.measurements]))
         @test length(meta.default_references) == 4 && issubset(collect(meta.default_references), [g.label for g in meta.groups])
         @test issubset(collect(meta.regression_bones), snapshot.bones)
+        # the limits the page holds a plan to before it is sent
+        @test meta.max_comparisons == OSS.MAX_RESULT_ROWS && meta.max_plan_tests == OSS.MAX_PLAN_TESTS
         codes = Set(m.code for m in meta.measurements)
         @test !isempty(meta.articulation) && all(p -> p.a in codes && p.b in codes, meta.articulation)
 
